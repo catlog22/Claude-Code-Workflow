@@ -157,9 +157,9 @@ async function refreshWorkspace() {
       // Reload data from server
       const data = await loadDashboardData(projectPath);
       if (data) {
-        // Update stores
-        sessionDataStore = {};
-        liteTaskDataStore = {};
+        // Update stores - clear existing properties
+        Object.keys(sessionDataStore).forEach(k => delete sessionDataStore[k]);
+        Object.keys(liteTaskDataStore).forEach(k => delete liteTaskDataStore[k]);
 
         // Populate stores
         [...(data.activeSessions || []), ...(data.archivedSessions || [])].forEach(s => {
