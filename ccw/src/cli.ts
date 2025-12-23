@@ -31,7 +31,7 @@ interface PackageInfo {
  * @returns Package info with version
  */
 function loadPackageInfo(): PackageInfo {
-  const pkgPath = join(__dirname, '../package.json');
+  const pkgPath = join(__dirname, '../../package.json');
 
   try {
     if (!existsSync(pkgPath)) {
