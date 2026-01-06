@@ -149,6 +149,12 @@ The CCW Dashboard (`ccw view`) provides:
 
 ---
 
+## 🔒 Security
+
+The dashboard server is **localhost-bound by default** and **API endpoints require authentication**. See `ccw/docs/SECURITY.md` for the full security model, token usage, and safe deployment guidance.
+
+---
+
 ## 🛠️ Command Reference
 
 CCW provides a rich set of commands for managing workflows, tasks, and interactions with AI tools. For a complete list and detailed descriptions of all available commands, please refer to the [**COMMAND_REFERENCE.md**](COMMAND_REFERENCE.md) file.

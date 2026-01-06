@@ -6,6 +6,7 @@ import chalk from 'chalk';
 interface ViewOptions {
   port?: number;
   path?: string;
+  host?: string;
   browser?: boolean;
 }
 
@@ -30,7 +31,8 @@ async function isServerRunning(port: number): Promise<boolean> {
     });
     clearTimeout(timeoutId);
 
-    return response.ok;
+    // Authenticated APIs may return 401; any HTTP response means server is running.
+    return response.status > 0;
   } catch {
     return false;
   }
@@ -44,8 +46,13 @@ async function isServerRunning(port: number): Promise<boolean> {
  */
 async function switchWorkspace(port: number, path: string): Promise<SwitchWorkspaceResult> {
   try {
+    const tokenResponse = await fetch(`http://localhost:${port}/api/auth/token`);
+    const tokenData = await tokenResponse.json() as { token?: string };
+    const token = tokenData.token;
+
     const response = await fetch(
-      `http://localhost:${port}/api/switch-path?path=${encodeURIComponent(path)}`
+      `http://localhost:${port}/api/switch-path?path=${encodeURIComponent(path)}`,
+      token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
     );
     return await response.json() as SwitchWorkspaceResult;
   } catch (err) {
@@ -62,6 +69,8 @@ async function switchWorkspace(port: number, path: string): Promise<SwitchWorksp
  */
 export async function viewCommand(options: ViewOptions): Promise<void> {
   const port = options.port || 3456;
+  const host = options.host || '127.0.0.1';
+  const browserHost = host === '0.0.0.0' || host === '::' ? 'localhost' : host;
 
   // Resolve workspace path
   let workspacePath = process.cwd();
@@ -89,7 +98,7 @@ export async function viewCommand(options: ViewOptions): Promise<void> {
       console.log(chalk.green(`  Workspace switched successfully`));
 
       // Open browser with the new path
-      const url = `http://localhost:${port}/?path=${encodeURIComponent(result.path!)}`;
+      const url = `http://${browserHost}:${port}/?path=${encodeURIComponent(result.path!)}`;
 
       if (options.browser !== false) {
         console.log(chalk.cyan('  Opening in browser...'));
@@ -113,6 +122,7 @@ export async function viewCommand(options: ViewOptions): Promise<void> {
     await serveCommand({
       path: workspacePath,
       port: port,
+      host,
       browser: options.browser
     });
   }

@@ -59,20 +59,47 @@ export async function stopCommand(options: StopOptions): Promise<void> {
       signal: AbortSignal.timeout(2000)
     }).catch(() => null);
 
-    if (healthCheck && healthCheck.ok) {
-      // CCW server is running - send shutdown signal
+    if (healthCheck) {
+      // CCW server is running (may require authentication) - send shutdown signal
       console.log(chalk.cyan('  CCW server found, sending shutdown signal...'));
 
-      await fetch(`http://localhost:${port}/api/shutdown`, {
+      let token: string | undefined;
+      try {
+        const tokenResponse = await fetch(`http://localhost:${port}/api/auth/token`, {
+          signal: AbortSignal.timeout(2000)
+        });
+        const tokenData = await tokenResponse.json() as { token?: string };
+        token = tokenData.token;
+      } catch {
+        // Ignore token acquisition errors; shutdown request will fail with 401.
+      }
+
+      const shutdownResponse = await fetch(`http://localhost:${port}/api/shutdown`, {
         method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         signal: AbortSignal.timeout(5000)
       }).catch(() => null);
 
       // Wait a moment for shutdown
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      console.log(chalk.green.bold('\n  Server stopped successfully!\n'));
-      process.exit(0);
+      if (shutdownResponse && 'ok' in shutdownResponse && shutdownResponse.ok) {
+        console.log(chalk.green.bold('\n  Server stopped successfully!\n'));
+        process.exit(0);
+      }
+
+      // Best-effort verify shutdown (may still succeed even if shutdown endpoint didn't return ok)
+      const postCheck = await fetch(`http://localhost:${port}/api/health`, {
+        signal: AbortSignal.timeout(2000)
+      }).catch(() => null);
+
+      if (!postCheck) {
+        console.log(chalk.green.bold('\n  Server stopped successfully!\n'));
+        process.exit(0);
+      }
+
+      const statusHint = shutdownResponse ? `HTTP ${shutdownResponse.status}` : 'no response';
+      console.log(chalk.yellow(`  Shutdown request did not stop server (${statusHint}).`));
     }
 
     // No CCW server responding, check if port is in use

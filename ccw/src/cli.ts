@@ -83,6 +83,7 @@ export function run(argv: string[]): void {
     .description('Open workflow dashboard server with live path switching')
     .option('-p, --path <path>', 'Path to project directory', '.')
     .option('--port <port>', 'Server port', '3456')
+    .option('--host <host>', 'Server host to bind', '127.0.0.1')
     .option('--no-browser', 'Start server without opening browser')
     .action(viewCommand);
 
@@ -92,6 +93,7 @@ export function run(argv: string[]): void {
     .description('Alias for view command')
     .option('-p, --path <path>', 'Initial project directory')
     .option('--port <port>', 'Server port', '3456')
+    .option('--host <host>', 'Server host to bind', '127.0.0.1')
     .option('--no-browser', 'Start server without opening browser')
     .action(serveCommand);
 

@@ -41,6 +41,7 @@
     "glob": "^10.3.0",
     "gradient-string": "^2.0.2",
     "inquirer": "^9.2.0",
+    "jsonwebtoken": "^9.0.3",
     "open": "^9.1.0",
     "ora": "^7.0.0",
     "zod": "^4.1.13"
@@ -80,6 +81,7 @@
     "@types/better-sqlite3": "^7.6.12",
     "@types/gradient-string": "^1.1.6",
     "@types/inquirer": "^9.0.9",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.0.1",
     "pixelmatch": "^7.1.0",
     "playwright": "^1.57.0",

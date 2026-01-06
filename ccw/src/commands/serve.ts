@@ -7,6 +7,7 @@ import type { Server } from 'http';
 interface ServeOptions {
   port?: number;
   path?: string;
+  host?: string;
   browser?: boolean;
 }
 
@@ -16,6 +17,7 @@ interface ServeOptions {
  */
 export async function serveCommand(options: ServeOptions): Promise<void> {
   const port = options.port || 3456;
+  const host = options.host || '127.0.0.1';
 
   // Validate project path
   let initialPath = process.cwd();
@@ -30,26 +32,34 @@ export async function serveCommand(options: ServeOptions): Promise<void> {
 
   console.log(chalk.blue.bold('\n  CCW Dashboard Server\n'));
   console.log(chalk.gray(`  Initial project: ${initialPath}`));
+  console.log(chalk.gray(`  Host: ${host}`));
   console.log(chalk.gray(`  Port: ${port}\n`));
 
   try {
     // Start server
     console.log(chalk.cyan('  Starting server...'));
-    const server = await startServer({ port, initialPath });
+    const server = await startServer({ port, host, initialPath });
 
-    const url = `http://localhost:${port}`;
-    console.log(chalk.green(`  Server running at ${url}`));
+    const boundUrl = `http://${host}:${port}`;
+    const browserUrl = host === '0.0.0.0' || host === '::' ? `http://localhost:${port}` : boundUrl;
+
+    if (!['127.0.0.1', 'localhost', '::1'].includes(host)) {
+      console.log(chalk.yellow(`\n  WARNING: Binding to ${host} exposes the server to network attacks.`));
+      console.log(chalk.yellow('  Ensure firewall is configured and never expose tokens publicly.\n'));
+    }
+
+    console.log(chalk.green(`  Server running at ${boundUrl}`));
 
     // Open browser
     if (options.browser !== false) {
       console.log(chalk.cyan('  Opening in browser...'));
       try {
-        await launchBrowser(url);
+        await launchBrowser(browserUrl);
         console.log(chalk.green.bold('\n  Dashboard opened in browser!'));
       } catch (err) {
         const error = err as Error;
         console.log(chalk.yellow(`\n  Could not open browser: ${error.message}`));
-        console.log(chalk.gray(`  Open manually: ${url}`));
+        console.log(chalk.gray(`  Open manually: ${browserUrl}`));
       }
     }
 

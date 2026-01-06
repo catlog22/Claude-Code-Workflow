@@ -31,6 +31,10 @@ import { handleNavStatusRoutes } from './routes/nav-status-routes.js';
 // Import WebSocket handling
 import { handleWebSocketUpgrade, broadcastToClients } from './websocket.js';
 
+import { getTokenManager } from './auth/token-manager.js';
+import { authMiddleware, isLocalhostRequest, setAuthCookie } from './auth/middleware.js';
+import { getCorsOrigin } from './cors.js';
+
 import type { ServerConfig } from '../types/config.js';
 
 interface ServerOptions {
@@ -246,15 +250,24 @@ window.INITIAL_PATH = '${normalizePathForDisplay(initialPath).replace(/\\/g, '/'
 export async function startServer(options: ServerOptions = {}): Promise<http.Server> {
   const port = options.port ?? 3456;
   const initialPath = options.initialPath || process.cwd();
+  const host = options.host ?? '127.0.0.1';
+
+  const tokenManager = getTokenManager();
+  const secretKey = tokenManager.getSecretKey();
+  tokenManager.getOrCreateAuthToken();
+  const unauthenticatedPaths = new Set<string>(['/api/auth/token']);
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
     const pathname = url.pathname;
 
     // CORS headers for API requests
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    const originHeader = Array.isArray(req.headers.origin) ? req.headers.origin[0] : req.headers.origin;
+    res.setHeader('Access-Control-Allow-Origin', getCorsOrigin(originHeader, port));
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Vary', 'Origin');
 
     if (req.method === 'OPTIONS') {
       res.writeHead(200);
@@ -279,6 +292,27 @@ export async function startServer(options: ServerOptions = {}): Promise<http.Ser
         broadcastToClients,
         server
       };
+
+      // Token acquisition endpoint (localhost-only)
+      if (pathname === '/api/auth/token') {
+        if (!isLocalhostRequest(req)) {
+          res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ error: 'Forbidden' }));
+          return;
+        }
+
+        const tokenResult = tokenManager.getOrCreateAuthToken();
+        setAuthCookie(res, tokenResult.token, tokenResult.expiresAt);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ token: tokenResult.token, expiresAt: tokenResult.expiresAt.toISOString() }));
+        return;
+      }
+
+      // Authentication middleware for all API routes
+      if (pathname.startsWith('/api/')) {
+        const ok = authMiddleware({ pathname, req, res, tokenManager, secretKey, unauthenticatedPaths });
+        if (!ok) return;
+      }
 
       // Try each route handler in order
       // Order matters: more specific routes should come before general ones
@@ -401,6 +435,10 @@ export async function startServer(options: ServerOptions = {}): Promise<http.Ser
 
       // Serve dashboard HTML
       if (pathname === '/' || pathname === '/index.html') {
+        if (isLocalhostRequest(req)) {
+          const tokenResult = tokenManager.getOrCreateAuthToken();
+          setAuthCookie(res, tokenResult.token, tokenResult.expiresAt);
+        }
         const html = generateServerDashboard(initialPath);
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(html);
@@ -463,10 +501,10 @@ export async function startServer(options: ServerOptions = {}): Promise<http.Ser
   });
 
   return new Promise((resolve, reject) => {
-    server.listen(port, () => {
-      console.log(`Dashboard server running at http://localhost:${port}`);
-      console.log(`WebSocket endpoint available at ws://localhost:${port}/ws`);
-      console.log(`Hook endpoint available at POST http://localhost:${port}/api/hook`);
+    server.listen(port, host, () => {
+      console.log(`Dashboard server running at http://${host}:${port}`);
+      console.log(`WebSocket endpoint available at ws://${host}:${port}/ws`);
+      console.log(`Hook endpoint available at POST http://${host}:${port}/api/hook`);
       resolve(server);
     });
     server.on('error', reject);
