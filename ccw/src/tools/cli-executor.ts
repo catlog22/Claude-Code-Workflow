@@ -10,6 +10,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, readdirSync, statSync } from 'fs';
 import { join, relative } from 'path';
 import { validatePath } from '../utils/path-resolver.js';
+import { escapeWindowsArg } from '../utils/shell-escape.js';
 
 // Track current running child process for cleanup on interruption
 let currentChildProcess: ChildProcess | null = null;
@@ -930,6 +931,10 @@ async function executeCliTool(
     // Unix-like systems can use shell: false for direct execution
     const isWindows = process.platform === 'win32';
 
+    // When using cmd.exe via `shell: true`, escape args to prevent metacharacter injection.
+    const commandToSpawn = isWindows ? escapeWindowsArg(command) : command;
+    const argsToSpawn = isWindows ? args.map(escapeWindowsArg) : args;
+
     debugLog('SPAWN', `Spawning process`, {
       command,
       args,
@@ -937,10 +942,11 @@ async function executeCliTool(
       shell: isWindows,
       useStdin,
       platform: process.platform,
-      fullCommand: `${command} ${args.join(' ')}`
+      fullCommand: `${command} ${args.join(' ')}`,
+      ...(isWindows ? { escapedCommand: commandToSpawn, escapedArgs: argsToSpawn, escapedFullCommand: `${commandToSpawn} ${argsToSpawn.join(' ')}` } : {})
     });
 
-    const child = spawn(command, args, {
+    const child = spawn(commandToSpawn, argsToSpawn, {
       cwd: workingDir,
       shell: isWindows,  // Enable shell on Windows for .cmd files
       stdio: [useStdin ? 'pipe' : 'ignore', 'pipe', 'pipe']
