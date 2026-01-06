@@ -315,6 +315,24 @@ class TestNormalizeWeights:
         assert normalized is not weights
         assert normalized == weights
 
+    def test_normalize_weights_with_zero_total(self):
+        """Zero total returns unchanged weights without division."""
+        weights = {"exact": 0.0, "fuzzy": 0.0}
+
+        normalized = normalize_weights(weights)
+
+        assert normalized is not weights
+        assert normalized == weights
+
+    def test_normalize_weights_with_negative_total(self):
+        """Negative total returns unchanged weights without division."""
+        weights = {"exact": -1.0, "fuzzy": -0.5}
+
+        normalized = normalize_weights(weights)
+
+        assert normalized is not weights
+        assert normalized == weights
+
     def test_normalize_weights_valid_total_normalizes(self):
         """Valid finite positive total performs normalization correctly."""
         weights = {"exact": 2.0, "fuzzy": 1.0}
