@@ -177,6 +177,32 @@ describe('path-resolver utility module', async () => {
     assert.ok(res.error?.includes('Path must be within'));
   });
 
+  it('validatePath blocks symlink escapes even when target path does not exist', () => {
+    const baseDir = 'C:\\allowed';
+    const linkPath = 'C:\\allowed\\link';
+    setExists(linkPath, true);
+    setDir(linkPath, true);
+    setRealpath(linkPath, 'C:\\secret');
+
+    const res = pathResolver.validatePath(path.join(linkPath, 'newfile.txt'), { baseDir });
+    assert.equal(res.valid, false);
+    assert.equal(res.path, null);
+    assert.ok(res.error?.includes('Path must be within'));
+  });
+
+  it('validatePath allows symlinked parent directories that resolve within baseDir', () => {
+    const baseDir = 'C:\\allowed';
+    const linkPath = 'C:\\allowed\\link';
+    setExists(linkPath, true);
+    setDir(linkPath, true);
+    setRealpath(linkPath, 'C:\\allowed\\real');
+
+    const res = pathResolver.validatePath(path.join(linkPath, 'newfile.txt'), { baseDir });
+    assert.equal(res.valid, true);
+    assert.equal(res.path, path.join('C:\\allowed\\real', 'newfile.txt'));
+    assert.equal(res.error, null);
+  });
+
   it('validateOutputPath rejects directories and resolves relative output paths', () => {
     assert.equal(pathResolver.validateOutputPath('').valid, false);
 

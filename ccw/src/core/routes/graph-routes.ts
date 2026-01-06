@@ -7,6 +7,7 @@ import { homedir } from 'os';
 import { join, resolve, normalize } from 'path';
 import { existsSync, readdirSync } from 'fs';
 import Database from 'better-sqlite3';
+import { validatePath as validateAllowedPath } from '../../utils/path-validator.js';
 
 export interface RouteContext {
   pathname: string;
@@ -82,28 +83,22 @@ interface ImpactAnalysis {
  * Validate and sanitize project path to prevent path traversal attacks
  * @returns sanitized absolute path or null if invalid
  */
-function validateProjectPath(projectPath: string, initialPath: string): string | null {
-  if (!projectPath) {
-    return initialPath;
+type ProjectPathValidationResult =
+  | { path: string; status: 200 }
+  | { path: null; status: number; error: string };
+
+async function validateProjectPath(projectPath: string, initialPath: string): Promise<ProjectPathValidationResult> {
+  const candidate = projectPath || initialPath;
+
+  try {
+    const validated = await validateAllowedPath(candidate, { mustExist: true, allowedDirectories: [initialPath] });
+    return { path: validated, status: 200 };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const status = message.includes('Access denied') ? 403 : 400;
+    console.error(`[Graph] Project path validation failed: ${message}`);
+    return { path: null, status, error: status === 403 ? 'Access denied' : 'Invalid project path' };
   }
-
-  // Resolve to absolute path
-  const resolved = resolve(projectPath);
-  const normalized = normalize(resolved);
-
-  // Check for path traversal attempts
-  if (normalized.includes('..') || normalized !== resolved) {
-    console.error(`[Graph] Path traversal attempt blocked: ${projectPath}`);
-    return null;
-  }
-
-  // Ensure path exists and is a directory
-  if (!existsSync(normalized)) {
-    console.error(`[Graph] Path does not exist: ${normalized}`);
-    return null;
-  }
-
-  return normalized;
 }
 
 /**
@@ -440,17 +435,19 @@ export async function handleGraphRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Graph Nodes - Get all symbols as graph nodes
   if (pathname === '/api/graph/nodes') {
     const rawPath = url.searchParams.get('path') || initialPath;
-    const projectPath = validateProjectPath(rawPath, initialPath);
+    const projectPathResult = await validateProjectPath(rawPath, initialPath);
     const limitStr = url.searchParams.get('limit') || '1000';
     const limit = Math.min(parseInt(limitStr, 10) || 1000, 5000); // Max 5000 nodes
     const fileFilter = url.searchParams.get('file') || undefined;
     const moduleFilter = url.searchParams.get('module') || undefined;
 
-    if (!projectPath) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Invalid project path', nodes: [] }));
+    if (projectPathResult.path === null) {
+      res.writeHead(projectPathResult.status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: projectPathResult.error, nodes: [] }));
       return true;
     }
+
+    const projectPath = projectPathResult.path;
 
     try {
       const allNodes = await querySymbols(projectPath, fileFilter, moduleFilter);
@@ -474,17 +471,19 @@ export async function handleGraphRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Graph Edges - Get all relationships as graph edges
   if (pathname === '/api/graph/edges') {
     const rawPath = url.searchParams.get('path') || initialPath;
-    const projectPath = validateProjectPath(rawPath, initialPath);
+    const projectPathResult = await validateProjectPath(rawPath, initialPath);
     const limitStr = url.searchParams.get('limit') || '2000';
     const limit = Math.min(parseInt(limitStr, 10) || 2000, 10000); // Max 10000 edges
     const fileFilter = url.searchParams.get('file') || undefined;
     const moduleFilter = url.searchParams.get('module') || undefined;
 
-    if (!projectPath) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Invalid project path', edges: [] }));
+    if (projectPathResult.path === null) {
+      res.writeHead(projectPathResult.status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: projectPathResult.error, edges: [] }));
       return true;
     }
+
+    const projectPath = projectPathResult.path;
 
     try {
       const allEdges = await queryRelationships(projectPath, fileFilter, moduleFilter);
@@ -508,13 +507,15 @@ export async function handleGraphRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Get available files and modules for filtering
   if (pathname === '/api/graph/files') {
     const rawPath = url.searchParams.get('path') || initialPath;
-    const projectPath = validateProjectPath(rawPath, initialPath);
+    const projectPathResult = await validateProjectPath(rawPath, initialPath);
 
-    if (!projectPath) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Invalid project path', files: [], modules: [] }));
+    if (projectPathResult.path === null) {
+      res.writeHead(projectPathResult.status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: projectPathResult.error, files: [], modules: [] }));
       return true;
     }
+
+    const projectPath = projectPathResult.path;
 
     try {
       const mapper = new PathMapper();
@@ -570,14 +571,16 @@ export async function handleGraphRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Impact Analysis - Get impact analysis for a symbol
   if (pathname === '/api/graph/impact') {
     const rawPath = url.searchParams.get('path') || initialPath;
-    const projectPath = validateProjectPath(rawPath, initialPath);
+    const projectPathResult = await validateProjectPath(rawPath, initialPath);
     const symbolId = url.searchParams.get('symbol');
 
-    if (!projectPath) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Invalid project path', directDependents: [], affectedFiles: [] }));
+    if (projectPathResult.path === null) {
+      res.writeHead(projectPathResult.status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: projectPathResult.error, directDependents: [], affectedFiles: [] }));
       return true;
     }
+
+    const projectPath = projectPathResult.path;
 
     if (!symbolId) {
       res.writeHead(400, { 'Content-Type': 'application/json' });

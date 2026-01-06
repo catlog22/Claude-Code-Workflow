@@ -69,6 +69,21 @@ export function validatePath(inputPath: string, options: ValidatePathOptions = {
     return { valid: false, path: null, error: `Invalid path: ${message}` };
   }
 
+  // Check if within base directory when specified (pre-symlink resolution)
+  const resolvedBase = baseDir ? resolvePath(baseDir) : null;
+  if (resolvedBase) {
+    const relativePath = relative(resolvedBase, resolvedPath);
+
+    // Path traversal detection: relative path should not start with '..'
+    if (relativePath.startsWith('..') || isAbsolute(relativePath)) {
+      return {
+        valid: false,
+        path: null,
+        error: `Path must be within ${resolvedBase}`
+      };
+    }
+  }
+
   // Check if path exists when required
   if (mustExist && !existsSync(resolvedPath)) {
     return { valid: false, path: null, error: `Path does not exist: ${resolvedPath}` };
@@ -83,11 +98,30 @@ export function validatePath(inputPath: string, options: ValidatePathOptions = {
       const message = err instanceof Error ? err.message : String(err);
       return { valid: false, path: null, error: `Cannot resolve path: ${message}` };
     }
+  } else if (resolvedBase) {
+    // For non-existent paths, resolve the nearest existing ancestor to prevent symlink-based escapes
+    // (e.g., baseDir/link/newfile where baseDir/link is a symlink to a disallowed location).
+    let existingPath = resolvedPath;
+    while (!existsSync(existingPath)) {
+      const parent = resolve(existingPath, '..');
+      if (parent === existingPath) break;
+      existingPath = parent;
+    }
+
+    if (existsSync(existingPath)) {
+      try {
+        const realExisting = realpathSync(existingPath);
+        const remainder = relative(existingPath, resolvedPath);
+        realPath = remainder && remainder !== '.' ? join(realExisting, remainder) : realExisting;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return { valid: false, path: null, error: `Cannot resolve path: ${message}` };
+      }
+    }
   }
 
-  // Check if within base directory when specified
-  if (baseDir) {
-    const resolvedBase = resolvePath(baseDir);
+  // Check if within base directory when specified (post-symlink resolution)
+  if (resolvedBase) {
     const relativePath = relative(resolvedBase, realPath);
 
     // Path traversal detection: relative path should not start with '..'

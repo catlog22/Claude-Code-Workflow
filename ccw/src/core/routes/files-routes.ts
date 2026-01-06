@@ -6,6 +6,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
+import { validatePath as validateAllowedPath } from '../../utils/path-validator.js';
 
 export interface RouteContext {
   pathname: string;
@@ -392,9 +393,19 @@ export async function handleFilesRoutes(ctx: RouteContext): Promise<boolean> {
   // API: List directory files with .gitignore filtering (Explorer view)
   if (pathname === '/api/files') {
     const dirPath = url.searchParams.get('path') || initialPath;
-    const filesData = await listDirectoryFiles(dirPath);
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(filesData));
+
+    try {
+      const validatedDir = await validateAllowedPath(dirPath, { mustExist: true, allowedDirectories: [initialPath] });
+      const filesData = await listDirectoryFiles(validatedDir);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(filesData));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const status = message.includes('Access denied') ? 403 : 400;
+      console.error(`[Files] Path validation failed: ${message}`);
+      res.writeHead(status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: status === 403 ? 'Access denied' : 'Invalid path', files: [] }));
+    }
     return true;
   }
 
@@ -406,9 +417,19 @@ export async function handleFilesRoutes(ctx: RouteContext): Promise<boolean> {
       res.end(JSON.stringify({ error: 'File path is required' }));
       return true;
     }
-    const fileData = await getFileContent(filePath);
-    res.writeHead(fileData.error ? 404 : 200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(fileData));
+
+    try {
+      const validatedFile = await validateAllowedPath(filePath, { mustExist: true, allowedDirectories: [initialPath] });
+      const fileData = await getFileContent(validatedFile);
+      res.writeHead(fileData.error ? 404 : 200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(fileData));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const status = message.includes('Access denied') ? 403 : 400;
+      console.error(`[Files] Path validation failed: ${message}`);
+      res.writeHead(status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: status === 403 ? 'Access denied' : 'Invalid path' }));
+    }
     return true;
   }
 
@@ -419,7 +440,16 @@ export async function handleFilesRoutes(ctx: RouteContext): Promise<boolean> {
       if (!targetPath) {
         return { error: 'path is required', status: 400 };
       }
-      return await triggerUpdateClaudeMd(targetPath, tool, strategy);
+
+      try {
+        const validatedPath = await validateAllowedPath(targetPath, { mustExist: true, allowedDirectories: [initialPath] });
+        return await triggerUpdateClaudeMd(validatedPath, tool, strategy);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const status = message.includes('Access denied') ? 403 : 400;
+        console.error(`[Files] Path validation failed: ${message}`);
+        return { error: status === 403 ? 'Access denied' : 'Invalid path', status };
+      }
     });
     return true;
   }

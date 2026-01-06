@@ -7,7 +7,7 @@
  * Inspired by MCP filesystem server's security model.
  */
 
-import { resolve, isAbsolute, normalize, relative } from 'path';
+import { resolve, isAbsolute, normalize, relative, sep } from 'path';
 import { realpath, access } from 'fs/promises';
 import { constants } from 'fs';
 
@@ -42,6 +42,27 @@ export function normalizePath(p: string): string {
   return normalize(p).replace(/\\/g, '/');
 }
 
+function canonicalizeForComparison(p: string): string {
+  const base = getProjectRoot();
+  const absolute = isAbsolute(p) ? p : resolve(base, p);
+  let canonical = normalize(absolute);
+
+  // Remove trailing separators (except drive roots like C:\ and posix root /)
+  canonical = canonical.replace(/[\\/]+$/, '');
+  if (/^[a-zA-Z]:$/.test(canonical)) {
+    canonical += sep;
+  } else if (canonical === '') {
+    canonical = sep;
+  }
+
+  // Windows paths are case-insensitive.
+  if (process.platform === 'win32') {
+    canonical = canonical.toLowerCase();
+  }
+
+  return canonical;
+}
+
 /**
  * Check if path is within allowed directories
  */
@@ -49,12 +70,13 @@ export function isPathWithinAllowedDirectories(
   targetPath: string,
   allowedDirectories: string[]
 ): boolean {
-  const normalizedTarget = normalizePath(targetPath);
+  const canonicalTarget = canonicalizeForComparison(targetPath);
   return allowedDirectories.some(dir => {
-    const normalizedDir = normalizePath(dir);
-    // Check if path equals or starts with allowed directory
-    return normalizedTarget === normalizedDir ||
-           normalizedTarget.startsWith(normalizedDir + '/');
+    const canonicalDir = canonicalizeForComparison(dir);
+    if (canonicalTarget === canonicalDir) return true;
+
+    const boundary = canonicalDir.endsWith(sep) ? canonicalDir : canonicalDir + sep;
+    return canonicalTarget.startsWith(boundary);
   });
 }
 
