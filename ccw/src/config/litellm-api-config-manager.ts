@@ -3,7 +3,7 @@
  * Manages provider credentials, custom endpoints, and cache settings
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import { StoragePaths, GlobalPaths, ensureStorageDir } from './storage-paths.js';
@@ -44,6 +44,14 @@ function getConfigPath(_baseDir?: string): string {
   return join(configDir, 'litellm-api-config.json');
 }
 
+function bestEffortRestrictPermissions(filePath: string, mode: number): void {
+  try {
+    chmodSync(filePath, mode);
+  } catch {
+    // Ignore permission errors (e.g., Windows or restrictive environments)
+  }
+}
+
 /**
  * Load configuration from file
  */
@@ -68,7 +76,8 @@ export function loadLiteLLMApiConfig(baseDir: string): LiteLLMApiConfig {
  */
 function saveConfig(baseDir: string, config: LiteLLMApiConfig): void {
   const configPath = getConfigPath(baseDir);
-  writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+  writeFileSync(configPath, JSON.stringify(config, null, 2), { encoding: 'utf8', mode: 0o600 });
+  bestEffortRestrictPermissions(configPath, 0o600);
 }
 
 /**
@@ -117,10 +126,26 @@ export function getProviderWithResolvedEnvVars(
   const provider = getProvider(baseDir, providerId);
   if (!provider) return null;
 
-  return {
+  const resolvedApiKey = resolveEnvVar(provider.apiKey);
+
+  // Avoid leaking env-var syntax or secrets if this object is logged/serialized.
+  const sanitizedProvider: ProviderCredential = {
     ...provider,
-    resolvedApiKey: resolveEnvVar(provider.apiKey),
+    apiKey: '***',
+    apiKeys: provider.apiKeys?.map(keyEntry => ({
+      ...keyEntry,
+      key: '***',
+    })),
   };
+
+  Object.defineProperty(sanitizedProvider, 'resolvedApiKey', {
+    value: resolvedApiKey,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+
+  return sanitizedProvider as ProviderCredential & { resolvedApiKey: string };
 }
 
 /**

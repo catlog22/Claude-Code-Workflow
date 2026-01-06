@@ -76,6 +76,22 @@ export interface RouteContext {
   broadcastToClients: (data: unknown) => void;
 }
 
+function sanitizeProviderForResponse(provider: any): any {
+  if (!provider) return provider;
+  return {
+    ...provider,
+    apiKey: '***',
+    apiKeys: Array.isArray(provider.apiKeys)
+      ? provider.apiKeys.map((entry: any) => ({ ...entry, key: '***' }))
+      : provider.apiKeys,
+  };
+}
+
+function sanitizeRotationEndpointForResponse(endpoint: any): any {
+  if (!endpoint) return endpoint;
+  return { ...endpoint, api_key: '***' };
+}
+
 // ===========================
 // Model Information
 // ===========================
@@ -132,7 +148,7 @@ export async function handleLiteLLMApiRoutes(ctx: RouteContext): Promise<boolean
   // GET /api/litellm-api/providers - List all providers
   if (pathname === '/api/litellm-api/providers' && req.method === 'GET') {
     try {
-      const providers = getAllProviders(initialPath);
+      const providers = getAllProviders(initialPath).map(sanitizeProviderForResponse);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ providers, count: providers.length }));
     } catch (err) {
@@ -153,13 +169,14 @@ export async function handleLiteLLMApiRoutes(ctx: RouteContext): Promise<boolean
 
       try {
         const provider = addProvider(initialPath, providerData);
+        const sanitizedProvider = sanitizeProviderForResponse(provider);
 
         broadcastToClients({
           type: 'LITELLM_PROVIDER_CREATED',
-          payload: { provider, timestamp: new Date().toISOString() }
+          payload: { provider: sanitizedProvider, timestamp: new Date().toISOString() }
         });
 
-        return { success: true, provider };
+        return { success: true, provider: sanitizedProvider };
       } catch (err) {
         return { error: (err as Error).message, status: 500 };
       }
@@ -181,7 +198,7 @@ export async function handleLiteLLMApiRoutes(ctx: RouteContext): Promise<boolean
       }
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(provider));
+      res.end(JSON.stringify(sanitizeProviderForResponse(provider)));
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: (err as Error).message }));
@@ -199,13 +216,14 @@ export async function handleLiteLLMApiRoutes(ctx: RouteContext): Promise<boolean
 
       try {
         const provider = updateProvider(initialPath, providerId, updates);
+        const sanitizedProvider = sanitizeProviderForResponse(provider);
 
         broadcastToClients({
           type: 'LITELLM_PROVIDER_UPDATED',
-          payload: { provider, timestamp: new Date().toISOString() }
+          payload: { provider: sanitizedProvider, timestamp: new Date().toISOString() }
         });
 
-        return { success: true, provider };
+        return { success: true, provider: sanitizedProvider };
       } catch (err) {
         return { error: (err as Error).message, status: 404 };
       }
@@ -687,11 +705,12 @@ export async function handleLiteLLMApiRoutes(ctx: RouteContext): Promise<boolean
   if (pathname === '/api/litellm-api/codexlens/rotation/endpoints' && req.method === 'GET') {
     try {
       const endpoints = generateRotationEndpoints(initialPath);
+      const sanitizedEndpoints = endpoints.map(sanitizeRotationEndpointForResponse);
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
-        endpoints,
-        count: endpoints.length,
+        endpoints: sanitizedEndpoints,
+        count: sanitizedEndpoints.length,
       }));
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
