@@ -17,6 +17,7 @@ import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 import { getSystemPython } from '../utils/python-utils.js';
+import { EXEC_TIMEOUTS } from '../utils/exec-constants.js';
 
 // Get directory of this module
 const __filename = fileURLToPath(import.meta.url);
@@ -340,7 +341,7 @@ async function ensureLiteLLMEmbedderReady(): Promise<BootstrapResult> {
     for (const localPath of possiblePaths) {
       if (existsSync(join(localPath, 'pyproject.toml'))) {
         console.log(`[CodexLens] Installing ccw-litellm from local path: ${localPath}`);
-        execSync(`"${pipPath}" install -e "${localPath}"`, { stdio: 'inherit' });
+        execSync(`"${pipPath}" install -e "${localPath}"`, { stdio: 'inherit', timeout: EXEC_TIMEOUTS.PACKAGE_INSTALL });
         installed = true;
         break;
       }
@@ -348,7 +349,7 @@ async function ensureLiteLLMEmbedderReady(): Promise<BootstrapResult> {
 
     if (!installed) {
       console.log('[CodexLens] Installing ccw-litellm from PyPI...');
-      execSync(`"${pipPath}" install ccw-litellm`, { stdio: 'inherit' });
+      execSync(`"${pipPath}" install ccw-litellm`, { stdio: 'inherit', timeout: EXEC_TIMEOUTS.PACKAGE_INSTALL });
     }
 
     return { success: true };
@@ -426,11 +427,11 @@ async function detectGpuSupport(): Promise<{ mode: GpuMode; available: GpuMode[]
   // Check for NVIDIA GPU (CUDA)
   try {
     if (process.platform === 'win32') {
-      execSync('nvidia-smi', { stdio: 'pipe' });
+      execSync('nvidia-smi', { stdio: 'pipe', timeout: EXEC_TIMEOUTS.SYSTEM_INFO });
       available.push('cuda');
       detectedInfo = 'NVIDIA GPU detected (CUDA available)';
     } else {
-      execSync('which nvidia-smi', { stdio: 'pipe' });
+      execSync('which nvidia-smi', { stdio: 'pipe', timeout: EXEC_TIMEOUTS.SYSTEM_INFO });
       available.push('cuda');
       detectedInfo = 'NVIDIA GPU detected (CUDA available)';
     }
@@ -503,7 +504,7 @@ async function installSemantic(gpuMode: GpuMode = 'cpu'): Promise<BootstrapResul
 
   for (const pkg of onnxVariants) {
     try {
-      execSync(`"${pipPath}" uninstall ${pkg} -y`, { stdio: 'pipe' });
+      execSync(`"${pipPath}" uninstall ${pkg} -y`, { stdio: 'pipe', timeout: EXEC_TIMEOUTS.PACKAGE_INSTALL });
       console.log(`[CodexLens] Removed ${pkg}`);
     } catch {
       // Package not installed, ignore
@@ -587,7 +588,7 @@ async function installSemantic(gpuMode: GpuMode = 'cpu'): Promise<BootstrapResul
           if (gpuMode !== 'cpu') {
             try {
               console.log(`[CodexLens] Reinstalling ${onnxPackage} to ensure GPU provider works...`);
-              execSync(`"${pipPath}" install --force-reinstall ${onnxPackage}`, { stdio: 'pipe', timeout: 300000 });
+              execSync(`"${pipPath}" install --force-reinstall ${onnxPackage}`, { stdio: 'pipe', timeout: EXEC_TIMEOUTS.PACKAGE_INSTALL });
               console.log(`[CodexLens] ${onnxPackage} reinstalled successfully`);
             } catch (e) {
               console.warn(`[CodexLens] Warning: Failed to reinstall ${onnxPackage}: ${(e as Error).message}`);
@@ -626,7 +627,7 @@ async function bootstrapVenv(): Promise<BootstrapResult> {
     try {
       console.log('[CodexLens] Creating virtual environment...');
       const pythonCmd = getSystemPython();
-      execSync(`${pythonCmd} -m venv "${CODEXLENS_VENV}"`, { stdio: 'inherit' });
+      execSync(`${pythonCmd} -m venv "${CODEXLENS_VENV}"`, { stdio: 'inherit', timeout: EXEC_TIMEOUTS.PROCESS_SPAWN });
     } catch (err) {
       return { success: false, error: `Failed to create venv: ${(err as Error).message}` };
     }
@@ -651,7 +652,7 @@ async function bootstrapVenv(): Promise<BootstrapResult> {
     for (const localPath of possiblePaths) {
       if (existsSync(join(localPath, 'pyproject.toml'))) {
         console.log(`[CodexLens] Installing from local path: ${localPath}`);
-        execSync(`"${pipPath}" install -e "${localPath}"`, { stdio: 'inherit' });
+        execSync(`"${pipPath}" install -e "${localPath}"`, { stdio: 'inherit', timeout: EXEC_TIMEOUTS.PACKAGE_INSTALL });
         installed = true;
         break;
       }
@@ -659,7 +660,7 @@ async function bootstrapVenv(): Promise<BootstrapResult> {
 
     if (!installed) {
       console.log('[CodexLens] Installing from PyPI...');
-      execSync(`"${pipPath}" install codexlens`, { stdio: 'inherit' });
+      execSync(`"${pipPath}" install codexlens`, { stdio: 'inherit', timeout: EXEC_TIMEOUTS.PACKAGE_INSTALL });
     }
 
     // Clear cache after successful installation
@@ -1368,7 +1369,7 @@ async function uninstallCodexLens(): Promise<BootstrapResult> {
       const { execSync } = await import('child_process');
       try {
         // Kill any python processes from our venv that might be holding file locks
-        execSync(`taskkill /F /IM python.exe /FI "MODULES eq sqlite3" 2>nul`, { stdio: 'ignore' });
+        execSync(`taskkill /F /IM python.exe /FI "MODULES eq sqlite3" 2>nul`, { stdio: 'ignore', timeout: EXEC_TIMEOUTS.SYSTEM_INFO });
       } catch {
         // Ignore errors - no processes to kill
       }
@@ -1397,7 +1398,7 @@ async function uninstallCodexLens(): Promise<BootstrapResult> {
                 try {
                   const { execSync } = await import('child_process');
                   // Try to close handles on the specific file
-                  execSync(`handle -c ${err.path} -y 2>nul`, { stdio: 'ignore' });
+                  execSync(`handle -c ${err.path} -y 2>nul`, { stdio: 'ignore', timeout: EXEC_TIMEOUTS.SYSTEM_INFO });
                 } catch {
                   // handle.exe may not be installed, ignore
                 }
@@ -1454,7 +1455,7 @@ function cancelIndexing(): { success: boolean; message?: string; error?: string 
       // On Windows, use taskkill to kill the process tree
       const { execSync } = require('child_process');
       try {
-        execSync(`taskkill /pid ${currentIndexingProcess.pid} /T /F`, { stdio: 'ignore' });
+        execSync(`taskkill /pid ${currentIndexingProcess.pid} /T /F`, { stdio: 'ignore', timeout: EXEC_TIMEOUTS.SYSTEM_INFO });
       } catch {
         // Process may have already exited
       }

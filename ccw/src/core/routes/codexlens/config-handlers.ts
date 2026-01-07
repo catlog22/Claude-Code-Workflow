@@ -13,6 +13,7 @@ import {
   uninstallCodexLens,
 } from '../../../tools/codex-lens.js';
 import type { RouteContext } from '../types.js';
+import { EXEC_TIMEOUTS } from '../../../utils/exec-constants.js';
 import { extractJSON } from './utils.js';
 import { stopWatcherForUninstall } from './watcher-handlers.js';
 
@@ -331,7 +332,7 @@ export async function handleCodexLensConfigRoutes(ctx: RouteContext): Promise<bo
           const { execSync } = await import('child_process');
           const wmicOutput = execSync('wmic path win32_VideoController get name', {
             encoding: 'utf-8',
-            timeout: 10000,
+            timeout: EXEC_TIMEOUTS.SYSTEM_INFO,
             stdio: ['pipe', 'pipe', 'pipe']
           });
 
@@ -359,7 +360,7 @@ export async function handleCodexLensConfigRoutes(ctx: RouteContext): Promise<bo
           const { execSync } = await import('child_process');
           const nvidiaOutput = execSync('nvidia-smi --query-gpu=name --format=csv,noheader', {
             encoding: 'utf-8',
-            timeout: 10000,
+            timeout: EXEC_TIMEOUTS.SYSTEM_INFO,
             stdio: ['pipe', 'pipe', 'pipe']
           });
 

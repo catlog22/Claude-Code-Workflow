@@ -8,6 +8,15 @@ import type { ToolSchema, ToolResult } from '../types/tool.js';
 import { readdirSync, statSync, existsSync } from 'fs';
 import { join, resolve, dirname, extname, relative } from 'path';
 import { execSync } from 'child_process';
+import { EXEC_TIMEOUTS } from '../utils/exec-constants.js';
+
+function isExecTimeoutError(error: unknown): boolean {
+  const err = error as { code?: unknown; errno?: unknown; message?: unknown } | null;
+  const code = err?.code ?? err?.errno;
+  if (code === 'ETIMEDOUT') return true;
+  const message = typeof err?.message === 'string' ? err.message : '';
+  return message.includes('ETIMEDOUT');
+}
 
 // Source file extensions to track
 const SOURCE_EXTENSIONS = [
@@ -53,9 +62,12 @@ interface ToolOutput {
  */
 function isGitRepo(basePath: string): boolean {
   try {
-    execSync('git rev-parse --git-dir', { cwd: basePath, stdio: 'pipe' });
+    execSync('git rev-parse --git-dir', { cwd: basePath, stdio: 'pipe', timeout: EXEC_TIMEOUTS.GIT_QUICK });
     return true;
-  } catch (e) {
+  } catch (e: unknown) {
+    if (isExecTimeoutError(e)) {
+      console.warn(`[detect_changed_modules] git rev-parse timed out after ${EXEC_TIMEOUTS.GIT_QUICK}ms`);
+    }
     return false;
   }
 }
@@ -69,13 +81,15 @@ function getGitChangedFiles(basePath: string): string[] {
     let output = execSync('git diff --name-only HEAD 2>/dev/null', {
       cwd: basePath,
       encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: EXEC_TIMEOUTS.GIT_DIFF,
     }).trim();
 
     const cachedOutput = execSync('git diff --name-only --cached 2>/dev/null', {
       cwd: basePath,
       encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: EXEC_TIMEOUTS.GIT_DIFF,
     }).trim();
 
     if (cachedOutput) {
@@ -87,12 +101,16 @@ function getGitChangedFiles(basePath: string): string[] {
       output = execSync('git diff --name-only HEAD~1 HEAD 2>/dev/null', {
         cwd: basePath,
         encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: EXEC_TIMEOUTS.GIT_DIFF,
       }).trim();
     }
 
     return output ? output.split('\n').filter(f => f.trim()) : [];
-  } catch (e) {
+  } catch (e: unknown) {
+    if (isExecTimeoutError(e)) {
+      console.warn(`[detect_changed_modules] git diff timed out after ${EXEC_TIMEOUTS.GIT_DIFF}ms`);
+    }
     return [];
   }
 }

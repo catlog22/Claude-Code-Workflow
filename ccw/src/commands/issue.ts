@@ -8,6 +8,15 @@ import chalk from 'chalk';
 import { execSync } from 'child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, statSync } from 'fs';
 import { join, resolve } from 'path';
+import { EXEC_TIMEOUTS } from '../utils/exec-constants.js';
+
+function isExecTimeoutError(error: unknown): boolean {
+  const err = error as { code?: unknown; errno?: unknown; message?: unknown } | null;
+  const code = err?.code ?? err?.errno;
+  if (code === 'ETIMEDOUT') return true;
+  const message = typeof err?.message === 'string' ? err.message : '';
+  return message.includes('ETIMEDOUT');
+}
 
 // Handle EPIPE errors gracefully
 process.stdout.on('error', (err: NodeJS.ErrnoException) => {
@@ -261,13 +270,15 @@ function getProjectRoot(): string {
     // Get the common git directory (points to main repo's .git)
     const gitCommonDir = execSync('git rev-parse --git-common-dir', {
       encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: EXEC_TIMEOUTS.GIT_QUICK,
     }).trim();
 
     // Get the current git directory
     const gitDir = execSync('git rev-parse --git-dir', {
       encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: EXEC_TIMEOUTS.GIT_QUICK,
     }).trim();
 
     // Normalize paths for comparison (Windows case insensitive)
@@ -286,7 +297,10 @@ function getProjectRoot(): string {
         return mainRepoRoot;
       }
     }
-  } catch {
+  } catch (err: unknown) {
+    if (isExecTimeoutError(err)) {
+      console.warn(`[issue] git rev-parse timed out after ${EXEC_TIMEOUTS.GIT_QUICK}ms; falling back to filesystem detection`);
+    }
     // Git command failed - fall through to manual detection
   }
 

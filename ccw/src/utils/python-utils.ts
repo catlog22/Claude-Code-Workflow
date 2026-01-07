@@ -4,6 +4,15 @@
  */
 
 import { execSync } from 'child_process';
+import { EXEC_TIMEOUTS } from './exec-constants.js';
+
+function isExecTimeoutError(error: unknown): boolean {
+  const err = error as { code?: unknown; errno?: unknown; message?: unknown } | null;
+  const code = err?.code ?? err?.errno;
+  if (code === 'ETIMEDOUT') return true;
+  const message = typeof err?.message === 'string' ? err.message : '';
+  return message.includes('ETIMEDOUT');
+}
 
 /**
  * Parse Python version string to major.minor numbers
@@ -40,7 +49,7 @@ export function getSystemPython(): string {
   const customPython = process.env.CCW_PYTHON;
   if (customPython) {
     try {
-      const version = execSync(`"${customPython}" --version 2>&1`, { encoding: 'utf8' });
+      const version = execSync(`"${customPython}" --version 2>&1`, { encoding: 'utf8', timeout: EXEC_TIMEOUTS.PYTHON_VERSION });
       if (version.includes('Python 3')) {
         const parsed = parsePythonVersion(version);
         if (parsed && !isPythonVersionCompatible(parsed.major, parsed.minor)) {
@@ -48,8 +57,12 @@ export function getSystemPython(): string {
         }
         return `"${customPython}"`;
       }
-    } catch {
-      console.warn(`[Python] Warning: CCW_PYTHON="${customPython}" is not a valid Python executable, falling back to system Python`);
+    } catch (err: unknown) {
+      if (isExecTimeoutError(err)) {
+        console.warn(`[Python] Warning: CCW_PYTHON version check timed out after ${EXEC_TIMEOUTS.PYTHON_VERSION}ms, falling back to system Python`);
+      } else {
+        console.warn(`[Python] Warning: CCW_PYTHON="${customPython}" is not a valid Python executable, falling back to system Python`);
+      }
     }
   }
 
@@ -58,12 +71,15 @@ export function getSystemPython(): string {
     const compatibleVersions = ['3.12', '3.11', '3.10', '3.9'];
     for (const ver of compatibleVersions) {
       try {
-        const version = execSync(`py -${ver} --version 2>&1`, { encoding: 'utf8' });
+        const version = execSync(`py -${ver} --version 2>&1`, { encoding: 'utf8', timeout: EXEC_TIMEOUTS.PYTHON_VERSION });
         if (version.includes(`Python ${ver}`)) {
           console.log(`[Python] Found compatible Python ${ver} via py launcher`);
           return `py -${ver}`;
         }
-      } catch {
+      } catch (err: unknown) {
+        if (isExecTimeoutError(err)) {
+          console.warn(`[Python] Warning: py -${ver} version check timed out after ${EXEC_TIMEOUTS.PYTHON_VERSION}ms`);
+        }
         // Version not installed, try next
       }
     }
@@ -75,7 +91,7 @@ export function getSystemPython(): string {
 
   for (const cmd of commands) {
     try {
-      const version = execSync(`${cmd} --version 2>&1`, { encoding: 'utf8' });
+      const version = execSync(`${cmd} --version 2>&1`, { encoding: 'utf8', timeout: EXEC_TIMEOUTS.PYTHON_VERSION });
       if (version.includes('Python 3')) {
         const parsed = parsePythonVersion(version);
         if (parsed) {
@@ -90,7 +106,10 @@ export function getSystemPython(): string {
           }
         }
       }
-    } catch {
+    } catch (err: unknown) {
+      if (isExecTimeoutError(err)) {
+        console.warn(`[Python] Warning: ${cmd} --version timed out after ${EXEC_TIMEOUTS.PYTHON_VERSION}ms`);
+      }
       // Try next command
     }
   }

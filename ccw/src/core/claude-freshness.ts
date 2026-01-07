@@ -7,6 +7,15 @@ import { execSync } from 'child_process';
 import { existsSync, statSync, readdirSync } from 'fs';
 import { dirname, extname, relative, join } from 'path';
 import { getCoreMemoryStore, ClaudeUpdateRecord } from './core-memory-store.js';
+import { EXEC_TIMEOUTS } from '../utils/exec-constants.js';
+
+function isExecTimeoutError(error: unknown): boolean {
+  const err = error as { code?: unknown; errno?: unknown; message?: unknown } | null;
+  const code = err?.code ?? err?.errno;
+  if (code === 'ETIMEDOUT') return true;
+  const message = typeof err?.message === 'string' ? err.message : '';
+  return message.includes('ETIMEDOUT');
+}
 
 // Source file extensions to track (from detect-changed-modules.ts)
 const SOURCE_EXTENSIONS = [
@@ -53,9 +62,12 @@ export interface FreshnessResponse {
  */
 function isGitRepo(basePath: string): boolean {
   try {
-    execSync('git rev-parse --git-dir', { cwd: basePath, stdio: 'pipe' });
+    execSync('git rev-parse --git-dir', { cwd: basePath, stdio: 'pipe', timeout: EXEC_TIMEOUTS.GIT_QUICK });
     return true;
-  } catch (e) {
+  } catch (e: unknown) {
+    if (isExecTimeoutError(e)) {
+      console.warn(`[Claude Freshness] git rev-parse timed out after ${EXEC_TIMEOUTS.GIT_QUICK}ms`);
+    }
     return false;
   }
 }
@@ -68,10 +80,14 @@ export function getCurrentGitCommit(basePath: string): string | null {
     const output = execSync('git rev-parse HEAD', {
       cwd: basePath,
       encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: EXEC_TIMEOUTS.GIT_QUICK,
     }).trim();
     return output || null;
-  } catch (e) {
+  } catch (e: unknown) {
+    if (isExecTimeoutError(e)) {
+      console.warn(`[Claude Freshness] git rev-parse HEAD timed out after ${EXEC_TIMEOUTS.GIT_QUICK}ms`);
+    }
     return null;
   }
 }
@@ -91,7 +107,8 @@ function getChangedFilesSince(basePath: string, modulePath: string, sinceDate: s
       {
         cwd: basePath,
         encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: EXEC_TIMEOUTS.GIT_LOG,
       }
     ).trim();
 
@@ -103,7 +120,10 @@ function getChangedFilesSince(basePath: string, modulePath: string, sinceDate: s
       const ext = extname(f).toLowerCase();
       return SOURCE_EXTENSIONS.includes(ext);
     });
-  } catch (e) {
+  } catch (e: unknown) {
+    if (isExecTimeoutError(e)) {
+      console.warn(`[Claude Freshness] git log timed out after ${EXEC_TIMEOUTS.GIT_LOG}ms, falling back to mtime scan`);
+    }
     // Fallback to mtime-based detection
     return findFilesModifiedSince(modulePath, sinceDate);
   }

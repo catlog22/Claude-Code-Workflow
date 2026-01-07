@@ -25,6 +25,7 @@ import {
 } from './codex-lens.js';
 import type { ProgressInfo } from './codex-lens.js';
 import { getProjectRoot } from '../utils/path-validator.js';
+import { EXEC_TIMEOUTS } from '../utils/exec-constants.js';
 
 // Timing utilities for performance analysis
 const TIMING_ENABLED = process.env.SMART_SEARCH_TIMING === '1' || process.env.DEBUG?.includes('timing');
@@ -559,7 +560,7 @@ function checkToolAvailability(toolName: string): boolean {
   try {
     const isWindows = process.platform === 'win32';
     const command = isWindows ? 'where' : 'which';
-    execSync(`${command} ${toolName}`, { stdio: 'ignore' });
+    execSync(`${command} ${toolName}`, { stdio: 'ignore', timeout: EXEC_TIMEOUTS.SYSTEM_INFO });
     return true;
   } catch {
     return false;
