@@ -561,6 +561,11 @@ async function execAction(positionalPrompt: string | undefined, options: CliExec
   } else if (optionPrompt) {
     // Use --prompt/-p option (preferred for multi-line)
     finalPrompt = optionPrompt;
+    const promptLineCount = optionPrompt.split(/\r?\n/).length;
+    if (promptLineCount > 3) {
+      console.log(chalk.dim('   💡 Tip: Use --file option to avoid shell escaping issues with multi-line prompts'));
+      console.log(chalk.dim('      Example: ccw cli -f prompt.txt --tool gemini'));
+    }
   } else {
     // Fall back to positional argument
     finalPrompt = positionalPrompt;
@@ -1163,8 +1168,8 @@ export async function cliCommand(
         console.log(chalk.bold.cyan('\n  CCW CLI Tool Executor\n'));
         console.log('  Unified interface for Gemini, Qwen, and Codex CLI tools.\n');
         console.log('  Usage:');
-        console.log(chalk.gray('    ccw cli -p "<prompt>" --tool <tool>     Execute with prompt'));
-        console.log(chalk.gray('    ccw cli -f prompt.txt --tool <tool>     Execute from file'));
+        console.log(chalk.gray('    ccw cli -f prompt.txt --tool <tool>     Execute from file (recommended for multi-line)'));
+        console.log(chalk.gray('    ccw cli -p "<prompt>" --tool <tool>     Execute with prompt (single-line)'));
         console.log();
         console.log('  Subcommands:');
         console.log(chalk.gray('    status              Check CLI tools availability'));
@@ -1175,8 +1180,8 @@ export async function cliCommand(
         console.log(chalk.gray('    test-parse [args]   Debug CLI argument parsing'));
         console.log();
         console.log('  Options:');
-        console.log(chalk.gray('    -p, --prompt <text> Prompt text'));
-        console.log(chalk.gray('    -f, --file <file>   Read prompt from file'));
+        console.log(chalk.gray('    -f, --file <file>   Read prompt from file (recommended for multi-line prompts)'));
+        console.log(chalk.gray('    -p, --prompt <text> Prompt text (single-line)'));
         console.log(chalk.gray('    --tool <tool>       Tool: gemini, qwen, codex (default: gemini)'));
         console.log(chalk.gray('    --mode <mode>       Mode: analysis, write, auto (default: analysis)'));
         console.log(chalk.gray('    -d, --debug         Enable debug logging for troubleshooting'));
@@ -1187,6 +1192,27 @@ export async function cliCommand(
         console.log(chalk.gray('    --resume [id]       Resume previous session'));
         console.log(chalk.gray('    --cache <items>     Cache: comma-separated @patterns and text'));
         console.log(chalk.gray('    --inject-mode <m>   Inject mode: none, full, progressive'));
+        console.log();
+        console.log('  Examples:');
+        console.log(chalk.gray('    ccw cli -f my-prompt.txt --tool gemini'));
+        console.log();
+        console.log(chalk.gray('    # Bash/Linux heredoc'));
+        console.log(chalk.gray("    ccw cli -f <(cat <<'EOF'"));
+        console.log(chalk.gray('    PURPOSE: Multi-line prompt'));
+        console.log(chalk.gray('    TASK: Example task'));
+        console.log(chalk.gray('    EOF'));
+        console.log(chalk.gray('    ) --tool gemini'));
+        console.log();
+        console.log(chalk.gray('    # PowerShell multi-line'));
+        console.log(chalk.gray("    @'"));
+        console.log(chalk.gray('    PURPOSE: Multi-line prompt'));
+        console.log(chalk.gray('    TASK: Example task'));
+        console.log(chalk.gray("    '@ | Out-File -Encoding utf8 prompt.tmp; ccw cli -f prompt.tmp --tool gemini"));
+        console.log();
+        console.log(chalk.gray('    ccw cli --resume --tool gemini'));
+        console.log(chalk.gray('    ccw cli -p "..." --cache "@src/**/*.ts" --tool codex'));
+        console.log(chalk.gray('    ccw cli -p "..." --cache "@src/**/*" --inject-mode progressive --tool gemini'));
+        console.log(chalk.gray('    ccw cli output <id> --final      # View result with usage hint'));
         console.log();
         console.log('  Cache format:');
         console.log(chalk.gray('    --cache "@src/**/*.ts,@CLAUDE.md"     # @patterns to pack'));
@@ -1204,14 +1230,7 @@ export async function cliCommand(
         console.log(chalk.gray('    --offset <n> Start from byte offset'));
         console.log(chalk.gray('    --limit <n>  Limit output bytes'));
         console.log();
-        console.log('  Examples:');
-        console.log(chalk.gray('    ccw cli -p "Analyze auth module" --tool gemini'));
-        console.log(chalk.gray('    ccw cli -f prompt.txt --tool codex --mode write'));
-        console.log(chalk.gray('    ccw cli -p "$(cat template.md)" --tool gemini'));
-        console.log(chalk.gray('    ccw cli --resume --tool gemini'));
-        console.log(chalk.gray('    ccw cli -p "..." --cache "@src/**/*.ts" --tool codex'));
-        console.log(chalk.gray('    ccw cli -p "..." --cache "@src/**/*" --inject-mode progressive --tool gemini'));
-        console.log(chalk.gray('    ccw cli output <id> --final      # View result with usage hint'));
+        console.log(chalk.dim('  Tip: For complex prompts, use --file to avoid shell escaping issues'));
         console.log();
       }
     }

@@ -117,6 +117,76 @@ describe('cli command module', async () => {
     assert.deepEqual(exitCodes, [0, 0, 0]);
   });
 
+  it('prints a --file tip when a multi-line prompt is provided via --prompt', async () => {
+    stubHttpRequest();
+
+    const logs: string[] = [];
+    mock.method(console, 'log', (...args: any[]) => {
+      logs.push(args.map(String).join(' '));
+    });
+    mock.method(console, 'error', (...args: any[]) => {
+      logs.push(args.map(String).join(' '));
+    });
+
+    mock.method(cliExecutorModule.cliExecutorTool, 'execute', async () => {
+      return {
+        success: true,
+        stdout: '',
+        stderr: '',
+        execution: { id: 'EXEC-ML', duration_ms: 1, status: 'success' },
+        conversation: { turn_count: 1, total_duration_ms: 1 },
+      };
+    });
+
+    const exitCodes: Array<number | undefined> = [];
+    mock.method(process as any, 'exit', (code?: number) => {
+      exitCodes.push(code);
+    });
+
+    await cliModule.cliCommand('exec', [], { prompt: 'line1\nline2\nline3\nline4', tool: 'gemini', stream: true });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    assert.ok(logs.some((l) => l.includes('Tip: Use --file option to avoid shell escaping issues with multi-line prompts')));
+    assert.ok(logs.some((l) => l.includes('Example: ccw cli -f prompt.txt --tool gemini')));
+    assert.deepEqual(exitCodes, [0]);
+  });
+
+  it('does not print the --file tip for single-line prompts', async () => {
+    stubHttpRequest();
+
+    const logs: string[] = [];
+    mock.method(console, 'log', (...args: any[]) => {
+      logs.push(args.map(String).join(' '));
+    });
+    mock.method(console, 'error', (...args: any[]) => {
+      logs.push(args.map(String).join(' '));
+    });
+
+    mock.method(cliExecutorModule.cliExecutorTool, 'execute', async () => {
+      return {
+        success: true,
+        stdout: '',
+        stderr: '',
+        execution: { id: 'EXEC-SL', duration_ms: 1, status: 'success' },
+        conversation: { turn_count: 1, total_duration_ms: 1 },
+      };
+    });
+
+    const exitCodes: Array<number | undefined> = [];
+    mock.method(process as any, 'exit', (code?: number) => {
+      exitCodes.push(code);
+    });
+
+    await cliModule.cliCommand('exec', [], { prompt: 'Hello', tool: 'gemini', stream: true });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    assert.equal(
+      logs.some((l) => l.includes('Tip: Use --file option to avoid shell escaping issues with multi-line prompts')),
+      false,
+    );
+    assert.deepEqual(exitCodes, [0]);
+  });
+
   it('prints full output hint immediately after stderr truncation (no troubleshooting duplicate)', async () => {
     stubHttpRequest();
 
@@ -225,6 +295,38 @@ describe('cli command module', async () => {
     );
 
     assert.equal(executed, false);
+  });
+
+  it('shows --file guidance first in help output (multi-line prompts)', async () => {
+    const logs: string[] = [];
+    mock.method(console, 'log', (...args: any[]) => {
+      logs.push(args.map(String).join(' '));
+    });
+    mock.method(console, 'error', (...args: any[]) => {
+      logs.push(args.map(String).join(' '));
+    });
+
+    await cliModule.cliCommand('--help', [], {});
+
+    const usageFileIndex = logs.findIndex((l) => l.includes('ccw cli -f prompt.txt'));
+    const usagePromptIndex = logs.findIndex((l) => l.includes('ccw cli -p "<prompt>"'));
+    assert.ok(usageFileIndex >= 0);
+    assert.ok(usagePromptIndex >= 0);
+    assert.ok(usageFileIndex < usagePromptIndex);
+
+    const optionFileIndex = logs.findIndex((l) => l.includes('-f, --file <file>'));
+    const optionPromptIndex = logs.findIndex((l) => l.includes('-p, --prompt <text>'));
+    assert.ok(optionFileIndex >= 0);
+    assert.ok(optionPromptIndex >= 0);
+    assert.ok(optionFileIndex < optionPromptIndex);
+    assert.ok(logs.some((l) => l.includes('Read prompt from file (recommended for multi-line prompts)')));
+
+    assert.ok(logs.some((l) => l.includes('Examples:')));
+    assert.ok(logs.some((l) => l.includes('ccw cli -f my-prompt.txt --tool gemini')));
+    assert.ok(logs.some((l) => l.includes("ccw cli -f <(cat <<'EOF'")));
+    assert.ok(logs.some((l) => l.includes("@'")));
+    assert.ok(logs.some((l) => l.includes('Out-File -Encoding utf8 prompt.tmp; ccw cli -f prompt.tmp --tool gemini')));
+    assert.ok(logs.some((l) => l.includes('Tip: For complex prompts, use --file to avoid shell escaping issues')));
   });
 
   it('prompts for confirmation before cleaning all storage (and cancels safely)', async () => {
