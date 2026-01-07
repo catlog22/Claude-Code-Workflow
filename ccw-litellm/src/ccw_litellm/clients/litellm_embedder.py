@@ -102,6 +102,15 @@ class LiteLLMEmbedder(AbstractEmbedder):
         """Embedding vector size."""
         return self._model_config.dimensions
 
+    @property
+    def max_input_tokens(self) -> int:
+        """Maximum token limit for embeddings.
+
+        Returns the configured max_input_tokens from model config,
+        enabling adaptive batch sizing based on actual model capacity.
+        """
+        return self._model_config.max_input_tokens
+
     def _estimate_tokens(self, text: str) -> int:
         """Estimate token count for a text using fast heuristic.
 
@@ -162,7 +171,7 @@ class LiteLLMEmbedder(AbstractEmbedder):
         texts: str | Sequence[str],
         *,
         batch_size: int | None = None,
-        max_tokens_per_batch: int = 30000,
+        max_tokens_per_batch: int | None = None,
         **kwargs: Any,
     ) -> NDArray[np.floating]:
         """Embed one or more texts.
@@ -170,7 +179,8 @@ class LiteLLMEmbedder(AbstractEmbedder):
         Args:
             texts: Single text or sequence of texts
             batch_size: Batch size for processing (deprecated, use max_tokens_per_batch)
-            max_tokens_per_batch: Maximum estimated tokens per API call (default: 30000)
+            max_tokens_per_batch: Maximum estimated tokens per API call.
+                If None, uses 90% of model's max_input_tokens for safety margin.
             **kwargs: Additional arguments for litellm.embedding()
 
         Returns:
@@ -195,6 +205,15 @@ class LiteLLMEmbedder(AbstractEmbedder):
         # For OpenAI-compatible endpoints, ensure encoding_format is set
         if self._provider_config.api_base and "encoding_format" not in embedding_kwargs:
             embedding_kwargs["encoding_format"] = "float"
+
+        # Determine adaptive max_tokens_per_batch
+        # Use 90% of model's max_input_tokens as safety margin
+        if max_tokens_per_batch is None:
+            max_tokens_per_batch = int(self.max_input_tokens * 0.9)
+            logger.debug(
+                f"Using adaptive batch size: {max_tokens_per_batch} tokens "
+                f"(90% of {self.max_input_tokens})"
+            )
 
         # Split into token-aware batches
         batches = self._create_batches(text_list, max_tokens_per_batch)

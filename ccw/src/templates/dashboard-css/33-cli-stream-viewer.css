@@ -429,6 +429,136 @@
   color: hsl(200 80% 70%);
 }
 
+/* ===== Formatted Message Types ===== */
+.cli-stream-line.formatted {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 10px;
+  margin: 2px 0;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  color: hsl(0 0% 90%);  /* Ensure text is visible */
+}
+
+.cli-stream-line.formatted:hover {
+  background: hsl(0 0% 100% / 0.05);
+}
+
+/* Message Badge */
+.cli-msg-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cli-msg-badge i,
+.cli-msg-badge svg {
+  width: 12px;
+  height: 12px;
+}
+
+.cli-msg-content {
+  flex: 1;
+  word-break: break-word;
+}
+
+/* System Message */
+.cli-stream-line.formatted.system {
+  background: hsl(210 50% 20% / 0.3);
+  border-left: 3px solid hsl(210 80% 55%);
+}
+
+.cli-msg-badge.cli-msg-system {
+  background: hsl(210 80% 55% / 0.2);
+  color: hsl(210 80% 70%);
+}
+
+/* Thinking Message */
+.cli-stream-line.formatted.thinking {
+  background: hsl(280 50% 20% / 0.3);
+  border-left: 3px solid hsl(280 70% 65%);
+  font-style: italic;
+}
+
+.cli-msg-badge.cli-msg-thinking {
+  background: hsl(280 70% 65% / 0.2);
+  color: hsl(280 70% 75%);
+}
+
+/* Response Message */
+.cli-stream-line.formatted.response {
+  background: hsl(145 40% 18% / 0.3);
+  border-left: 3px solid hsl(145 60% 50%);
+}
+
+.cli-msg-badge.cli-msg-response {
+  background: hsl(145 60% 50% / 0.2);
+  color: hsl(145 60% 65%);
+}
+
+/* Result Message */
+.cli-stream-line.formatted.result {
+  background: hsl(160 50% 18% / 0.4);
+  border-left: 3px solid hsl(160 80% 45%);
+}
+
+.cli-msg-badge.cli-msg-result {
+  background: hsl(160 80% 45% / 0.25);
+  color: hsl(160 80% 60%);
+}
+
+/* Error Message */
+.cli-stream-line.formatted.error {
+  background: hsl(0 50% 20% / 0.4);
+  border-left: 3px solid hsl(0 70% 55%);
+}
+
+.cli-msg-badge.cli-msg-error {
+  background: hsl(0 70% 55% / 0.25);
+  color: hsl(0 70% 70%);
+}
+
+/* Warning Message */
+.cli-stream-line.formatted.warning {
+  background: hsl(45 60% 18% / 0.4);
+  border-left: 3px solid hsl(45 80% 55%);
+}
+
+.cli-msg-badge.cli-msg-warning {
+  background: hsl(45 80% 55% / 0.25);
+  color: hsl(45 80% 65%);
+}
+
+/* Info Message */
+.cli-stream-line.formatted.info {
+  background: hsl(200 50% 18% / 0.3);
+  border-left: 3px solid hsl(200 70% 60%);
+}
+
+.cli-msg-badge.cli-msg-info {
+  background: hsl(200 70% 60% / 0.2);
+  color: hsl(200 70% 70%);
+}
+
+/* Inline Code */
+.cli-inline-code {
+  padding: 1px 5px;
+  background: hsl(0 0% 25%);
+  border-radius: 3px;
+  font-family: var(--font-mono, 'Consolas', 'Monaco', 'Courier New', monospace);
+  font-size: 0.85em;
+  color: hsl(45 80% 70%);
+}
+
 /* JSON/Code syntax coloring in output */
 .cli-stream-line .json-key {
   color: hsl(200 80% 70%);

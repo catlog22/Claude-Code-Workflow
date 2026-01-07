@@ -602,7 +602,7 @@ export async function handleClaudeRoutes(ctx: RouteContext): Promise<boolean> {
           id: syncId
         });
 
-        if (!result.success || !result.execution?.output) {
+        if (!result.success) {
           return {
             error: 'CLI execution failed',
             details: result.stderr || result.execution?.output?.stderr || 'No output received',
@@ -610,10 +610,13 @@ export async function handleClaudeRoutes(ctx: RouteContext): Promise<boolean> {
           };
         }
 
-        // Extract CLI output
-        const cliOutput = typeof result.execution.output === 'string'
-          ? result.execution.output
-          : result.execution.output.stdout || '';
+        // Extract CLI output - prefer parsedOutput (extracted text from stream JSON)
+        let cliOutput = result.parsedOutput || '';
+        if (!cliOutput && result.execution?.output) {
+          cliOutput = typeof result.execution.output === 'string'
+            ? result.execution.output
+            : result.execution.output.stdout || '';
+        }
 
         if (!cliOutput || cliOutput.trim().length === 0) {
           return { error: 'CLI returned empty output', status: 500 };

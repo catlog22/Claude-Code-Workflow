@@ -2,7 +2,8 @@
  * Smart Search Tool - Unified intelligent search with CodexLens integration
  *
  * Features:
- * - Intent classification with automatic mode selection
+ * - Fuzzy mode: FTS + ripgrep fusion with RRF ranking (default)
+ * - Semantic mode: Dense coarse retrieval + cross-encoder reranking
  * - CodexLens integration (init, dense_rerank, fts)
  * - Ripgrep fallback for exact mode
  * - Index status checking and warnings
@@ -10,7 +11,7 @@
  *
  * Actions:
  * - init: Initialize CodexLens index
- * - search: Intelligent search with auto mode selection
+ * - search: Intelligent search with fuzzy (default) or semantic mode
  * - status: Check index status
  * - update: Incremental index update for changed files
  * - watch: Start file watcher for automatic updates
@@ -62,12 +63,13 @@ function createTimer(): { mark: (name: string) => void; getTimings: () => Timing
 
 // Define Zod schema for validation
 const ParamsSchema = z.object({
-  // Action: search (content), find_files (path/name pattern), init, status, update (incremental), watch
+  // Action: search (content), find_files (path/name pattern), init, init_force, status, update (incremental), watch
   // Note: search_files is deprecated, use search with output_mode='files_only'
-  action: z.enum(['init', 'search', 'search_files', 'find_files', 'status', 'update', 'watch']).default('search'),
+  // init: incremental index (skip existing), init_force: force full rebuild (delete and recreate)
+  action: z.enum(['init', 'init_force', 'search', 'search_files', 'find_files', 'status', 'update', 'watch']).default('search'),
   query: z.string().optional().describe('Content search query (for action="search")'),
   pattern: z.string().optional().describe('Glob pattern for path matching (for action="find_files")'),
-  mode: z.enum(['auto', 'hybrid', 'exact', 'ripgrep', 'priority']).default('auto'),
+  mode: z.enum(['fuzzy', 'semantic']).default('fuzzy'),
   output_mode: z.enum(['full', 'files_only', 'count']).default('full'),
   path: z.string().optional(),
   paths: z.array(z.string()).default([]),
@@ -84,9 +86,10 @@ const ParamsSchema = z.object({
   regex: z.boolean().default(true),            // Use regex pattern matching (default: enabled)
   caseSensitive: z.boolean().default(true),    // Case sensitivity (default: case-sensitive)
   tokenize: z.boolean().default(true),         // Tokenize multi-word queries for OR matching (default: enabled)
-  // File type filtering
+  // File type filtering (default: code only)
   excludeExtensions: z.array(z.string()).optional().describe('File extensions to exclude from results (e.g., ["md", "txt"])'),
-  codeOnly: z.boolean().default(false).describe('Only return code files (excludes md, txt, json, yaml, xml, etc.)'),
+  codeOnly: z.boolean().default(true).describe('Only return code files (excludes md, txt, json, yaml, xml, etc.). Default: true'),
+  withDoc: z.boolean().default(false).describe('Include documentation files (md, txt, rst, etc.). Overrides codeOnly when true'),
   // Watcher options
   debounce: z.number().default(1000).describe('Debounce interval in ms for watch action'),
   // Fuzzy matching is implicit in hybrid mode (RRF fusion)
@@ -95,7 +98,7 @@ const ParamsSchema = z.object({
 type Params = z.infer<typeof ParamsSchema>;
 
 // Search mode constants
-const SEARCH_MODES = ['auto', 'hybrid', 'exact', 'ripgrep', 'priority'] as const;
+const SEARCH_MODES = ['fuzzy', 'semantic'] as const;
 
 // Classification confidence threshold
 const CONFIDENCE_THRESHOLD = 0.7;
@@ -330,6 +333,17 @@ interface ModelInfo {
   updated_at?: string;
 }
 
+interface CodexLensConfig {
+  config_file?: string;
+  index_dir?: string;
+  embedding_backend?: string;  // 'fastembed' (local) or 'litellm' (api)
+  embedding_model?: string;
+  reranker_enabled?: boolean;
+  reranker_backend?: string;   // 'onnx' (local) or 'api'
+  reranker_model?: string;
+  reranker_top_k?: number;
+}
+
 interface IndexStatus {
   indexed: boolean;
   has_embeddings: boolean;
@@ -337,6 +351,7 @@ interface IndexStatus {
   embeddings_coverage_percent?: number;
   total_chunks?: number;
   model_info?: ModelInfo | null;
+  config?: CodexLensConfig | null;
   warning?: string;
 }
 
@@ -390,12 +405,39 @@ function splitResultsWithExtraFiles<T extends { file: string }>(
  */
 async function checkIndexStatus(path: string = '.'): Promise<IndexStatus> {
   try {
-    const result = await executeCodexLens(['status', '--json'], { cwd: path });
+    // Fetch both status and config in parallel
+    const [statusResult, configResult] = await Promise.all([
+      executeCodexLens(['status', '--json'], { cwd: path }),
+      executeCodexLens(['config', 'show', '--json'], { cwd: path }),
+    ]);
 
-    if (!result.success) {
+    // Parse config
+    let config: CodexLensConfig | null = null;
+    if (configResult.success && configResult.output) {
+      try {
+        const cleanConfigOutput = stripAnsi(configResult.output);
+        const parsedConfig = JSON.parse(cleanConfigOutput);
+        const configData = parsedConfig.result || parsedConfig;
+        config = {
+          config_file: configData.config_file,
+          index_dir: configData.index_dir,
+          embedding_backend: configData.embedding_backend,
+          embedding_model: configData.embedding_model,
+          reranker_enabled: configData.reranker_enabled,
+          reranker_backend: configData.reranker_backend,
+          reranker_model: configData.reranker_model,
+          reranker_top_k: configData.reranker_top_k,
+        };
+      } catch {
+        // Config parse failed, continue without it
+      }
+    }
+
+    if (!statusResult.success) {
       return {
         indexed: false,
         has_embeddings: false,
+        config,
         warning: 'No CodexLens index found. Run smart_search(action="init") to create index for better search results.',
       };
     }
@@ -403,7 +445,7 @@ async function checkIndexStatus(path: string = '.'): Promise<IndexStatus> {
     // Parse status output
     try {
       // Strip ANSI color codes from JSON output
-      const cleanOutput = stripAnsi(result.output || '{}');
+      const cleanOutput = stripAnsi(statusResult.output || '{}');
       const parsed = JSON.parse(cleanOutput);
       // Handle both direct and nested response formats (status returns {success, result: {...}})
       const status = parsed.result || parsed;
@@ -443,12 +485,14 @@ async function checkIndexStatus(path: string = '.'): Promise<IndexStatus> {
         total_chunks: totalChunks,
         // Ensure model_info is null instead of undefined so it's included in JSON
         model_info: modelInfo ?? null,
+        config,
         warning,
       };
     } catch {
       return {
         indexed: false,
         has_embeddings: false,
+        config,
         warning: 'Failed to parse index status',
       };
     }
@@ -645,8 +689,10 @@ function buildRipgrepCommand(params: {
 /**
  * Action: init - Initialize CodexLens index (FTS only, no embeddings)
  * For semantic/vector search, use ccw view dashboard or codexlens CLI directly
+ * @param params - Search parameters
+ * @param force - If true, force full rebuild (delete existing index first)
  */
-async function executeInitAction(params: Params): Promise<SearchResult> {
+async function executeInitAction(params: Params, force: boolean = false): Promise<SearchResult> {
   const { path = '.', languages } = params;
 
   // Check CodexLens availability
@@ -661,6 +707,9 @@ async function executeInitAction(params: Params): Promise<SearchResult> {
   // Build args with --no-embeddings for FTS-only index (faster)
   // Use 'index init' subcommand (new CLI structure)
   const args = ['index', 'init', path, '--no-embeddings'];
+  if (force) {
+    args.push('--force');  // Force full rebuild
+  }
   if (languages && languages.length > 0) {
     args.push('--language', languages.join(','));
   }
@@ -680,7 +729,7 @@ async function executeInitAction(params: Params): Promise<SearchResult> {
 
   // Build metadata with progress info
   const metadata: SearchMetadata = {
-    action: 'init',
+    action: force ? 'init_force' : 'init',
     path,
   };
 
@@ -699,8 +748,9 @@ async function executeInitAction(params: Params): Promise<SearchResult> {
     metadata.progressHistory = progressUpdates.slice(-5); // Keep last 5 progress updates
   }
 
+  const actionLabel = force ? 'rebuilt (force)' : 'created';
   const successMessage = result.success
-    ? `FTS index created for ${path}. Note: For semantic/vector search, create vector index via "ccw view" dashboard or run "codexlens init ${path}" (without --no-embeddings).`
+    ? `FTS index ${actionLabel} for ${path}. Note: For semantic/vector search, create vector index via "ccw view" dashboard or run "codexlens init ${path}" (without --no-embeddings).`
     : undefined;
 
   return {
@@ -719,10 +769,43 @@ async function executeStatusAction(params: Params): Promise<SearchResult> {
 
   const indexStatus = await checkIndexStatus(path);
 
+  // Build detailed status message
+  const statusParts: string[] = [];
+
+  // Index status
+  statusParts.push(`Index: ${indexStatus.indexed ? 'indexed' : 'not indexed'}`);
+  if (indexStatus.file_count) {
+    statusParts.push(`Files: ${indexStatus.file_count}`);
+  }
+
+  // Embeddings status
+  if (indexStatus.embeddings_coverage_percent !== undefined) {
+    statusParts.push(`Embeddings: ${indexStatus.embeddings_coverage_percent.toFixed(1)}%`);
+  }
+  if (indexStatus.total_chunks) {
+    statusParts.push(`Chunks: ${indexStatus.total_chunks}`);
+  }
+
+  // Config summary
+  if (indexStatus.config) {
+    const cfg = indexStatus.config;
+    // Embedding backend info
+    const embeddingType = cfg.embedding_backend === 'litellm' ? 'API' : 'Local';
+    statusParts.push(`Embedding: ${embeddingType} (${cfg.embedding_model || 'default'})`);
+
+    // Reranker info
+    if (cfg.reranker_enabled) {
+      const rerankerType = cfg.reranker_backend === 'onnx' ? 'Local' : 'API';
+      statusParts.push(`Reranker: ${rerankerType} (${cfg.reranker_model || 'default'})`);
+    } else {
+      statusParts.push('Reranker: disabled');
+    }
+  }
+
   return {
     success: true,
     status: indexStatus,
-    message: indexStatus.warning || `Index status: ${indexStatus.indexed ? 'indexed' : 'not indexed'}, embeddings: ${indexStatus.has_embeddings ? 'available' : 'not available'}`,
+    message: indexStatus.warning || statusParts.join(' | '),
   };
 }
 
@@ -852,6 +935,98 @@ async function executeWatchAction(params: Params): Promise<SearchResult> {
 }
 
 /**
+ * Mode: fuzzy - FTS + ripgrep fusion with RRF ranking
+ * Runs both exact (FTS) and ripgrep searches in parallel, merges and ranks results
+ */
+async function executeFuzzyMode(params: Params): Promise<SearchResult> {
+  const { query, path = '.', maxResults = 5, extraFilesCount = 10, codeOnly = true, withDoc = false, excludeExtensions } = params;
+  // withDoc overrides codeOnly
+  const effectiveCodeOnly = withDoc ? false : codeOnly;
+
+  if (!query) {
+    return {
+      success: false,
+      error: 'Query is required for search',
+    };
+  }
+
+  const timer = createTimer();
+
+  // Run both searches in parallel
+  const [ftsResult, ripgrepResult] = await Promise.allSettled([
+    executeCodexLensExactMode(params),
+    executeRipgrepMode(params),
+  ]);
+  timer.mark('parallel_search');
+
+  // Collect results from both sources
+  const resultsMap = new Map<string, any[]>();
+  
+  // Add FTS results if successful
+  if (ftsResult.status === 'fulfilled' && ftsResult.value.success && ftsResult.value.results) {
+    resultsMap.set('exact', ftsResult.value.results as any[]);
+  }
+
+  // Add ripgrep results if successful
+  if (ripgrepResult.status === 'fulfilled' && ripgrepResult.value.success && ripgrepResult.value.results) {
+    resultsMap.set('ripgrep', ripgrepResult.value.results as any[]);
+  }
+
+  // If both failed, return error
+  if (resultsMap.size === 0) {
+    const errors: string[] = [];
+    if (ftsResult.status === 'rejected') errors.push(`FTS: ${ftsResult.reason}`);
+    if (ripgrepResult.status === 'rejected') errors.push(`Ripgrep: ${ripgrepResult.reason}`);
+    return {
+      success: false,
+      error: `Both search backends failed: ${errors.join('; ')}`,
+    };
+  }
+
+  // Apply RRF fusion with fuzzy-optimized weights
+  // Fuzzy mode: balanced between exact and ripgrep
+  const fusionWeights = { exact: 0.5, ripgrep: 0.5 };
+  const totalToFetch = maxResults + extraFilesCount;
+  const fusedResults = applyRRFFusion(resultsMap, fusionWeights, totalToFetch);
+  timer.mark('rrf_fusion');
+
+  // Apply code-only and extension filtering after fusion
+  const filteredFusedResults = filterNoisyFiles(fusedResults as any[], { codeOnly: effectiveCodeOnly, excludeExtensions });
+
+  // Normalize results format
+  const normalizedResults = filteredFusedResults.map((item: any) => ({
+    file: item.file || item.path,
+    line: item.line || 0,
+    column: item.column || 0,
+    content: item.content || '',
+    score: item.fusion_score || 0,
+    matchCount: item.matchCount,
+    matchScore: item.matchScore,
+  }));
+
+  // Split results: first N with full content, rest as file paths only
+  const { results, extra_files } = splitResultsWithExtraFiles(normalizedResults, maxResults, extraFilesCount);
+
+  // Log timing
+  timer.log();
+  const timings = timer.getTimings();
+
+  return {
+    success: true,
+    results,
+    extra_files: extra_files.length > 0 ? extra_files : undefined,
+    metadata: {
+      mode: 'fuzzy',
+      backend: 'fts+ripgrep',
+      count: results.length,
+      query,
+      note: `Fuzzy search using RRF fusion of FTS and ripgrep (weights: exact=${fusionWeights.exact}, ripgrep=${fusionWeights.ripgrep})`,
+      timing: TIMING_ENABLED ? timings : undefined,
+    },
+  };
+}
+
+/**
  * Mode: auto - Intent classification and mode selection
  * Routes to: hybrid (NL + index) | exact (index) | ripgrep (no index)
  */
@@ -922,7 +1097,9 @@ async function executeAutoMode(params: Params): Promise<SearchResult> {
  * Supports tokenized multi-word queries with OR matching and result ranking
  */
 async function executeRipgrepMode(params: Params): Promise<SearchResult> {
-  const { query, paths = [], contextLines = 0, maxResults = 5, extraFilesCount = 10, maxContentLength = 200, includeHidden = false, path = '.', regex = true, caseSensitive = true, tokenize = true } = params;
+  const { query, paths = [], contextLines = 0, maxResults = 5, extraFilesCount = 10, maxContentLength = 200, includeHidden = false, path = '.', regex = true, caseSensitive = true, tokenize = true, codeOnly = true, withDoc = false, excludeExtensions } = params;
+  // withDoc overrides codeOnly
+  const effectiveCodeOnly = withDoc ? false : codeOnly;
 
   if (!query) {
     return {
@@ -1067,9 +1244,12 @@ async function executeRipgrepMode(params: Params): Promise<SearchResult> {
       // Results matching more tokens are ranked higher (exact matches first)
       const scoredResults = tokens.length > 1 ? scoreByTokenMatch(allResults, tokens) : allResults;
 
-      if (code === 0 || code === 1 || (isWindowsDeviceError && scoredResults.length > 0)) {
+      // Apply code-only and extension filtering
+      const filteredResults = filterNoisyFiles(scoredResults as any[], { codeOnly: effectiveCodeOnly, excludeExtensions });
+
+      if (code === 0 || code === 1 || (isWindowsDeviceError && filteredResults.length > 0)) {
         // Split results: first N with full content, rest as file paths only
-        const { results, extra_files } = splitResultsWithExtraFiles(scoredResults, maxResults, extraFilesCount);
+        const { results, extra_files } = splitResultsWithExtraFiles(filteredResults, maxResults, extraFilesCount);
 
         // Build warning message for various conditions
         const warnings: string[] = [];
@@ -1131,7 +1311,9 @@ async function executeRipgrepMode(params: Params): Promise<SearchResult> {
  * Requires index
  */
 async function executeCodexLensExactMode(params: Params): Promise<SearchResult> {
-  const { query, path = '.', maxResults = 5, extraFilesCount = 10, maxContentLength = 200, enrich = false } = params;
+  const { query, path = '.', maxResults = 5, extraFilesCount = 10, maxContentLength = 200, enrich = false, excludeExtensions, codeOnly = true, withDoc = false, offset = 0 } = params;
+  // withDoc overrides codeOnly
+  const effectiveCodeOnly = withDoc ? false : codeOnly;
 
   if (!query) {
     return {
@@ -1154,9 +1336,17 @@ async function executeCodexLensExactMode(params: Params): Promise<SearchResult> 
 
   // Request more results to support split (full content + extra files)
   const totalToFetch = maxResults + extraFilesCount;
-  const args = ['search', query, '--limit', totalToFetch.toString(), '--method', 'fts', '--json'];
+  const args = ['search', query, '--limit', totalToFetch.toString(), '--offset', offset.toString(), '--method', 'fts', '--json'];
   if (enrich) {
     args.push('--enrich');
+  }
+  // Add code_only filter if requested (default: true)
+  if (effectiveCodeOnly) {
+    args.push('--code-only');
+  }
+  // Add exclude_extensions filter if provided
+  if (excludeExtensions && excludeExtensions.length > 0) {
+    args.push('--exclude-extensions', excludeExtensions.join(','));
   }
   const result = await executeCodexLens(args, { cwd: path });
 
@@ -1191,9 +1381,17 @@ async function executeCodexLensExactMode(params: Params): Promise<SearchResult> 
 
   // Fallback to fuzzy mode if exact returns no results
   if (allResults.length === 0) {
-    const fuzzyArgs = ['search', query, '--limit', totalToFetch.toString(), '--method', 'fts', '--use-fuzzy', '--json'];
+    const fuzzyArgs = ['search', query, '--limit', totalToFetch.toString(), '--offset', offset.toString(), '--method', 'fts', '--use-fuzzy', '--json'];
     if (enrich) {
       fuzzyArgs.push('--enrich');
+    }
+    // Add code_only filter if requested (default: true)
+    if (effectiveCodeOnly) {
+      fuzzyArgs.push('--code-only');
+    }
+    // Add exclude_extensions filter if provided
+    if (excludeExtensions && excludeExtensions.length > 0) {
+      fuzzyArgs.push('--exclude-extensions', excludeExtensions.join(','));
     }
     const fuzzyResult = await executeCodexLens(fuzzyArgs, { cwd: path });
 
@@ -1256,7 +1454,9 @@ async function executeCodexLensExactMode(params: Params): Promise<SearchResult> 
  */
 async function executeHybridMode(params: Params): Promise<SearchResult> {
   const timer = createTimer();
-  const { query, path = '.', maxResults = 5, extraFilesCount = 10, maxContentLength = 200, enrich = false, excludeExtensions, codeOnly = false } = params;
+  const { query, path = '.', maxResults = 5, extraFilesCount = 10, maxContentLength = 200, enrich = false, excludeExtensions, codeOnly = true, withDoc = false, offset = 0 } = params;
+  // withDoc overrides codeOnly
+  const effectiveCodeOnly = withDoc ? false : codeOnly;
 
   if (!query) {
     return {
@@ -1281,9 +1481,17 @@ async function executeHybridMode(params: Params): Promise<SearchResult> {
 
   // Request more results to support split (full content + extra files)
   const totalToFetch = maxResults + extraFilesCount;
-  const args = ['search', query, '--limit', totalToFetch.toString(), '--method', 'dense_rerank', '--json'];
+  const args = ['search', query, '--limit', totalToFetch.toString(), '--offset', offset.toString(), '--method', 'dense_rerank', '--json'];
   if (enrich) {
     args.push('--enrich');
+  }
+  // Add code_only filter if requested (default: true)
+  if (effectiveCodeOnly) {
+    args.push('--code-only');
+  }
+  // Add exclude_extensions filter if provided
+  if (excludeExtensions && excludeExtensions.length > 0) {
+    args.push('--exclude-extensions', excludeExtensions.join(','));
   }
   const result = await executeCodexLens(args, { cwd: path });
   timer.mark('codexlens_search');
@@ -1334,8 +1542,9 @@ async function executeHybridMode(params: Params): Promise<SearchResult> {
     allResults = baselineResult.filteredResults;
     baselineInfo = baselineResult.baselineInfo;
 
-    // 1. Filter noisy files (coverage, node_modules, etc.) and excluded extensions
-    allResults = filterNoisyFiles(allResults, { excludeExtensions, codeOnly });
+    // 1. Filter noisy directories (node_modules, etc.)
+    // NOTE: Extension filtering is now done engine-side via --code-only and --exclude-extensions
+    allResults = filterNoisyFiles(allResults, {});
     // 2. Boost results containing query keywords
     allResults = applyKeywordBoosting(allResults, query);
     // 3. Enforce score diversity (penalize identical scores)
@@ -1496,13 +1705,14 @@ function filterNoisyFiles(results: SemanticMatch[], options: FilterOptions = {})
   }
 
   return results.filter(r => {
-    const filePath = r.file || '';
+    // Support both 'file' and 'path' field names (different backends use different names)
+    const filePath = r.file || (r as any).path || '';
     if (!filePath) return true;
 
-    const segments = filePath.split(/[/\\]/);
+    const segments: string[] = filePath.split(/[/\\]/);
 
     // Accurate directory check: segment must exactly match excluded directory
-    if (segments.some(segment => FILTER_CONFIG.exclude_directories.has(segment))) {
+    if (segments.some((segment: string) => FILTER_CONFIG.exclude_directories.has(segment))) {
       return false;
     }
 
@@ -1827,16 +2037,16 @@ export const schema: ToolSchema = {
 **Actions:**
 - search: Search file content (default)
 - find_files: Find files by path/name pattern (glob matching)
-- init: Create FTS index
+- init: Create FTS index (incremental - skips existing)
+- init_force: Force full rebuild (delete and recreate index)
 - status: Check index status
 - update: Incremental index update (for changed files)
 - watch: Start file watcher for automatic updates
 
 **Content Search (action="search"):**
-  smart_search(query="authentication logic")        # auto mode - routes to best backend
-  smart_search(query="MyClass", mode="exact")       # exact mode - precise FTS matching
-  smart_search(query="auth", mode="ripgrep")        # ripgrep mode - fast literal search
-  smart_search(query="how to auth", mode="hybrid")  # hybrid mode - semantic + fuzzy search
+  smart_search(query="authentication logic")        # fuzzy mode (default) - FTS + ripgrep fusion
+  smart_search(query="MyClass", mode="fuzzy")       # fuzzy mode - fast hybrid search
+  smart_search(query="how to auth", mode="semantic")  # semantic mode - dense + reranker
 
 **File Discovery (action="find_files"):**
   smart_search(action="find_files", pattern="*.ts")           # find all TypeScript files
@@ -1853,24 +2063,14 @@ export const schema: ToolSchema = {
   smart_search(query="auth", limit=10, offset=0)    # first page
   smart_search(query="auth", limit=10, offset=10)   # second page
 
-**Multi-Word Search (ripgrep mode with tokenization):**
-  smart_search(query="CCW_PROJECT_ROOT CCW_ALLOWED_DIRS", mode="ripgrep")  # tokenized OR matching
-  smart_search(query="auth login user", mode="ripgrep")   # matches any token, ranks by match count
-  smart_search(query="exact phrase", mode="ripgrep", tokenize=false)  # disable tokenization
-
-**Regex Search (ripgrep mode):**
-  smart_search(query="class.*Builder")              # auto-detects regex pattern
-  smart_search(query="def.*\\(.*\\):")              # find function definitions
-  smart_search(query="import.*from", caseSensitive=false)  # case-insensitive
-
-**Modes:** auto (intelligent routing), hybrid (semantic+fuzzy), exact (FTS), ripgrep (fast with tokenization), priority (fallback chain)`,
+**Modes:** fuzzy (FTS + ripgrep fusion, default), semantic (dense + reranker)`,
   inputSchema: {
     type: 'object',
     properties: {
       action: {
         type: 'string',
-        enum: ['init', 'search', 'find_files', 'status', 'search_files'],
-        description: 'Action: search (content search), find_files (path pattern matching), init (create index), status (check index). Note: search_files is deprecated.',
+        enum: ['init', 'init_force', 'search', 'find_files', 'status', 'update', 'watch', 'search_files'],
+        description: 'Action: search (content search), find_files (path pattern matching), init (create index, incremental), init_force (force full rebuild), status (check index), update (incremental update), watch (auto-update). Note: search_files is deprecated.',
         default: 'search',
       },
       query: {
@@ -1884,8 +2084,8 @@ export const schema: ToolSchema = {
       mode: {
         type: 'string',
         enum: SEARCH_MODES,
-        description: 'Search mode: auto, hybrid (best quality), exact (CodexLens FTS), ripgrep (fast, no index), priority (fallback chain)',
-        default: 'auto',
+        description: 'Search mode: fuzzy (FTS + ripgrep fusion, default), semantic (dense + reranker for natural language queries)',
+        default: 'fuzzy',
       },
       output_mode: {
         type: 'string',
@@ -2294,7 +2494,11 @@ export async function handler(params: Record<string, unknown>): Promise<ToolResu
     // Handle actions
     switch (action) {
       case 'init':
-        result = await executeInitAction(parsed.data);
+        result = await executeInitAction(parsed.data, false);
+        break;
+
+      case 'init_force':
+        result = await executeInitAction(parsed.data, true);
         break;
 
       case 'status':
@@ -2324,25 +2528,16 @@ export async function handler(params: Record<string, unknown>): Promise<ToolResu
 
       case 'search':
       default:
-        // Handle search modes: auto | hybrid | exact | ripgrep | priority
+        // Handle search modes: fuzzy | semantic
         switch (mode) {
-          case 'auto':
-            result = await executeAutoMode(parsed.data);
+          case 'fuzzy':
+            result = await executeFuzzyMode(parsed.data);
             break;
-          case 'hybrid':
+          case 'semantic':
             result = await executeHybridMode(parsed.data);
             break;
-          case 'exact':
-            result = await executeCodexLensExactMode(parsed.data);
-            break;
-          case 'ripgrep':
-            result = await executeRipgrepMode(parsed.data);
-            break;
-          case 'priority':
-            result = await executePriorityFallbackMode(parsed.data);
-            break;
           default:
-            throw new Error(`Unsupported mode: ${mode}. Use: auto, hybrid, exact, ripgrep, or priority`);
+            throw new Error(`Unsupported mode: ${mode}. Use: fuzzy or semantic`);
         }
         break;
     }
@@ -2384,6 +2579,8 @@ export async function handler(params: Record<string, unknown>): Promise<ToolResu
 /**
  * Execute init action with external progress callback
  * Used by MCP server for streaming progress
+ * @param params - Search parameters (path, languages, force)
+ * @param onProgress - Optional callback for progress updates
  */
 export async function executeInitWithProgress(
   params: Record<string, unknown>,
@@ -2391,6 +2588,7 @@ export async function executeInitWithProgress(
 ): Promise<SearchResult> {
   const path = (params.path as string) || '.';
   const languages = params.languages as string[] | undefined;
+  const force = params.force as boolean || false;
 
   // Check CodexLens availability
   const readyStatus = await ensureCodexLensReady();
@@ -2403,6 +2601,9 @@ export async function executeInitWithProgress(
 
   // Use 'index init' subcommand (new CLI structure)
   const args = ['index', 'init', path];
+  if (force) {
+    args.push('--force');  // Force full rebuild
+  }
   if (languages && languages.length > 0) {
     args.push('--language', languages.join(','));
   }
@@ -2426,7 +2627,7 @@ export async function executeInitWithProgress(
 
   // Build metadata with progress info
   const metadata: SearchMetadata = {
-    action: 'init',
+    action: force ? 'init_force' : 'init',
     path,
   };
 
@@ -2445,11 +2646,12 @@ export async function executeInitWithProgress(
     metadata.progressHistory = progressUpdates.slice(-5);
   }
 
+  const actionLabel = force ? 'rebuilt (force)' : 'created';
   return {
     success: result.success,
     error: result.error,
     message: result.success
-      ? `CodexLens index created successfully for ${path}`
+      ? `CodexLens index ${actionLabel} successfully for ${path}`
       : undefined,
     metadata,
   };

@@ -78,6 +78,7 @@ class APIReranker(BaseReranker):
         backoff_max_s: float = 8.0,
         env_api_key: str = _DEFAULT_ENV_API_KEY,
         workspace_root: Path | str | None = None,
+        max_input_tokens: int | None = None,
     ) -> None:
         ok, err = check_httpx_available()
         if not ok:  # pragma: no cover - exercised via factory availability tests
@@ -134,6 +135,22 @@ class APIReranker(BaseReranker):
             headers=headers,
             timeout=self.timeout_s,
         )
+
+        # Store max_input_tokens with model-aware defaults
+        if max_input_tokens is not None:
+            self._max_input_tokens = max_input_tokens
+        else:
+            # Infer from model name
+            model_lower = self.model_name.lower()
+            if '8b' in model_lower or 'large' in model_lower:
+                self._max_input_tokens = 32768
+            else:
+                self._max_input_tokens = 8192
+
+    @property
+    def max_input_tokens(self) -> int:
+        """Return maximum token limit for reranking."""
+        return self._max_input_tokens
 
     def close(self) -> None:
         try:
@@ -276,15 +293,91 @@ class APIReranker(BaseReranker):
         }
         return payload
 
+    def _estimate_tokens(self, text: str) -> int:
+        """Estimate token count using fast heuristic.
+
+        Uses len(text) // 4 as approximation (~4 chars per token for English).
+        Not perfectly accurate for all models/languages but sufficient for
+        batch sizing decisions where exact counts aren't critical.
+        """
+        return len(text) // 4
+
+    def _create_token_aware_batches(
+        self,
+        query: str,
+        documents: Sequence[str],
+    ) -> list[list[tuple[int, str]]]:
+        """Split documents into batches that fit within token limits.
+
+        Uses 90% of max_input_tokens as safety margin.
+        Each batch includes the query tokens overhead.
+        """
+        max_tokens = int(self._max_input_tokens * 0.9)
+        query_tokens = self._estimate_tokens(query)
+
+        batches: list[list[tuple[int, str]]] = []
+        current_batch: list[tuple[int, str]] = []
+        current_tokens = query_tokens  # Start with query overhead
+
+        for idx, doc in enumerate(documents):
+            doc_tokens = self._estimate_tokens(doc)
+
+            # Warn if single document exceeds token limit (will be truncated by API)
+            if doc_tokens > max_tokens - query_tokens:
+                logger.warning(
+                    f"Document {idx} exceeds token limit: ~{doc_tokens} tokens "
+                    f"(limit: {max_tokens - query_tokens} after query overhead). "
+                    "Document will likely be truncated by the API."
+                )
+
+            # If batch would exceed limit, start new batch
+            if current_tokens + doc_tokens > max_tokens and current_batch:
+                batches.append(current_batch)
+                current_batch = []
+                current_tokens = query_tokens
+
+            current_batch.append((idx, doc))
+            current_tokens += doc_tokens
+
+        if current_batch:
+            batches.append(current_batch)
+
+        return batches
+
     def _rerank_one_query(self, *, query: str, documents: Sequence[str]) -> list[float]:
         if not documents:
             return []
 
-        payload = self._build_payload(query=query, documents=documents)
-        data = self._request_json(payload)
+        # Create token-aware batches
+        batches = self._create_token_aware_batches(query, documents)
 
-        results = data.get("results")
-        return self._extract_scores_from_results(results, expected=len(documents))
+        if len(batches) == 1:
+            # Single batch - original behavior
+            payload = self._build_payload(query=query, documents=documents)
+            data = self._request_json(payload)
+            results = data.get("results")
+            return self._extract_scores_from_results(results, expected=len(documents))
+
+        # Multiple batches - process each and merge results
+        logger.info(
+            f"Splitting {len(documents)} documents into {len(batches)} batches "
+            f"(max_input_tokens: {self._max_input_tokens})"
+        )
+
+        all_scores: list[float] = [0.0] * len(documents)
+
+        for batch in batches:
+            batch_docs = [doc for _, doc in batch]
+            payload = self._build_payload(query=query, documents=batch_docs)
+            data = self._request_json(payload)
+            results = data.get("results")
+            batch_scores = self._extract_scores_from_results(results, expected=len(batch_docs))
+
+            # Map scores back to original indices
+            for (orig_idx, _), score in zip(batch, batch_scores):
+                all_scores[orig_idx] = score
+
+        return all_scores
 
     def score_pairs(
         self,

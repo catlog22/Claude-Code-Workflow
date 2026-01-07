@@ -636,12 +636,6 @@ function renderFileMetadata() {
     '<option value="gemini">Gemini</option>' +
     '<option value="qwen">Qwen</option>' +
     '</select>' +
-    '<label>' + (t('claude.mode') || 'Mode') + '</label>' +
-    '<select id="cliModeSelect" class="sync-select">' +
-    '<option value="update">' + (t('claude.modeUpdate') || 'Update (Smart Merge)') + '</option>' +
-    '<option value="generate">' + (t('claude.modeGenerate') || 'Generate (Full Replace)') + '</option>' +
-    '<option value="append">' + (t('claude.modeAppend') || 'Append') + '</option>' +
-    '</select>' +
     '</div>' +
     '<button class="btn btn-sm btn-primary full-width sync-button" onclick="syncFileWithCLI()" id="cliSyncButton">' +
     '<i data-lucide="refresh-cw" class="w-4 h-4"></i> ' +
@@ -664,7 +658,7 @@ async function syncFileWithCLI() {
   if (!selectedFile) return;
 
   var tool = document.getElementById('cliToolSelect').value;
-  var mode = document.getElementById('cliModeSelect').value;
+  var mode = 'generate'; // Default to full replace mode
 
   // Show progress
   showSyncProgress(true, tool);

@@ -1,7 +1,7 @@
 ---
 name: execute
 description: Execute queue with DAG-based parallel orchestration (one commit per solution)
-argument-hint: "[--worktree] [--queue <queue-id>]"
+argument-hint: "[--worktree [<existing-path>]] [--queue <queue-id>]"
 allowed-tools: TodoWrite(*), Bash(*), Read(*), AskUserQuestion(*)
 ---
 
@@ -26,11 +26,18 @@ Minimal orchestrator that dispatches **solution IDs** to executors. Each executo
 /issue:execute --queue QUE-xxx           # Execute specific queue
 /issue:execute --worktree                # Use git worktrees for parallel isolation
 /issue:execute --worktree --queue QUE-xxx
+/issue:execute --worktree /path/to/existing/worktree  # Resume in existing worktree
 ```
 
 **Parallelism**: Determined automatically by task dependency DAG (no manual control)
 **Executor & Dry-run**: Selected via interactive prompt (AskUserQuestion)
 **Worktree**: Creates isolated git worktrees for each parallel executor
+
+**Worktree Options**:
+- `--worktree` - Create a new worktree with timestamp-based name
+- `--worktree <existing-path>` - Resume in an existing worktree (for recovery/continuation)
+
+**Resume**: Use `git worktree list` to find existing worktrees from interrupted executions
 
 ## Execution Flow
 
@@ -159,10 +166,14 @@ if (useWorktree) {
   Bash('git worktree prune');
 }
 
+// Parse existing worktree path from args if provided
+// Example: --worktree /path/to/existing/worktree
+const existingWorktree = args.worktree && typeof args.worktree === 'string' ? args.worktree : null;
+
 // Launch ALL solutions in batch in parallel (DAG guarantees no conflicts)
 const executions = batch.map(solutionId => {
   updateTodo(solutionId, 'in_progress');
-  return dispatchExecutor(solutionId, executor, useWorktree);
+  return dispatchExecutor(solutionId, executor, useWorktree, existingWorktree);
 });
 
 await Promise.all(executions);
@@ -172,25 +183,47 @@ batch.forEach(id => updateTodo(id, 'completed'));
 ### Executor Dispatch
 
 ```javascript
-function dispatchExecutor(solutionId, executorType, useWorktree = false) {
+function dispatchExecutor(solutionId, executorType, useWorktree = false, existingWorktree = null) {
   // Worktree setup commands (if enabled) - using absolute paths
+  // Supports both creating new worktrees and resuming in existing ones
   const worktreeSetup = useWorktree ? `
 ### Step 0: Setup Isolated Worktree
 \`\`\`bash
 # Use absolute paths to avoid issues when running from subdirectories
 REPO_ROOT=$(git rev-parse --show-toplevel)
 WORKTREE_BASE="\${REPO_ROOT}/.ccw/worktrees"
-WORKTREE_NAME="exec-${solutionId}-$(date +%H%M%S)"
-WORKTREE_PATH="\${WORKTREE_BASE}/\${WORKTREE_NAME}"
 
-# Ensure worktree base exists
-mkdir -p "\${WORKTREE_BASE}"
+# Check if existing worktree path was provided
+EXISTING_WORKTREE="${existingWorktree || ''}"
 
-# Prune stale worktrees
-git worktree prune
+if [[ -n "\${EXISTING_WORKTREE}" && -d "\${EXISTING_WORKTREE}" ]]; then
+  # Resume mode: Use existing worktree
+  WORKTREE_PATH="\${EXISTING_WORKTREE}"
+  WORKTREE_NAME=$(basename "\${WORKTREE_PATH}")
 
-# Create worktree
-git worktree add "\${WORKTREE_PATH}" -b "\${WORKTREE_NAME}"
+  # Verify it's a valid git worktree
+  if ! git -C "\${WORKTREE_PATH}" rev-parse --is-inside-work-tree &>/dev/null; then
+    echo "Error: \${EXISTING_WORKTREE} is not a valid git worktree"
+    exit 1
+  fi
+
+  echo "Resuming in existing worktree: \${WORKTREE_PATH}"
+else
+  # Create mode: New worktree with timestamp
+  WORKTREE_NAME="exec-${solutionId}-$(date +%H%M%S)"
+  WORKTREE_PATH="\${WORKTREE_BASE}/\${WORKTREE_NAME}"
+
+  # Ensure worktree base exists
+  mkdir -p "\${WORKTREE_BASE}"
+
+  # Prune stale worktrees
+  git worktree prune
+
+  # Create worktree
+  git worktree add "\${WORKTREE_PATH}" -b "\${WORKTREE_NAME}"
+
+  echo "Created new worktree: \${WORKTREE_PATH}"
+fi
 
 # Setup cleanup trap for graceful failure handling
 cleanup_worktree() {

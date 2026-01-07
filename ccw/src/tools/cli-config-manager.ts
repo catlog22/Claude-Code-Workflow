@@ -20,14 +20,15 @@ export interface CliConfig {
   tools: Record<string, CliToolConfig>;
 }
 
-export type CliToolName = 'gemini' | 'qwen' | 'codex';
+export type CliToolName = 'gemini' | 'qwen' | 'codex' | 'claude';
 
 // ========== Constants ==========
 
 export const PREDEFINED_MODELS: Record<CliToolName, string[]> = {
   gemini: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
   qwen: ['coder-model', 'vision-model', 'qwen2.5-coder-32b'],
-  codex: ['gpt-5.2', 'gpt-4.1', 'o4-mini', 'o3']
+  codex: ['gpt-5.2', 'gpt-4.1', 'o4-mini', 'o3'],
+  claude: ['sonnet', 'opus', 'haiku', 'claude-sonnet-4-5-20250929', 'claude-opus-4-5-20251101']
 };
 
 export const DEFAULT_CONFIG: CliConfig = {
@@ -47,6 +48,11 @@ export const DEFAULT_CONFIG: CliConfig = {
       enabled: true,
       primaryModel: 'gpt-5.2',
       secondaryModel: 'gpt-5.2'
+    },
+    claude: {
+      enabled: true,
+      primaryModel: 'sonnet',
+      secondaryModel: 'haiku'
     }
   }
 };
@@ -63,7 +69,7 @@ function ensureConfigDirForProject(baseDir: string): void {
 }
 
 function isValidToolName(tool: string): tool is CliToolName {
-  return ['gemini', 'qwen', 'codex'].includes(tool);
+  return ['gemini', 'qwen', 'codex', 'claude'].includes(tool);
 }
 
 function validateConfig(config: unknown): config is CliConfig {
@@ -74,7 +80,7 @@ function validateConfig(config: unknown): config is CliConfig {
   if (!c.tools || typeof c.tools !== 'object') return false;
 
   const tools = c.tools as Record<string, unknown>;
-  for (const toolName of ['gemini', 'qwen', 'codex']) {
+  for (const toolName of ['gemini', 'qwen', 'codex', 'claude']) {
     const tool = tools[toolName];
     if (!tool || typeof tool !== 'object') return false;
 

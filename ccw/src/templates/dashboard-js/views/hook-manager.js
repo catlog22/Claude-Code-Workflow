@@ -87,7 +87,7 @@ async function renderHookManager() {
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           ${renderWizardCard('memory-update')}
-          ${renderWizardCard('memory-setup')}
+          ${renderWizardCard('danger-protection')}
           ${renderWizardCard('skill-context')}
         </div>
       </div>
@@ -216,10 +216,12 @@ function renderWizardCard(wizardId) {
   // Get translated wizard name and description
   const wizardName = wizardId === 'memory-update' ? t('hook.wizard.memoryUpdate') :
                      wizardId === 'memory-setup' ? t('hook.wizard.memorySetup') :
-                     wizardId === 'skill-context' ? t('hook.wizard.skillContext') : wizard.name;
+                     wizardId === 'skill-context' ? t('hook.wizard.skillContext') :
+                     wizardId === 'danger-protection' ? t('hook.wizard.dangerProtection') : wizard.name;
   const wizardDesc = wizardId === 'memory-update' ? t('hook.wizard.memoryUpdateDesc') :
                      wizardId === 'memory-setup' ? t('hook.wizard.memorySetupDesc') :
-                     wizardId === 'skill-context' ? t('hook.wizard.skillContextDesc') : wizard.description;
+                     wizardId === 'skill-context' ? t('hook.wizard.skillContextDesc') :
+                     wizardId === 'danger-protection' ? t('hook.wizard.dangerProtectionDesc') : wizard.description;
 
   // Translate options
   const getOptionName = (wizardId, optId) => {
@@ -236,6 +238,12 @@ function renderWizardCard(wizardId) {
     if (wizardId === 'skill-context') {
       if (optId === 'keyword') return t('hook.wizard.keywordMatching');
       if (optId === 'auto') return t('hook.wizard.autoDetection');
+    }
+    if (wizardId === 'danger-protection') {
+      if (optId === 'bash-confirm') return t('hook.wizard.dangerBashConfirm');
+      if (optId === 'file-protection') return t('hook.wizard.dangerFileProtection');
+      if (optId === 'git-destructive') return t('hook.wizard.dangerGitDestructive');
+      if (optId === 'network-confirm') return t('hook.wizard.dangerNetworkConfirm');
     }
     return wizard.options.find(o => o.id === optId)?.name || '';
   };
@@ -254,6 +262,12 @@ function renderWizardCard(wizardId) {
     if (wizardId === 'skill-context') {
       if (optId === 'keyword') return t('hook.wizard.keywordMatchingDesc');
       if (optId === 'auto') return t('hook.wizard.autoDetectionDesc');
+    }
+    if (wizardId === 'danger-protection') {
+      if (optId === 'bash-confirm') return t('hook.wizard.dangerBashConfirmDesc');
+      if (optId === 'file-protection') return t('hook.wizard.dangerFileProtectionDesc');
+      if (optId === 'git-destructive') return t('hook.wizard.dangerGitDestructiveDesc');
+      if (optId === 'network-confirm') return t('hook.wizard.dangerNetworkConfirmDesc');
     }
     return wizard.options.find(o => o.id === optId)?.description || '';
   };

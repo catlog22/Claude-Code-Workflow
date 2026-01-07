@@ -510,35 +510,8 @@ function openSkillCreateModal() {
               <p class="text-xs text-muted-foreground mt-1">${t('skills.skillNameHint')}</p>
             </div>
 
-            <!-- Generation Type Selection -->
-            <div>
-              <label class="block text-sm font-medium text-foreground mb-2">${t('skills.generationType')}</label>
-              <div class="flex gap-3">
-                <button class="flex-1 px-4 py-3 text-left border-2 rounded-lg transition-all ${skillCreateState.generationType === 'description' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}"
-                        onclick="switchSkillGenerationType('description')">
-                  <div class="flex items-center gap-2">
-                    <i data-lucide="file-text" class="w-5 h-5"></i>
-                    <div>
-                      <div class="font-medium text-sm">${t('skills.fromDescription')}</div>
-                      <div class="text-xs text-muted-foreground">${t('skills.fromDescriptionHint')}</div>
-                    </div>
-                  </div>
-                </button>
-                <button class="flex-1 px-4 py-3 text-left border-2 rounded-lg transition-all opacity-50 cursor-not-allowed"
-                        disabled>
-                  <div class="flex items-center gap-2">
-                    <i data-lucide="layout-template" class="w-5 h-5"></i>
-                    <div>
-                      <div class="font-medium text-sm">${t('skills.fromTemplate')}</div>
-                      <div class="text-xs text-muted-foreground">${t('skills.comingSoon')}</div>
-                    </div>
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            <!-- Description Text Area (for 'description' type) -->
-            <div id="skillDescriptionArea" style="display: ${skillCreateState.generationType === 'description' ? 'block' : 'none'}">
+            <!-- Description Text Area -->
+            <div id="skillDescriptionArea">
               <label class="block text-sm font-medium text-foreground mb-2">${t('skills.descriptionLabel')} <span class="text-destructive">*</span></label>
               <textarea id="skillDescription"
                         class="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
@@ -681,19 +654,6 @@ function switchSkillCreateMode(mode) {
     }
     if (typeof lucide !== 'undefined') lucide.createIcons();
   }
-}
-
-function switchSkillGenerationType(type) {
-  skillCreateState.generationType = type;
-
-  // Toggle visibility of description area
-  const descriptionArea = document.getElementById('skillDescriptionArea');
-  if (descriptionArea) {
-    descriptionArea.style.display = type === 'description' ? 'block' : 'none';
-  }
-
-  // Update generation type button styles (only the description button is active, template is disabled)
-  // No need to update button styles since template button is disabled
 }
 
 function browseSkillFolder() {

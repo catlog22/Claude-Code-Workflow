@@ -472,6 +472,65 @@ function handleNotification(data) {
       }
       break;
 
+    case 'CODEXLENS_WATCHER_UPDATE':
+      // Handle CodexLens watcher real-time updates (file changes detected)
+      if (typeof handleWatcherStatusUpdate === 'function') {
+        handleWatcherStatusUpdate(payload);
+      }
+      console.log('[CodexLens] Watcher update:', payload.events_processed, 'events');
+      break;
+
+    case 'CODEXLENS_WATCHER_QUEUE_UPDATE':
+      // Handle pending queue status updates
+      if (typeof updatePendingQueueUI === 'function') {
+        updatePendingQueueUI(payload.queue);
+      }
+      // Add activity log entries only for NEW files (not already logged)
+      if (payload.queue && payload.queue.files && payload.queue.files.length > 0) {
+        if (typeof addWatcherLogEntry === 'function') {
+          // Track logged files to avoid duplicates
+          window._watcherLoggedFiles = window._watcherLoggedFiles || new Set();
+          var newFiles = payload.queue.files.filter(function(f) {
+            return !window._watcherLoggedFiles.has(f);
+          });
+          // Only show first few new files to avoid spam
+          newFiles.slice(0, 5).forEach(function(fileName) {
+            window._watcherLoggedFiles.add(fileName);
+            addWatcherLogEntry('modified', fileName);
+          });
+          // Clear tracking when queue is empty (after flush)
+          if (payload.queue.file_count === 0) {
+            window._watcherLoggedFiles.clear();
+          }
+        }
+      }
+      console.log('[CodexLens] Queue update:', payload.queue?.file_count, 'files pending');
+      break;
+
+    case 'CODEXLENS_WATCHER_INDEX_COMPLETE':
+      // Handle index completion event
+      if (typeof updateLastIndexResult === 'function') {
+        updateLastIndexResult(payload.result);
+      }
+      // Clear logged files tracking after index completes
+      if (window._watcherLoggedFiles) {
+        window._watcherLoggedFiles.clear();
+      }
+      // Add activity log entry for index completion
+      if (typeof addWatcherLogEntry === 'function' && payload.result) {
+        var summary = 'Indexed ' + (payload.result.files_indexed || 0) + ' files';
+        addWatcherLogEntry('indexed', summary);
+      }
+      // Show toast notification
+      if (typeof showRefreshToast === 'function' && payload.result) {
+        var indexMsg = 'Indexed ' + (payload.result.files_indexed || 0) + ' files, ' +
+                       (payload.result.symbols_added || 0) + ' symbols';
+        var toastType = (payload.result.errors && payload.result.errors.length > 0) ? 'warning' : 'success';
+        showRefreshToast(indexMsg, toastType);
+      }
+      console.log('[CodexLens] Index complete:', payload.result?.files_indexed, 'files indexed');
+      break;
+
     default:
       console.log('[WS] Unknown notification type:', type);
   }

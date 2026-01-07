@@ -835,8 +835,12 @@ async function execAction(positionalPrompt: string | undefined, options: CliExec
     }
 
     // If not streaming (default), print output now
-    if (!stream && result.stdout) {
-      console.log(result.stdout);
+    // Prefer parsedOutput (from stream parser) over raw stdout for better formatting
+    if (!stream) {
+      const output = result.parsedOutput || result.stdout;
+      if (output) {
+        console.log(output);
+      }
     }
 
     // Print summary with execution ID and turn info

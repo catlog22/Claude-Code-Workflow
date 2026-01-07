@@ -1,6 +1,56 @@
 // Core Memory View
 // Manages strategic context entries with knowledge graph and evolution tracking
 
+/**
+ * Parse JSON streaming content and extract readable text
+ * Handles Gemini/Qwen format: {"type":"message","content":"...","delta":true}
+ */
+function parseJsonStreamContent(content) {
+  if (!content || typeof content !== 'string') return content;
+
+  // Check if content looks like JSON streaming (multiple JSON objects)
+  if (!content.includes('{"type":')) return content;
+
+  const lines = content.split('\n');
+  const extractedParts = [];
+  let hasJsonLines = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    // Try to parse as JSON
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        const obj = JSON.parse(trimmed);
+        // Extract content from message type
+        if (obj.type === 'message' && obj.content) {
+          extractedParts.push(obj.content);
+          hasJsonLines = true;
+        }
+        // Skip init/result/error types (metadata)
+        else if (obj.type === 'init' || obj.type === 'result' || obj.type === 'error') {
+          hasJsonLines = true;
+          continue;
+        }
+      } catch (e) {
+        // Not valid JSON, keep as plain text
+        extractedParts.push(trimmed);
+      }
+    } else {
+      // Plain text line
+      extractedParts.push(trimmed);
+    }
+  }
+
+  // If we found JSON lines, return extracted content
+  if (hasJsonLines && extractedParts.length > 0) {
+    return extractedParts.join('');
+  }
+
+  return content;
+}
+
 // Notification function
 function showNotification(message, type = 'info') {
   // Create notification container if it doesn't exist
@@ -228,15 +278,31 @@ function renderMemoryCard(memory) {
   const updatedDate = memory.updated_at ? new Date(memory.updated_at).toLocaleString() : createdDate;
   const isArchived = memory.archived || false;
 
-  const metadata = memory.metadata || {};
+  // Parse metadata - it may be double-encoded JSON string from the backend
+  let metadata = {};
+  if (memory.metadata) {
+    try {
+      let parsed = typeof memory.metadata === 'string' ? JSON.parse(memory.metadata) : memory.metadata;
+      // Handle double-encoded JSON (string within string)
+      if (typeof parsed === 'string') {
+        parsed = JSON.parse(parsed);
+      }
+      metadata = parsed;
+      console.log('[DEBUG] Memory', memory.id, 'metadata parsed:', metadata, 'favorite:', metadata.favorite);
+    } catch (e) {
+      console.warn('Failed to parse memory metadata:', e);
+    }
+  }
   const tags = metadata.tags || [];
   const priority = metadata.priority || 'medium';
+  const isFavorite = metadata.favorite === true;
+  console.log('[DEBUG] Memory', memory.id, 'isFavorite:', isFavorite);
 
   return `
     <div class="memory-card ${isArchived ? 'archived' : ''}" data-memory-id="${memory.id}" onclick="viewMemoryDetail('${memory.id}')">
       <div class="memory-card-header">
         <div class="memory-id">
-          ${metadata.favorite ? '<i data-lucide="star"></i>' : ''}
+          ${isFavorite ? '<i data-lucide="star" class="favorite-star"></i>' : ''}
           <span>${memory.id}</span>
           ${isArchived ? `<span class="badge badge-archived">${t('common.archived')}</span>` : ''}
           ${priority !== 'medium' ? `<span class="badge badge-priority-${priority}">${priority}</span>` : ''}
@@ -245,7 +311,7 @@ function renderMemoryCard(memory) {
           <button class="icon-btn" onclick="editMemory('${memory.id}')" title="${t('common.edit')}">
             <i data-lucide="edit"></i>
           </button>
-          <button class="icon-btn ${metadata.favorite ? 'favorite-active' : ''}" onclick="toggleFavorite('${memory.id}')" title="${t('coreMemory.toggleFavorite') || 'Toggle Favorite'}">
+          <button class="icon-btn ${isFavorite ? 'favorite-active' : ''}" onclick="toggleFavorite('${memory.id}')" title="${t('coreMemory.toggleFavorite') || 'Toggle Favorite'}">
             <i data-lucide="star"></i>
           </button>
           ${!isArchived
@@ -312,7 +378,8 @@ function renderMemoryCard(memory) {
 // API Functions
 async function fetchCoreMemories(archived = false) {
   try {
-    const response = await fetch(`/api/core-memory/memories?path=${encodeURIComponent(projectPath)}&archived=${archived}`);
+    // Add timestamp to prevent browser caching
+    const response = await fetch(`/api/core-memory/memories?path=${encodeURIComponent(projectPath)}&archived=${archived}&_t=${Date.now()}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     return data.memories || [];
@@ -325,7 +392,8 @@ async function fetchCoreMemories(archived = false) {
 
 async function fetchMemoryById(memoryId) {
   try {
-    const response = await fetch(`/api/core-memory/memories/${memoryId}?path=${encodeURIComponent(projectPath)}`);
+    // Add timestamp to prevent browser caching
+    const response = await fetch(`/api/core-memory/memories/${memoryId}?path=${encodeURIComponent(projectPath)}&_t=${Date.now()}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     return data.memory || null;
@@ -356,7 +424,9 @@ async function editMemory(memoryId) {
   document.getElementById('memoryModalTitle').textContent = t('coreMemory.edit');
   document.getElementById('memoryContent').value = memory.content || '';
   document.getElementById('memorySummary').value = memory.summary || '';
-  document.getElementById('memoryMetadata').value = memory.metadata ? JSON.stringify(memory.metadata, null, 2) : '';
+  document.getElementById('memoryMetadata').value = memory.metadata 
+    ? (typeof memory.metadata === 'string' ? memory.metadata : JSON.stringify(memory.metadata, null, 2)) 
+    : '';
   modal.dataset.editId = memoryId;
   modal.style.display = 'flex';
   lucide.createIcons();
@@ -507,34 +577,48 @@ async function viewMemoryDetail(memoryId) {
   const modal = document.getElementById('memoryDetailModal');
   document.getElementById('memoryDetailTitle').textContent = memory.id;
 
+  // Parse content and summary in case they contain JSON streaming format
+  const parsedContent = parseJsonStreamContent(memory.content);
+  const parsedSummary = parseJsonStreamContent(memory.summary);
+
   const body = document.getElementById('memoryDetailBody');
   body.innerHTML = `
     <div class="memory-detail-content">
-      ${memory.summary
+      ${parsedSummary
         ? `<div class="detail-section">
              <h3>${t('coreMemory.summary')}</h3>
-             <div class="detail-text">${escapeHtml(memory.summary)}</div>
+             <div class="detail-text">${escapeHtml(parsedSummary)}</div>
            </div>`
         : ''
       }
 
       <div class="detail-section">
         <h3>${t('coreMemory.content')}</h3>
-        <pre class="detail-code">${escapeHtml(memory.content)}</pre>
+        <pre class="detail-code">${escapeHtml(parsedContent)}</pre>
       </div>
 
-      ${memory.metadata && Object.keys(memory.metadata).length > 0
-        ? `<div class="detail-section">
+      ${(() => {
+        if (!memory.metadata) return '';
+        try {
+          let metadataObj = typeof memory.metadata === 'string' ? JSON.parse(memory.metadata) : memory.metadata;
+          // Handle double-encoded JSON
+          if (typeof metadataObj === 'string') {
+            metadataObj = JSON.parse(metadataObj);
+          }
+          if (Object.keys(metadataObj).length === 0) return '';
+          return `<div class="detail-section">
              <h3>${t('coreMemory.metadata')}</h3>
-             <pre class="detail-code">${escapeHtml(JSON.stringify(memory.metadata, null, 2))}</pre>
-           </div>`
-        : ''
-      }
+             <pre class="detail-code">${escapeHtml(JSON.stringify(metadataObj, null, 2))}</pre>
+           </div>`;
+        } catch (e) {
+          return '';
+        }
+      })()}
 
       ${memory.raw_output
         ? `<div class="detail-section">
              <h3>${t('coreMemory.rawOutput')}</h3>
-             <pre class="detail-code">${escapeHtml(memory.raw_output)}</pre>
+             <pre class="detail-code">${escapeHtml(parseJsonStreamContent(memory.raw_output))}</pre>
            </div>`
         : ''
       }
@@ -644,7 +728,19 @@ function showClustersView() {
 // Favorites Functions
 async function refreshFavorites() {
   const allMemories = await fetchCoreMemories(false);
-  const favorites = allMemories.filter(m => m.metadata && m.metadata.favorite);
+  const favorites = allMemories.filter(m => {
+    if (!m.metadata) return false;
+    try {
+      let parsed = typeof m.metadata === 'string' ? JSON.parse(m.metadata) : m.metadata;
+      // Handle double-encoded JSON
+      if (typeof parsed === 'string') {
+        parsed = JSON.parse(parsed);
+      }
+      return parsed.favorite === true;
+    } catch (e) {
+      return false;
+    }
+  });
 
   const countEl = document.getElementById('totalFavoritesCount');
   const gridEl = document.getElementById('favoritesGridContent');
@@ -670,7 +766,7 @@ async function refreshFavorites() {
 async function showMemoryRelations(memoryId) {
   try {
     // Fetch all clusters
-    const response = await fetch(`/api/core-memory/clusters?path=${encodeURIComponent(projectPath)}`);
+    const response = await fetch(`/api/core-memory/clusters?path=${encodeURIComponent(projectPath)}&_t=${Date.now()}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const result = await response.json();
@@ -679,7 +775,7 @@ async function showMemoryRelations(memoryId) {
     // Find clusters containing this memory
     const relatedClusters = [];
     for (const cluster of clusters) {
-      const detailRes = await fetch(`/api/core-memory/clusters/${cluster.id}?path=${encodeURIComponent(projectPath)}`);
+      const detailRes = await fetch(`/api/core-memory/clusters/${cluster.id}?path=${encodeURIComponent(projectPath)}&_t=${Date.now()}`);
       if (detailRes.ok) {
         const detail = await detailRes.json();
         const members = detail.members || [];
@@ -749,7 +845,20 @@ async function toggleFavorite(memoryId) {
     const memory = await fetchMemoryById(memoryId);
     if (!memory) return;
 
-    const metadata = memory.metadata || {};
+    // Parse metadata - it may be double-encoded JSON string from the backend
+    let metadata = {};
+    if (memory.metadata) {
+      try {
+        let parsed = typeof memory.metadata === 'string' ? JSON.parse(memory.metadata) : memory.metadata;
+        // Handle double-encoded JSON
+        if (typeof parsed === 'string') {
+          parsed = JSON.parse(parsed);
+        }
+        metadata = parsed;
+      } catch (e) {
+        console.warn('Failed to parse memory metadata:', e);
+      }
+    }
     metadata.favorite = !metadata.favorite;
 
     const response = await fetch('/api/core-memory/memories', {

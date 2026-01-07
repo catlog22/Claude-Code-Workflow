@@ -517,34 +517,45 @@ async function generateSkillViaCLI({ generationType, description, skillName, loc
       await fsPromises.mkdir(baseDir, { recursive: true });
     }
 
-    // Build CLI prompt
+    // Build structured skill parameters for /skill-generator
     const targetLocationDisplay = location === 'project'
       ? '.claude/skills/'
       : '~/.claude/skills/';
 
-    const prompt = `PURPOSE: Generate a complete Claude Code skill from description
-TASK: • Parse skill requirements • Create SKILL.md with proper frontmatter (name, description, version, allowed-tools) • Generate supporting files if needed in skill folder
-MODE: write
-CONTEXT: @**/*
-EXPECTED: Complete skill folder structure with SKILL.md and all necessary files
-RULES: $(cat ~/.claude/workflows/cli-templates/prompts/universal/00-universal-rigorous-style.txt) | Follow Claude Code skill format | Include name, description in frontmatter | write=CREATE
+    // Structured fields from user input
+    const skillParams = {
+      skill_name: skillName,
+      description: description || 'Generate a basic skill template',
+      target_location: targetLocationDisplay,
+      target_path: targetPath,
+      location_type: location // 'project' | 'user'
+    };
 
-SKILL DESCRIPTION:
-${description || 'Generate a basic skill template'}
+    // Prompt that invokes /skill-generator skill with structured parameters
+    const prompt = `/skill-generator
 
-SKILL NAME: ${skillName}
-TARGET LOCATION: ${targetLocationDisplay}
-TARGET PATH: ${targetPath}
+## Skill Parameters (Structured Input)
 
-REQUIREMENTS:
-1. Create SKILL.md with frontmatter containing:
-   - name: "${skillName}"
-   - description: Brief description of the skill
-   - version: "1.0.0"
-   - allowed-tools: List of tools this skill can use (e.g., [Read, Write, Edit, Bash])
-2. Add skill content below frontmatter explaining what the skill does and how to use it
-3. If the skill requires supporting files (e.g., templates, scripts), create them in the skill folder
-4. Ensure all files are properly formatted and follow best practices`;
+\`\`\`json
+${JSON.stringify(skillParams, null, 2)}
+\`\`\`
+
+## User Request
+
+Create a new Claude Code skill with the following specifications:
+
+- **Skill Name**: ${skillName}
+- **Description**: ${description || 'Generate a basic skill template'}
+- **Target Location**: ${targetLocationDisplay}${skillName}
+- **Location Type**: ${location === 'project' ? 'Project-level (.claude/skills/)' : 'User-level (~/.claude/skills/)'}
+
+## Instructions
+
+1. Use the skill-generator to create a complete skill structure
+2. Generate SKILL.md with proper frontmatter (name, description, version, allowed-tools)
+3. Create necessary supporting files (phases, specs, templates as needed)
+4. Follow Claude Code skill design patterns and best practices
+5. Output all files to: ${targetPath}`;
 
     // Execute CLI tool (Claude) with write mode
     const result = await executeCliTool({
@@ -560,7 +571,7 @@ REQUIREMENTS:
     if (!result.success) {
       return {
         error: `CLI generation failed: ${result.stderr || 'Unknown error'}`,
-        stdout: result.stdout,
+        stdout: result.parsedOutput || result.stdout,
         stderr: result.stderr
       };
     }
@@ -570,7 +581,7 @@ REQUIREMENTS:
     if (!validation.valid) {
       return {
         error: `Generated skill is invalid: ${validation.errors.join(', ')}`,
-        stdout: result.stdout,
+        stdout: result.parsedOutput || result.stdout,
         stderr: result.stderr
       };
     }
@@ -580,7 +591,7 @@ REQUIREMENTS:
       skillName: validation.skillInfo.name,
       location,
       path: targetPath,
-      stdout: result.stdout,
+      stdout: result.parsedOutput || result.stdout,
       stderr: result.stderr
     };
   } catch (error) {

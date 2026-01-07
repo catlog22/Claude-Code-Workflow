@@ -2,9 +2,20 @@
 
 用于生成新 Skill 入口文件的模板。
 
-## 模板结构
+## ⚠️ 重要：YAML Front Matter 规范
 
-```markdown
+> **CRITICAL**: SKILL.md 文件必须以 YAML front matter 开头，即以 `---` 作为文件第一行。
+>
+> **禁止**使用以下格式：
+> - `# Title` 然后 `## Metadata` + yaml 代码块 ❌
+> - 任何在 `---` 之前的内容 ❌
+>
+> **正确格式**：文件第一行必须是 `---`
+
+## 可直接应用的模板
+
+以下是完整的 SKILL.md 模板。生成时**直接复制应用**，将 `{{变量}}` 替换为实际值：
+
 ---
 name: {{skill_name}}
 description: {{description}}. Triggers on {{triggers}}.
@@ -33,9 +44,9 @@ allowed-tools: {{allowed_tools}}
 
 \`\`\`javascript
 const timestamp = new Date().toISOString().slice(0,19).replace(/[-:T]/g, '');
-const workDir = `{{output_location}}`;
+const workDir = \`{{output_location}}\`;
 
-Bash(`mkdir -p "${workDir}"`);
+Bash(\`mkdir -p "\${workDir}"\`);
 {{additional_dirs}}
 \`\`\`
 
@@ -48,7 +59,8 @@ Bash(`mkdir -p "${workDir}"`);
 ## Reference Documents
 
 {{reference_table}}
-```
+
+---
 
 ## 变量说明
 

@@ -400,6 +400,11 @@ class HybridSearchEngine:
             elif backend == "legacy":
                 if not bool(getattr(self._config, "embedding_use_gpu", True)):
                     device = "cpu"
+            elif backend == "api":
+                # Pass max_input_tokens for adaptive batching
+                max_tokens = getattr(self._config, "reranker_max_input_tokens", None)
+                if max_tokens:
+                    kwargs["max_input_tokens"] = max_tokens
 
             return get_reranker(
                 backend=backend,
@@ -605,13 +610,20 @@ class HybridSearchEngine:
             index_root = hnsw_path.parent
             model_config = None
 
-            # Try to get model config from the provided index_path first
+            # Try to get model config from the centralized index root first
+            # (not the sub-directory index_path, which may have outdated config)
             try:
                 from codexlens.semantic.vector_store import VectorStore
-                with VectorStore(index_path) as vs:
-                    model_config = vs.get_model_config()
-            except Exception:
-                pass
+                central_index_path = index_root / "_index.db"
+                if central_index_path.exists():
+                    with VectorStore(central_index_path) as vs:
+                        model_config = vs.get_model_config()
+                    self.logger.debug(
+                        "Loaded model config from centralized index: %s",
+                        model_config
+                    )
+            except Exception as e:
+                self.logger.debug("Failed to load model config from centralized index: %s", e)
 
             # Detect dimension from HNSW file if model config not found
             if model_config is None:

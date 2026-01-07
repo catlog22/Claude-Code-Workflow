@@ -269,6 +269,106 @@ function handleCliStreamError(payload) {
   updateStreamBadge();
 }
 
+// ===== Message Type Parsing =====
+const MESSAGE_TYPE_PATTERNS = {
+  system: /^\[系统\]/,
+  thinking: /^\[思考\]/,
+  response: /^\[响应\]/,
+  result: /^\[结果\]/,
+  error: /^\[错误\]/,
+  warning: /^\[警告\]/,
+  info: /^\[信息\]/
+};
+
+const MESSAGE_TYPE_ICONS = {
+  system: 'settings',
+  thinking: 'brain',
+  response: 'message-circle',
+  result: 'check-circle',
+  error: 'alert-circle',
+  warning: 'alert-triangle',
+  info: 'info'
+};
+
+const MESSAGE_TYPE_LABELS = {
+  system: '系统',
+  thinking: '思考',
+  response: '响应',
+  result: '结果',
+  error: '错误',
+  warning: '警告',
+  info: '信息'
+};
+
+/**
+ * Parse message content to extract type and clean content
+ * @param {string} content - Raw message content
+ * @returns {{ type: string, label: string, content: string, hasPrefix: boolean }}
+ */
+function parseMessageType(content) {
+  for (const [type, pattern] of Object.entries(MESSAGE_TYPE_PATTERNS)) {
+    if (pattern.test(content)) {
+      return {
+        type,
+        label: MESSAGE_TYPE_LABELS[type],
+        content: content.replace(pattern, '').trim(),
+        hasPrefix: true
+      };
+    }
+  }
+  return {
+    type: 'default',
+    label: '',
+    content: content,
+    hasPrefix: false
+  };
+}
+
+/**
+ * Render a formatted message line with type badge
+ * @param {Object} line - Line object with type and content
+ * @param {string} searchFilter - Current search filter
+ * @returns {string} - HTML string
+ */
+function renderFormattedLine(line, searchFilter) {
+  const parsed = parseMessageType(line.content);
+  let content = escapeHtml(parsed.content);
+
+  // Apply search highlighting
+  if (searchFilter && searchFilter.trim()) {
+    const searchRegex = new RegExp(`(${escapeRegex(searchFilter)})`, 'gi');
+    content = content.replace(searchRegex, '<mark class="cli-stream-highlight">$1</mark>');
+  }
+
+  // Format code blocks
+  content = formatCodeBlocks(content);
+
+  // Format inline code
+  content = content.replace(/`([^`]+)`/g, '<code class="cli-inline-code">$1</code>');
+
+  // Build type badge if has prefix
+  const typeBadge = parsed.hasPrefix ?
+    `<span class="cli-msg-badge cli-msg-${parsed.type}">
+      <i data-lucide="${MESSAGE_TYPE_ICONS[parsed.type] || 'circle'}"></i>
+      <span>${parsed.label}</span>
+    </span>` : '';
+
+  // Determine line class based on original type and parsed type
+  const lineClass = parsed.hasPrefix ? `cli-stream-line formatted ${parsed.type}` :
+                    `cli-stream-line ${line.type}`;
+
+  return `<div class="${lineClass}">${typeBadge}<span class="cli-msg-content">${content}</span></div>`;
+}
+
+/**
+ * Format code blocks in content
+ */
+function formatCodeBlocks(content) {
+  // Handle multi-line code blocks (already escaped)
+  // Just apply styling class for now
+  return content;
+}
+
 // ===== UI Rendering =====
 function renderStreamTabs() {
   const tabsContainer = document.getElementById('cliStreamTabs');
@@ -351,16 +451,15 @@ function renderStreamContent(executionId) {
     );
   }
 
-  // Render output lines with search highlighting
-  contentContainer.innerHTML = filteredOutput.map(line => {
-    let content = escapeHtml(line.content);
-    // Highlight search matches
-    if (searchFilter.trim()) {
-      const searchRegex = new RegExp(`(${escapeRegex(searchFilter)})`, 'gi');
-      content = content.replace(searchRegex, '<mark class="cli-stream-highlight">$1</mark>');
-    }
-    return `<div class="cli-stream-line ${line.type}">${content}</div>`;
-  }).join('');
+  // Render output lines with formatted styling
+  contentContainer.innerHTML = filteredOutput.map(line =>
+    renderFormattedLine(line, searchFilter)
+  ).join('');
+
+  // Initialize Lucide icons for message badges
+  if (typeof lucide !== 'undefined') {
+    lucide.createIcons({ attrs: { class: 'cli-msg-icon' } });
+  }
 
   // Show filter result count if filtering
   if (searchFilter.trim() && filteredOutput.length !== exec.output.length) {

@@ -453,7 +453,8 @@ ${memory.content}
       category: 'internal'
     });
 
-    const summary = result.stdout?.trim() || 'Failed to generate summary';
+    // Use parsedOutput (extracted text from stream JSON) instead of raw stdout
+    const summary = result.parsedOutput?.trim() || result.stdout?.trim() || 'Failed to generate summary';
 
     // Update memory with summary
     const stmt = this.db.prepare(`

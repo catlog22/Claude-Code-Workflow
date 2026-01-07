@@ -264,6 +264,310 @@ function deleteRule(
 }
 
 /**
+ * Infer rule context from file name and subdirectory for better prompt generation
+ * @param {string} fileName - Rule file name
+ * @param {string} subdirectory - Optional subdirectory path
+ * @param {string} location - 'project' or 'user'
+ * @returns {Object} Inferred context
+ */
+function inferRuleContext(fileName: string, subdirectory: string, location: string) {
+  const normalizedName = fileName.replace(/\.md$/i, '').toLowerCase();
+  const normalizedSubdir = (subdirectory || '').toLowerCase();
+
+  // Rule category inference from file name and subdirectory
+  const categories = {
+    coding: ['coding', 'code', 'style', 'format', 'lint', 'convention'],
+    testing: ['test', 'spec', 'jest', 'vitest', 'mocha', 'coverage'],
+    security: ['security', 'auth', 'permission', 'access', 'secret', 'credential'],
+    architecture: ['arch', 'design', 'pattern', 'structure', 'module', 'layer'],
+    documentation: ['doc', 'comment', 'readme', 'jsdoc', 'api-doc'],
+    performance: ['perf', 'performance', 'optimize', 'cache', 'memory'],
+    workflow: ['workflow', 'ci', 'cd', 'deploy', 'build', 'release'],
+    tooling: ['tool', 'cli', 'script', 'npm', 'yarn', 'pnpm'],
+    error: ['error', 'exception', 'handling', 'logging', 'debug']
+  };
+
+  let inferredCategory = 'general';
+  let inferredKeywords: string[] = [];
+
+  for (const [category, keywords] of Object.entries(categories)) {
+    for (const keyword of keywords) {
+      if (normalizedName.includes(keyword) || normalizedSubdir.includes(keyword)) {
+        inferredCategory = category;
+        inferredKeywords = keywords;
+        break;
+      }
+    }
+    if (inferredCategory !== 'general') break;
+  }
+
+  // Scope inference from location
+  const scopeHint = location === 'project'
+    ? 'This rule applies to the current project only'
+    : 'This rule applies globally to all projects';
+
+  // Technology hints from file name
+  const techPatterns = {
+    typescript: ['ts', 'typescript', 'tsc'],
+    javascript: ['js', 'javascript', 'node'],
+    react: ['react', 'jsx', 'tsx', 'component'],
+    vue: ['vue', 'vuex', 'pinia'],
+    python: ['python', 'py', 'pip', 'poetry'],
+    rust: ['rust', 'cargo', 'rs'],
+    go: ['go', 'golang', 'mod'],
+    java: ['java', 'maven', 'gradle', 'spring']
+  };
+
+  let inferredTech: string | null = null;
+  for (const [tech, patterns] of Object.entries(techPatterns)) {
+    if (patterns.some(p => normalizedName.includes(p) || normalizedSubdir.includes(p))) {
+      inferredTech = tech;
+      break;
+    }
+  }
+
+  return {
+    category: inferredCategory,
+    keywords: inferredKeywords,
+    scopeHint,
+    technology: inferredTech,
+    isConditional: normalizedSubdir.length > 0
+  };
+}
+
+/**
+ * Build structured prompt for rule generation
+ * @param {Object} params
+ * @returns {string} Structured prompt
+ */
+function buildStructuredRulePrompt(params: {
+  description: string;
+  fileName: string;
+  subdirectory: string;
+  location: string;
+  context: ReturnType<typeof inferRuleContext>;
+  enableReview?: boolean;
+}) {
+  const { description, fileName, subdirectory, location, context, enableReview } = params;
+
+  // Build category-specific guidance
+  const categoryGuidance = {
+    coding: 'Focus on code style, naming conventions, and formatting rules. Include specific examples of correct and incorrect patterns.',
+    testing: 'Emphasize test structure, coverage expectations, mocking strategies, and assertion patterns.',
+    security: 'Highlight security best practices, input validation, authentication requirements, and sensitive data handling.',
+    architecture: 'Define module boundaries, dependency rules, layer responsibilities, and design pattern usage.',
+    documentation: 'Specify documentation requirements, comment styles, and API documentation standards.',
+    performance: 'Address caching strategies, optimization guidelines, resource management, and performance metrics.',
+    workflow: 'Define CI/CD requirements, deployment procedures, and release management rules.',
+    tooling: 'Specify tool configurations, script conventions, and dependency management rules.',
+    error: 'Define error handling patterns, logging requirements, and exception management.',
+    general: 'Provide clear, actionable guidelines that Claude can follow consistently.'
+  };
+
+  const guidance = categoryGuidance[context.category] || categoryGuidance.general;
+
+  // Build technology-specific hint
+  const techHint = context.technology
+    ? `\nTECHNOLOGY CONTEXT: This rule is for ${context.technology} development. Use ${context.technology}-specific best practices and terminology.`
+    : '';
+
+  // Build subdirectory context
+  const subdirHint = subdirectory
+    ? `\nORGANIZATION: This rule will be placed in the "${subdirectory}" subdirectory, indicating its category/scope.`
+    : '';
+
+  // Build review instruction if enabled
+  const reviewInstruction = enableReview
+    ? `\n\nAFTER GENERATION:
+- Verify the rule is specific and actionable
+- Check for ambiguous language that could be misinterpreted
+- Ensure examples are clear and relevant
+- Validate markdown formatting is correct`
+    : '';
+
+  return `PURPOSE: Generate a high-quality Claude Code memory rule that will guide Claude's behavior when working in this codebase
+SUCCESS CRITERIA: The rule must be (1) specific and actionable, (2) include concrete examples, (3) avoid ambiguous language, (4) follow Claude Code rule format
+
+TASK:
+• Parse the user's description to identify core requirements
+• Infer additional context from file name "${fileName}" and category "${context.category}"
+• Generate structured markdown content with clear instructions
+• Include DO and DON'T examples where appropriate
+• ${context.isConditional ? 'Consider if frontmatter paths are needed for conditional activation' : 'Create as a global rule'}
+
+MODE: write
+
+RULE CATEGORY: ${context.category}
+CATEGORY GUIDANCE: ${guidance}
+${techHint}
+${subdirHint}
+SCOPE: ${context.scopeHint}
+
+EXPECTED OUTPUT FORMAT:
+\`\`\`markdown
+${context.isConditional ? `---
+paths: [specific/path/patterns/**/*]
+---
+
+` : ''}# Rule Title
+
+Brief description of what this rule enforces.
+
+## Guidelines
+
+1. **First guideline** - Explanation
+2. **Second guideline** - Explanation
+
+## Examples
+
+### ✅ Correct
+\`\`\`language
+// Good example
+\`\`\`
+
+### ❌ Incorrect
+\`\`\`language
+// Bad example
+\`\`\`
+
+## Exceptions
+
+- When this rule may not apply
+\`\`\`
+
+USER DESCRIPTION:
+${description}
+
+FILE NAME: ${fileName}
+${subdirectory ? `SUBDIRECTORY: ${subdirectory}` : ''}
+${reviewInstruction}
+
+RULES: $(cat ~/.claude/workflows/cli-templates/prompts/universal/00-universal-rigorous-style.txt) | Generate ONLY the rule content in markdown | No additional commentary | Do NOT use any tools | Output raw markdown text directly | write=CREATE`;
+}
+
+/**
+ * Build structured prompt for code extraction
+ * @param {Object} params
+ * @returns {string} Structured prompt
+ */
+function buildExtractPrompt(params: {
+  extractScope: string;
+  extractFocus: string;
+  fileName: string;
+  subdirectory: string;
+  context: ReturnType<typeof inferRuleContext>;
+}) {
+  const { extractScope, extractFocus, fileName, subdirectory, context } = params;
+
+  const scope = extractScope || '**/*';
+  const focus = extractFocus || 'naming conventions, error handling, code structure, patterns';
+
+  return `PURPOSE: Extract and document coding conventions from the existing codebase to create a Claude Code memory rule
+SUCCESS CRITERIA: The rule must reflect ACTUAL patterns found in the code, not theoretical best practices
+
+TASK:
+• Scan files matching "${scope}" for recurring patterns
+• Identify ${focus.split(',').length} or more distinct conventions
+• Document each pattern with real code examples from the codebase
+• Create actionable rules based on observed practices
+• Note any inconsistencies found (optional section)
+
+MODE: analysis
+
+ANALYSIS SCOPE: @${scope}
+FOCUS AREAS: ${focus}
+
+EXTRACTION STRATEGY:
+1. **Pattern Recognition**: Look for repeated code structures, naming patterns, file organization
+2. **Consistency Check**: Identify which patterns are consistently followed vs. occasionally violated
+3. **Frequency Analysis**: Prioritize patterns that appear most frequently
+4. **Context Awareness**: Consider why certain patterns are used (performance, readability, etc.)
+
+EXPECTED OUTPUT FORMAT:
+\`\`\`markdown
+# ${fileName.replace(/\.md$/i, '')} Conventions
+
+Conventions extracted from codebase analysis of \`${scope}\`.
+
+## Naming Conventions
+
+- **Pattern name**: Description with example
+  \`\`\`language
+  // Actual code from codebase
+  \`\`\`
+
+## Code Structure
+
+- **Pattern name**: Description with example
+
+## Error Handling
+
+- **Pattern name**: Description with example
+
+## Notes
+
+- Any inconsistencies or variations observed
+\`\`\`
+
+FILE NAME: ${fileName}
+${subdirectory ? `SUBDIRECTORY: ${subdirectory}` : ''}
+INFERRED CATEGORY: ${context.category}
+
+RULES: $(cat ~/.claude/workflows/cli-templates/prompts/analysis/02-analyze-code-patterns.txt) | Extract REAL patterns from code | Include actual code snippets as examples | Do NOT use any tools | Output raw markdown text directly | analysis=READ-ONLY`;
+}
+
+/**
+ * Build review prompt for validating and improving generated rules
+ * @param {string} content - Generated rule content to review
+ * @param {string} fileName - Target file name
+ * @param {Object} context - Inferred context
+ * @returns {string} Review prompt
+ */
+function buildReviewPrompt(
+  content: string,
+  fileName: string,
+  context: ReturnType<typeof inferRuleContext>
+) {
+  return `PURPOSE: Review and improve a Claude Code memory rule for quality, clarity, and actionability
+SUCCESS CRITERIA: Output an improved version that is (1) more specific, (2) includes better examples, (3) has no ambiguous language
+
+TASK:
+• Analyze the rule for clarity and specificity
+• Check if guidelines are actionable (Claude can follow them)
+• Verify examples are concrete and helpful
+• Remove any ambiguous or vague language
+• Ensure markdown formatting is correct
+• Improve structure if needed
+• Keep the core intent and requirements intact
+
+MODE: write
+
+REVIEW CRITERIA:
+1. **Specificity**: Each guideline should be specific enough to follow without interpretation
+2. **Actionability**: Guidelines should tell Claude exactly what to do or not do
+3. **Examples**: Good and bad examples should be clearly different and illustrative
+4. **Consistency**: Formatting and style should be consistent throughout
+5. **Completeness**: All necessary aspects of the rule should be covered
+6. **Conciseness**: No unnecessary verbosity or repetition
+
+RULE CATEGORY: ${context.category}
+FILE NAME: ${fileName}
+
+ORIGINAL RULE CONTENT:
+\`\`\`markdown
+${content}
+\`\`\`
+
+EXPECTED OUTPUT:
+- Output ONLY the improved rule content in markdown format
+- Do NOT include any commentary, explanation, or meta-text
+- If the original is already high quality, return it unchanged
+- Preserve any frontmatter (---paths---) if present
+
+RULES: $(cat ~/.claude/workflows/cli-templates/prompts/universal/00-universal-rigorous-style.txt) | Output ONLY improved markdown content | No additional text | Do NOT use any tools | Output raw markdown text directly | write=CREATE`;
+}
+
+/**
  * Generate rule content via CLI tool
  * @param {Object} params
  * @param {string} params.generationType - 'description' | 'template' | 'extract'
@@ -275,6 +579,7 @@ function deleteRule(
  * @param {string} params.location - 'project' or 'user'
  * @param {string} params.subdirectory - Optional subdirectory
  * @param {string} params.projectPath - Project root path
+ * @param {boolean} params.enableReview - Optional: enable secondary review
  * @returns {Object}
  */
 async function generateRuleViaCLI(params: RuleGenerateParams): Promise<Record<string, unknown>> {
@@ -288,47 +593,47 @@ async function generateRuleViaCLI(params: RuleGenerateParams): Promise<Record<st
       fileName,
       location,
       subdirectory,
-      projectPath
+      projectPath,
+      enableReview
     } = params;
 
     let prompt = '';
     let mode = 'analysis';
     let workingDir = projectPath;
 
+    // Infer context from file name and subdirectory
+    const context = inferRuleContext(fileName, subdirectory || '', location);
+
     // Build prompt based on generation type
     if (generationType === 'description') {
       mode = 'write';
-      prompt = `PURPOSE: Generate Claude Code memory rule from description to guide Claude's behavior
-TASK: • Analyze rule requirements • Generate markdown content with clear instructions
-MODE: write
-EXPECTED: Complete rule content in markdown format
-RULES: $(cat ~/.claude/workflows/cli-templates/prompts/universal/00-universal-rigorous-style.txt) | Follow Claude Code rule format | Use frontmatter for conditional rules if paths specified | write=CREATE
-
-RULE DESCRIPTION:
-${description}
-
-FILE NAME: ${fileName}`;
+      prompt = buildStructuredRulePrompt({
+        description,
+        fileName,
+        subdirectory: subdirectory || '',
+        location,
+        context,
+        enableReview
+      });
     } else if (generationType === 'template') {
       mode = 'write';
       prompt = `PURPOSE: Generate Claude Code rule from template type
 TASK: • Create rule based on ${templateType} template • Generate structured markdown content
 MODE: write
 EXPECTED: Complete rule content in markdown format following template structure
-RULES: $(cat ~/.claude/workflows/cli-templates/prompts/universal/00-universal-rigorous-style.txt) | Follow Claude Code rule format | Use ${templateType} template patterns | write=CREATE
+RULES: $(cat ~/.claude/workflows/cli-templates/prompts/universal/00-universal-rigorous-style.txt) | Follow Claude Code rule format | Use ${templateType} template patterns | Do NOT use any tools | Output raw markdown text directly | write=CREATE
 
 TEMPLATE TYPE: ${templateType}
 FILE NAME: ${fileName}`;
     } else if (generationType === 'extract') {
       mode = 'analysis';
-      prompt = `PURPOSE: Extract coding rules from existing codebase to document patterns and conventions
-TASK: • Analyze code patterns in specified scope • Extract common conventions • Identify best practices
-MODE: analysis
-CONTEXT: @${extractScope || '**/*'}
-EXPECTED: Rule content based on codebase analysis with examples
-RULES: $(cat ~/.claude/workflows/cli-templates/prompts/analysis/02-analyze-code-patterns.txt) | Focus on actual patterns found | Include code examples | analysis=READ-ONLY
-
-ANALYSIS SCOPE: ${extractScope || '**/*'}
-FOCUS AREAS: ${extractFocus || 'naming conventions, error handling, code structure'}`;
+      prompt = buildExtractPrompt({
+        extractScope: extractScope || '',
+        extractFocus: extractFocus || '',
+        fileName,
+        subdirectory: subdirectory || '',
+        context
+      });
     } else {
       return { error: `Unknown generation type: ${generationType}` };
     }
@@ -350,8 +655,15 @@ FOCUS AREAS: ${extractFocus || 'naming conventions, error handling, code structu
       };
     }
 
-    // Extract generated content from stdout
-    const generatedContent = result.stdout.trim();
+    // Extract generated content - prefer parsedOutput (extracted text from stream JSON)
+    let generatedContent = (result.parsedOutput || result.stdout || '').trim();
+
+    // Remove markdown code block wrapper if present (e.g., ```markdown...```)
+    if (generatedContent.startsWith('```markdown')) {
+      generatedContent = generatedContent.replace(/^```markdown\s*\n?/, '').replace(/\n?```\s*$/, '');
+    } else if (generatedContent.startsWith('```')) {
+      generatedContent = generatedContent.replace(/^```\w*\s*\n?/, '').replace(/\n?```\s*$/, '');
+    }
 
     if (!generatedContent) {
       return {
@@ -359,6 +671,40 @@ FOCUS AREAS: ${extractFocus || 'naming conventions, error handling, code structu
         stdout: result.stdout,
         stderr: result.stderr
       };
+    }
+
+    // Optional review step - verify and improve the generated rule
+    let reviewResult = null;
+    if (enableReview) {
+      const reviewPrompt = buildReviewPrompt(generatedContent, fileName, context);
+
+      const reviewExecution = await executeCliTool({
+        tool: 'claude',
+        prompt: reviewPrompt,
+        mode: 'write',
+        cd: workingDir,
+        timeout: 300000, // 5 minutes for review
+        category: 'internal'
+      });
+
+      if (reviewExecution.success) {
+        let reviewedContent = (reviewExecution.parsedOutput || reviewExecution.stdout || '').trim();
+        // Remove markdown code block wrapper if present
+        if (reviewedContent.startsWith('```markdown')) {
+          reviewedContent = reviewedContent.replace(/^```markdown\s*\n?/, '').replace(/\n?```\s*$/, '');
+        } else if (reviewedContent.startsWith('```')) {
+          reviewedContent = reviewedContent.replace(/^```\w*\s*\n?/, '').replace(/\n?```\s*$/, '');
+        }
+        // Only use reviewed content if it's valid and different
+        if (reviewedContent.length > 50 && reviewedContent !== generatedContent) {
+          generatedContent = reviewedContent;
+          reviewResult = {
+            reviewed: true,
+            originalLength: (result.parsedOutput || result.stdout || '').trim().length,
+            reviewedLength: reviewedContent.length
+          };
+        }
+      }
     }
 
     // Create the rule using the generated content
@@ -375,7 +721,8 @@ FOCUS AREAS: ${extractFocus || 'naming conventions, error handling, code structu
       success: createResult.success || false,
       ...createResult,
       generatedContent,
-      executionId: result.conversation?.id
+      executionId: result.conversation?.id,
+      review: reviewResult
     };
   } catch (error: unknown) {
     return { error: error instanceof Error ? error.message : String(error) };

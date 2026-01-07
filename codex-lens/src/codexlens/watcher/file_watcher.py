@@ -11,10 +11,14 @@ from typing import Callable, Dict, List, Optional
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-from .events import ChangeType, FileEvent, WatcherConfig
+from .events import ChangeType, FileEvent, WatcherConfig, PendingQueueStatus
 from ..config import Config
 
 logger = logging.getLogger(__name__)
+
+# Maximum queue size to prevent unbounded memory growth
+# When exceeded, forces immediate flush to avoid memory exhaustion
+MAX_QUEUE_SIZE = 50000
 
 
 class _CodexLensHandler(FileSystemEventHandler):
@@ -112,8 +116,12 @@ class FileWatcher:
         self._event_queue: List[FileEvent] = []
         self._queue_lock = threading.Lock()
 
-        # Debounce thread
-        self._debounce_thread: Optional[threading.Thread] = None
+        # Debounce timer (true debounce - waits after last event)
+        self._flush_timer: Optional[threading.Timer] = None
+        self._last_event_time: float = 0
+
+        # Queue change callbacks for real-time UI updates
+        self._queue_change_callbacks: List[Callable[[PendingQueueStatus], None]] = []
 
         # Config instance for language checking
         self._codexlens_config = Config()
@@ -138,16 +146,57 @@ class FileWatcher:
         return language is not None
 
     def _on_raw_event(self, event: FileEvent) -> None:
-        """Handle raw event from watchdog handler."""
+        """Handle raw event from watchdog handler with true debounce."""
+        force_flush = False
+
         with self._queue_lock:
+            # Check queue size limit to prevent memory exhaustion
+            if len(self._event_queue) >= MAX_QUEUE_SIZE:
+                logger.warning(
+                    "Event queue limit (%d) reached, forcing immediate flush",
+                    MAX_QUEUE_SIZE
+                )
+                if self._flush_timer:
+                    self._flush_timer.cancel()
+                    self._flush_timer = None
+                force_flush = True
+
             self._event_queue.append(event)
-        # Debouncing is handled by background thread
+            self._last_event_time = time.time()
+
+            # Cancel previous timer and schedule new one (true debounce)
+            # Skip if we're about to force flush
+            if not force_flush:
+                if self._flush_timer:
+                    self._flush_timer.cancel()
+
+                self._flush_timer = threading.Timer(
+                    self.config.debounce_ms / 1000.0,
+                    self._flush_events
+                )
+                self._flush_timer.daemon = True
+                self._flush_timer.start()
+
+        # Force flush outside lock to avoid deadlock
+        if force_flush:
+            self._flush_events()
+
+        # Notify queue change (outside lock to avoid deadlock)
+        self._notify_queue_change()
 
     def _debounce_loop(self) -> None:
-        """Background thread for debounced event batching."""
+        """Background thread for checking flush signal file."""
+        signal_file = self.root_path / '.codexlens' / 'flush.signal'
         while self._running:
-            time.sleep(self.config.debounce_ms / 1000.0)
-            self._flush_events()
+            time.sleep(1.0)  # Check every second
+            # Check for flush signal file
+            if signal_file.exists():
+                try:
+                    signal_file.unlink()
+                    logger.info("Flush signal detected, triggering immediate index")
+                    self.flush_now()
+                except Exception as e:
+                    logger.warning("Failed to handle flush signal: %s", e)
 
     def _flush_events(self) -> None:
         """Flush queued events with deduplication."""
@@ -162,12 +211,60 @@ class FileWatcher:
 
             events = list(deduped.values())
             self._event_queue.clear()
+            self._last_event_time = 0  # Reset after flush
+
+        # Notify queue cleared
+        self._notify_queue_change()
 
         if events:
             try:
                 self.on_changes(events)
             except Exception as exc:
                 logger.error("Error in on_changes callback: %s", exc)
+
+    def flush_now(self) -> None:
+        """Immediately flush pending queue (manual trigger)."""
+        with self._queue_lock:
+            if self._flush_timer:
+                self._flush_timer.cancel()
+                self._flush_timer = None
+        self._flush_events()
+
+    def get_pending_queue_status(self) -> PendingQueueStatus:
+        """Get current pending queue status for UI display."""
+        with self._queue_lock:
+            file_count = len(self._event_queue)
+            files = [str(e.path.name) for e in self._event_queue[:20]]
+
+            # Calculate countdown
+            if self._last_event_time > 0 and file_count > 0:
+                elapsed = time.time() - self._last_event_time
+                remaining = max(0, self.config.debounce_ms / 1000.0 - elapsed)
+                countdown = int(remaining)
+            else:
+                countdown = 0
+
+            return PendingQueueStatus(
+                file_count=file_count,
+                files=files,
+                countdown_seconds=countdown,
+                last_event_time=self._last_event_time if file_count > 0 else None
+            )
+
+    def register_queue_change_callback(
+        self, callback: Callable[[PendingQueueStatus], None]
+    ) -> None:
+        """Register callback for queue change notifications."""
+        self._queue_change_callbacks.append(callback)
+
+    def _notify_queue_change(self) -> None:
+        """Notify all registered callbacks of queue change."""
+        status = self.get_pending_queue_status()
+        for callback in self._queue_change_callbacks:
+            try:
+                callback(status)
+            except Exception as e:
+                logger.error("Queue change callback error: %s", e)
 
     def start(self) -> None:
         """Start watching the directory.
@@ -190,13 +287,13 @@ class FileWatcher:
             self._stop_event.clear()
             self._observer.start()
 
-            # Start debounce thread
-            self._debounce_thread = threading.Thread(
+            # Start signal check thread (for flush.signal file)
+            self._signal_check_thread = threading.Thread(
                 target=self._debounce_loop,
                 daemon=True,
-                name="FileWatcher-Debounce",
+                name="FileWatcher-SignalCheck",
             )
-            self._debounce_thread.start()
+            self._signal_check_thread.start()
 
             logger.info("Started watching: %s", self.root_path)
 
@@ -212,15 +309,20 @@ class FileWatcher:
             self._running = False
             self._stop_event.set()
 
+            # Cancel pending flush timer
+            if self._flush_timer:
+                self._flush_timer.cancel()
+                self._flush_timer = None
+
             if self._observer:
                 self._observer.stop()
                 self._observer.join(timeout=5.0)
                 self._observer = None
 
-            # Wait for debounce thread to finish
-            if self._debounce_thread and self._debounce_thread.is_alive():
-                self._debounce_thread.join(timeout=2.0)
-                self._debounce_thread = None
+            # Wait for signal check thread to finish
+            if hasattr(self, '_signal_check_thread') and self._signal_check_thread and self._signal_check_thread.is_alive():
+                self._signal_check_thread.join(timeout=2.0)
+                self._signal_check_thread = None
 
             # Flush any remaining events
             self._flush_events()

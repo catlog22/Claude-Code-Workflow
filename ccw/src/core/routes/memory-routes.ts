@@ -392,10 +392,11 @@ Return ONLY valid JSON in this exact format (no markdown, no code blocks, just p
           category: 'insight'
         });
 
-        // Try to parse JSON from response
+        // Try to parse JSON from response - use parsedOutput (extracted text) instead of raw stdout
         let insights: { patterns: any[]; suggestions: any[] } = { patterns: [], suggestions: [] };
-        if (result.stdout) {
-          let outputText = result.stdout;
+        const cliOutput = result.parsedOutput || result.stdout || '';
+        if (cliOutput) {
+          let outputText = cliOutput;
 
           // Strip markdown code blocks if present
           const codeBlockMatch = outputText.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -415,14 +416,14 @@ Return ONLY valid JSON in this exact format (no markdown, no code blocks, just p
               console.error('[insights/analyze] JSON parse error:', e);
               // Return raw output if JSON parse fails
               insights = {
-                patterns: [{ type: 'raw_analysis', description: result.stdout.substring(0, 500), occurrences: 1, severity: 'low', suggestion: '' }],
+                patterns: [{ type: 'raw_analysis', description: cliOutput.substring(0, 500), occurrences: 1, severity: 'low', suggestion: '' }],
                 suggestions: []
               };
             }
           } else {
             // No JSON found, wrap raw output
             insights = {
-              patterns: [{ type: 'raw_analysis', description: result.stdout.substring(0, 500), occurrences: 1, severity: 'low', suggestion: '' }],
+              patterns: [{ type: 'raw_analysis', description: cliOutput.substring(0, 500), occurrences: 1, severity: 'low', suggestion: '' }],
               suggestions: []
             };
           }
@@ -439,7 +440,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code blocks, just p
             promptCount: prompts.length,
             patterns: insights.patterns,
             suggestions: insights.suggestions,
-            rawOutput: result.stdout || '',
+            rawOutput: cliOutput,
             executionId: result.execution?.id,
             lang
           });
@@ -981,23 +982,26 @@ RULES: Be concise. Focus on practical understanding. Include function signatures
             id: syncId
           });
 
-          if (result.success && result.execution?.output) {
-            // Extract stdout from output object with proper serialization
-            const output = result.execution.output;
-            if (typeof output === 'string') {
-              cliOutput = output;
-            } else if (output && typeof output === 'object') {
-              // Handle object output - extract stdout or serialize the object
-              if (output.stdout && typeof output.stdout === 'string') {
-                cliOutput = output.stdout;
-              } else if (output.stderr && typeof output.stderr === 'string') {
-                cliOutput = output.stderr;
-              } else {
-                // Last resort: serialize the entire object as JSON
-                cliOutput = JSON.stringify(output, null, 2);
+          if (result.success) {
+            // Prefer parsedOutput (extracted text from stream JSON) over raw execution output
+            if (result.parsedOutput) {
+              cliOutput = result.parsedOutput;
+            } else if (result.execution?.output) {
+              // Fallback to execution.output
+              const output = result.execution.output;
+              if (typeof output === 'string') {
+                cliOutput = output;
+              } else if (output && typeof output === 'object') {
+                // Handle object output - extract stdout or serialize the object
+                if (output.stdout && typeof output.stdout === 'string') {
+                  cliOutput = output.stdout;
+                } else if (output.stderr && typeof output.stderr === 'string') {
+                  cliOutput = output.stderr;
+                } else {
+                  // Last resort: serialize the entire object as JSON
+                  cliOutput = JSON.stringify(output, null, 2);
+                }
               }
-            } else {
-              cliOutput = '';
             }
           }
 

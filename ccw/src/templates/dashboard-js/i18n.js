@@ -288,6 +288,20 @@ const i18n = {
     'codexlens.envGroup.concurrency': 'Concurrency Settings',
     'codexlens.envGroup.cascade': 'Cascade Search Settings',
     'codexlens.envGroup.llm': 'LLM Features',
+    // Environment variable field labels
+    'codexlens.envField.backend': 'Backend',
+    'codexlens.envField.model': 'Model',
+    'codexlens.envField.useGpu': 'Use GPU',
+    'codexlens.envField.highAvailability': 'High Availability',
+    'codexlens.envField.loadBalanceStrategy': 'Load Balance Strategy',
+    'codexlens.envField.rateLimitCooldown': 'Rate Limit Cooldown (s)',
+    'codexlens.envField.enabled': 'Enabled',
+    'codexlens.envField.topKResults': 'Top K Results',
+    'codexlens.envField.maxWorkers': 'Max Workers',
+    'codexlens.envField.batchSize': 'Batch Size',
+    'codexlens.envField.searchStrategy': 'Search Strategy',
+    'codexlens.envField.coarseK': 'Coarse K (1st stage)',
+    'codexlens.envField.fineK': 'Fine K (final)',
     'codexlens.usingApiReranker': 'Using API Reranker',
     'codexlens.currentModel': 'Current Model',
     'codexlens.localModels': 'Local Models',
@@ -298,6 +312,8 @@ const i18n = {
     'codexlens.configuredInApiSettings': 'Configured in API Settings',
     'codexlens.commonModels': 'Common Models',
     'codexlens.selectApiModel': 'Select API model...',
+    'codexlens.selectLocalModel': 'Select local model...',
+    'codexlens.noConfiguredModels': 'No models configured in API Settings',
     'codexlens.autoDownloadHint': 'Models are auto-downloaded on first use',
     'codexlens.embeddingBackend': 'Embedding Backend',
     'codexlens.localFastembed': 'Local (FastEmbed)',
@@ -372,6 +388,14 @@ const i18n = {
     'codexlens.cleanCurrentWorkspaceSuccess': 'Current workspace index cleaned successfully',
     'codexlens.cleanFailed': 'Failed to clean indexes',
     'codexlens.loadingConfig': 'Loading configuration...',
+
+    // Workspace Index Status
+    'codexlens.workspaceStatus': 'Workspace Index Status',
+    'codexlens.noIndexFound': 'No index found for current workspace',
+    'codexlens.filesIndexed': 'files indexed',
+    'codexlens.filesWithEmbeddings': 'files with embeddings',
+    'codexlens.vectorSearchEnabled': 'Vector search enabled',
+    'codexlens.vectorSearchPartial': 'Vector search requires ≥50% coverage',
 
     // Model Management
     'codexlens.semanticDeps': 'Semantic Dependencies',
@@ -1339,6 +1363,8 @@ const i18n = {
     'rules.extractScopeRequired': 'Analysis scope is required',
     'rules.extractFocus': 'Focus Areas',
     'rules.extractFocusHint': 'Comma-separated aspects to focus on (e.g., naming, error-handling)',
+    'rules.enableReview': 'Enable Quality Review',
+    'rules.enableReviewHint': 'AI will verify the generated rule for clarity, actionability, and proper formatting',
     'rules.cliGenerating': 'Generating rule via CLI (this may take a few minutes)...',
 
     // CLAUDE.md Manager
@@ -1662,6 +1688,7 @@ const i18n = {
     // Embedding models
     'apiSettings.embeddingDimensions': 'Dimensions',
     'apiSettings.embeddingMaxTokens': 'Max Tokens',
+    'apiSettings.rerankerTopK': 'Top K',
     'apiSettings.selectEmbeddingModel': 'Select Embedding Model',
 
     // Model modal
@@ -1702,6 +1729,7 @@ const i18n = {
     'common.removeFromRecent': 'Remove from recent',
     'common.noDescription': 'No description',
     'common.saving': 'Saving...',
+    'common.saveSuccess': 'Saved successfully',
     'common.saveFailed': 'Failed to save',
     'common.unknownError': 'Unknown error',
     'common.exception': 'Exception',
@@ -2295,6 +2323,20 @@ const i18n = {
     'codexlens.envGroup.concurrency': '并发设置',
     'codexlens.envGroup.cascade': '级联搜索设置',
     'codexlens.envGroup.llm': 'LLM 功能',
+    // 环境变量字段标签
+    'codexlens.envField.backend': '后端',
+    'codexlens.envField.model': '模型',
+    'codexlens.envField.useGpu': '使用 GPU',
+    'codexlens.envField.highAvailability': '高可用',
+    'codexlens.envField.loadBalanceStrategy': '负载均衡策略',
+    'codexlens.envField.rateLimitCooldown': '限流冷却 (秒)',
+    'codexlens.envField.enabled': '启用',
+    'codexlens.envField.topKResults': 'Top K 结果数',
+    'codexlens.envField.maxWorkers': '最大工作线程数',
+    'codexlens.envField.batchSize': '批处理大小',
+    'codexlens.envField.searchStrategy': '搜索策略',
+    'codexlens.envField.coarseK': '粗筛 K (第一阶段)',
+    'codexlens.envField.fineK': '精筛 K (最终)',
     'codexlens.usingApiReranker': '使用 API 重排序',
     'codexlens.currentModel': '当前模型',
     'codexlens.localModels': '本地模型',
@@ -2305,6 +2347,8 @@ const i18n = {
     'codexlens.configuredInApiSettings': '已在 API 设置中配置',
     'codexlens.commonModels': '常用模型',
     'codexlens.selectApiModel': '选择 API 模型...',
+    'codexlens.selectLocalModel': '选择本地模型...',
+    'codexlens.noConfiguredModels': '未在 API 设置中配置模型',
     'codexlens.autoDownloadHint': '模型会在首次使用时自动下载',
     'codexlens.embeddingBackend': '嵌入后端',
     'codexlens.localFastembed': '本地 (FastEmbed)',
@@ -2379,6 +2423,14 @@ const i18n = {
     'codexlens.cleanCurrentWorkspaceSuccess': '当前工作空间索引已成功清理',
     'codexlens.cleanFailed': '清理索引失败',
     'codexlens.loadingConfig': '加载配置中...',
+
+    // 工作空间索引状态
+    'codexlens.workspaceStatus': '工作空间索引状态',
+    'codexlens.noIndexFound': '当前工作空间未找到索引',
+    'codexlens.filesIndexed': '个文件已索引',
+    'codexlens.filesWithEmbeddings': '个文件已嵌入',
+    'codexlens.vectorSearchEnabled': '向量搜索已启用',
+    'codexlens.vectorSearchPartial': '向量搜索需要≥50%覆盖率',
 
     // 模型管理
     'codexlens.semanticDeps': '语义搜索依赖',
@@ -3325,6 +3377,8 @@ const i18n = {
     'rules.extractScopeRequired': '分析范围是必需的',
     'rules.extractFocus': '关注领域',
     'rules.extractFocusHint': '以逗号分隔的关注方面（例如：命名规范, 错误处理）',
+    'rules.enableReview': '启用质量审查',
+    'rules.enableReviewHint': 'AI 将验证生成的规则是否清晰、可操作且格式正确',
     'rules.cliGenerating': '正在通过 CLI 生成规则（可能需要几分钟）...',
 
     // CLAUDE.md Manager
@@ -3678,6 +3732,7 @@ const i18n = {
     // Embedding models
     'apiSettings.embeddingDimensions': '向量维度',
     'apiSettings.embeddingMaxTokens': '最大 Token',
+    'apiSettings.rerankerTopK': 'Top K',
     'apiSettings.selectEmbeddingModel': '选择嵌入模型',
 
     // Model modal
@@ -3720,6 +3775,7 @@ const i18n = {
     'common.removeFromRecent': '从最近中移除',
     'common.noDescription': '无描述',
     'common.saving': '保存中...',
+    'common.saveSuccess': '保存成功',
     'common.saveFailed': '保存失败',
     'common.unknownError': '未知错误',
     'common.exception': '异常',

@@ -16,6 +16,16 @@ class BaseReranker(ABC):
     the abstract methods to ensure a consistent interface.
     """
 
+    @property
+    def max_input_tokens(self) -> int:
+        """Return maximum token limit for reranking.
+
+        Returns:
+            int: Maximum number of tokens that can be processed at once.
+                Default is 8192 if not overridden by implementation.
+        """
+        return 8192
+
     @abstractmethod
     def score_pairs(
         self,

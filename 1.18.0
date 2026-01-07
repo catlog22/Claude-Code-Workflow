@@ -1,0 +1,62 @@
+Collecting onnxruntime-directml
+  Using cached onnxruntime_directml-1.23.0-cp310-cp310-win_amd64.whl (25.1 MB)
+Collecting coloredlogs
+  Using cached coloredlogs-15.0.1-py2.py3-none-any.whl (46 kB)
+Collecting numpy>=1.21.6
+  Using cached numpy-2.2.6-cp310-cp310-win_amd64.whl (12.9 MB)
+Collecting sympy
+  Using cached sympy-1.14.0-py3-none-any.whl (6.3 MB)
+Collecting packaging
+  Using cached packaging-25.0-py3-none-any.whl (66 kB)
+Collecting protobuf
+  Using cached protobuf-6.33.2-cp310-abi3-win_amd64.whl (436 kB)
+Collecting flatbuffers
+  Using cached flatbuffers-25.12.19-py2.py3-none-any.whl (26 kB)
+Collecting humanfriendly>=9.1
+  Using cached humanfriendly-10.0-py2.py3-none-any.whl (86 kB)
+Collecting mpmath<1.4,>=1.1.0
+  Using cached mpmath-1.3.0-py3-none-any.whl (536 kB)
+Collecting pyreadline3
+  Using cached pyreadline3-3.5.4-py3-none-any.whl (83 kB)
+Installing collected packages: mpmath, flatbuffers, sympy, pyreadline3, protobuf, packaging, numpy, humanfriendly, coloredlogs, onnxruntime-directml
+  Attempting uninstall: mpmath
+    Found existing installation: mpmath 1.3.0
+    Uninstalling mpmath-1.3.0:
+      Successfully uninstalled mpmath-1.3.0
+  Attempting uninstall: flatbuffers
+    Found existing installation: flatbuffers 25.12.19
+    Uninstalling flatbuffers-25.12.19:
+      Successfully uninstalled flatbuffers-25.12.19
+  Attempting uninstall: sympy
+    Found existing installation: sympy 1.14.0
+    Uninstalling sympy-1.14.0:
+      Successfully uninstalled sympy-1.14.0
+  Attempting uninstall: pyreadline3
+    Found existing installation: pyreadline3 3.5.4
+    Uninstalling pyreadline3-3.5.4:
+      Successfully uninstalled pyreadline3-3.5.4
+  Attempting uninstall: protobuf
+    Found existing installation: protobuf 6.33.2
+    Uninstalling protobuf-6.33.2:
+      Successfully uninstalled protobuf-6.33.2
+  Attempting uninstall: packaging
+    Found existing installation: packaging 25.0
+    Uninstalling packaging-25.0:
+      Successfully uninstalled packaging-25.0
+  Attempting uninstall: numpy
+    Found existing installation: numpy 2.2.6
+    Uninstalling numpy-2.2.6:
+      Successfully uninstalled numpy-2.2.6
+  Attempting uninstall: humanfriendly
+    Found existing installation: humanfriendly 10.0
+    Uninstalling humanfriendly-10.0:
+      Successfully uninstalled humanfriendly-10.0
+  Attempting uninstall: coloredlogs
+    Found existing installation: coloredlogs 15.0.1
+    Uninstalling coloredlogs-15.0.1:
+      Successfully uninstalled coloredlogs-15.0.1
+  Attempting uninstall: onnxruntime-directml
+    Found existing installation: onnxruntime-directml 1.23.0
+    Uninstalling onnxruntime-directml-1.23.0:
+      Successfully uninstalled onnxruntime-directml-1.23.0
+Successfully installed coloredlogs-15.0.1 flatbuffers-25.12.19 humanfriendly-10.0 mpmath-1.3.0 numpy-2.2.6 onnxruntime-directml-1.23.0 packaging-25.0 protobuf-6.33.2 pyreadline3-3.5.4 sympy-1.14.0

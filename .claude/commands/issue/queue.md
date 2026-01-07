@@ -33,6 +33,7 @@ Queue formation command using **issue-queue-agent** that analyzes all bound solu
 | Get next item | `ccw issue next --json` | `Read('queues/*.json')` |
 | Update status | `ccw issue update <id> --status ...` | Direct file edit |
 | Sync from queue | `ccw issue update --from-queue` | Direct file edit |
+| **Read solution (brief)** | `ccw issue solution <id> --brief` | `Read('solutions/*.jsonl')` |
 
 **Output Options**:
 - `--brief`: JSON with minimal fields (id, status, counts)
@@ -109,14 +110,14 @@ Phase 6: Status Update & Summary
 ### Phase 1: Solution Loading & Distribution
 
 **Data Loading:**
-- Load `issues.jsonl` and filter issues with `status === 'planned'` and `bound_solution_id`
+- Use `ccw issue list --status planned --brief` to get planned issues with `bound_solution_id`
 - If no planned issues found → display message, suggest `/issue:plan`
 
-**Solution Collection** (for each planned issue):
-- Read `solutions/{issue-id}.jsonl`
-- Find bound solution by `bound_solution_id`
-- If bound solution not found → warn and skip issue
-- Extract `files_touched` from all task `modification_points`
+**Solution Brief Loading** (for each planned issue):
+```bash
+ccw issue solution <issue-id> --brief
+# Returns: [{ solution_id, is_bound, task_count, files_touched[] }]
+```
 
 **Build Solution Objects:**
 ```json
@@ -130,19 +131,8 @@ Phase 6: Status Update & Summary
 ```
 
 **Multi-Queue Distribution** (if `--queues > 1`):
-```javascript
-const numQueues = args.queues || 1;
-if (numQueues > 1) {
-  // Partition solutions to minimize cross-group file conflicts
-  const groups = partitionByFileOverlap(solutions, numQueues);
-  // groups = [[sol1, sol2], [sol3, sol4], [sol5]]
-}
-```
-
-**Partitioning Strategy:**
-- Group solutions with overlapping `files_touched` into same queue
-- Use greedy assignment: assign each solution to queue with most file overlap
-- If no overlap, assign to queue with fewest solutions (balance load)
+- Use `files_touched` from brief output for partitioning
+- Group solutions with overlapping files into same queue
 
 **Output:** Array of solution objects (or N arrays if multi-queue)
 
@@ -168,10 +158,11 @@ const queueIds = numQueues === 1
 
 ### Input
 ${JSON.stringify(solutions)}
+// Each object: { issue_id, solution_id, task_count, files_touched[], priority }
 
 ### Workflow
 
-Step 1: Build dependency graph from solutions (nodes=solutions, edges=file conflicts)
+Step 1: Build dependency graph from solutions (nodes=solutions, edges=file conflicts via files_touched)
 Step 2: Use Gemini CLI for conflict analysis (5 types: file, API, data, dependency, architecture)
 Step 3: For high-severity conflicts without clear resolution → add to `clarifications`
 Step 4: Calculate semantic priority (base from issue priority + task_count boost)
@@ -201,6 +192,7 @@ Step 6: Write queue JSON + update index
 - Queue Item ID format: S-1, S-2, S-3, ...
 - Use provided Queue ID (do NOT generate new)
 - `clarifications` only present if high-severity unresolved conflicts exist
+- Use `files_touched` from input (already extracted by orchestrator)
 
 ### Done Criteria
 - [ ] Queue JSON written with all solutions ordered

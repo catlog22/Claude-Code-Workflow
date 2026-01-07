@@ -1,6 +1,6 @@
 ---
 description: Execute all solutions from issue queue with git commit after each solution
-argument-hint: "[--worktree] [--queue <queue-id>]"
+argument-hint: "[--worktree [<existing-path>]] [--queue <queue-id>]"
 ---
 
 # Issue Execute (Codex Version)
@@ -11,7 +11,11 @@ argument-hint: "[--worktree] [--queue <queue-id>]"
 
 ## Worktree Mode (Recommended for Parallel Execution)
 
-When `--worktree` is specified, create a separate git worktree to isolate work.
+When `--worktree` is specified, create or use a git worktree to isolate work.
+
+**Usage**:
+- `--worktree` - Create a new worktree with timestamp-based name
+- `--worktree <existing-path>` - Resume in an existing worktree (for recovery/continuation)
 
 **Note**: `ccw issue` commands auto-detect worktree and redirect to main repo automatically.
 
@@ -21,17 +25,38 @@ When `--worktree` is specified, create a separate git worktree to isolate work.
 # Use absolute paths to avoid issues when running from subdirectories
 REPO_ROOT=$(git rev-parse --show-toplevel)
 WORKTREE_BASE="${REPO_ROOT}/.ccw/worktrees"
-WORKTREE_NAME="issue-exec-$(date +%Y%m%d-%H%M%S)"
-WORKTREE_PATH="${WORKTREE_BASE}/${WORKTREE_NAME}"
 
-# Ensure worktree base directory exists (gitignored)
-mkdir -p "${WORKTREE_BASE}"
+# Check if existing worktree path was provided
+EXISTING_WORKTREE="${1:-}"  # Pass as argument or empty
 
-# Prune stale worktrees from previous interrupted executions
-git worktree prune
+if [[ -n "${EXISTING_WORKTREE}" && -d "${EXISTING_WORKTREE}" ]]; then
+  # Resume mode: Use existing worktree
+  WORKTREE_PATH="${EXISTING_WORKTREE}"
+  WORKTREE_NAME=$(basename "${WORKTREE_PATH}")
 
-# Create worktree from current branch
-git worktree add "${WORKTREE_PATH}" -b "${WORKTREE_NAME}"
+  # Verify it's a valid git worktree
+  if ! git -C "${WORKTREE_PATH}" rev-parse --is-inside-work-tree &>/dev/null; then
+    echo "Error: ${EXISTING_WORKTREE} is not a valid git worktree"
+    exit 1
+  fi
+
+  echo "Resuming in existing worktree: ${WORKTREE_PATH}"
+else
+  # Create mode: New worktree with timestamp
+  WORKTREE_NAME="issue-exec-$(date +%Y%m%d-%H%M%S)"
+  WORKTREE_PATH="${WORKTREE_BASE}/${WORKTREE_NAME}"
+
+  # Ensure worktree base directory exists (gitignored)
+  mkdir -p "${WORKTREE_BASE}"
+
+  # Prune stale worktrees from previous interrupted executions
+  git worktree prune
+
+  # Create worktree from current branch
+  git worktree add "${WORKTREE_PATH}" -b "${WORKTREE_NAME}"
+
+  echo "Created new worktree: ${WORKTREE_PATH}"
+fi
 
 # Setup cleanup trap for graceful failure handling
 cleanup_worktree() {
@@ -64,6 +89,17 @@ cd "${WORKTREE_PATH}"
 - Parallel executors don't conflict with each other
 - Main working directory stays clean
 - Easy cleanup after execution
+- **Resume support**: Pass existing worktree path to continue interrupted executions
+
+**Resume Examples:**
+```bash
+# List existing worktrees to find interrupted execution
+git worktree list
+
+# Resume in existing worktree (pass path as argument)
+# The worktree path will be used instead of creating a new one
+codex -p "@.codex/prompts/issue-execute.md --worktree /path/to/existing/worktree"
+```
 
 **Completion - User Choice:**
 

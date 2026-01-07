@@ -299,8 +299,28 @@
   color: hsl(38 92% 50%);
 }
 
+.icon-btn.favorite-active svg {
+  stroke: hsl(38 92% 50%);
+  fill: hsl(38 92% 50% / 0.2);
+}
+
 .icon-btn.favorite-active:hover {
   color: hsl(38 92% 40%);
+}
+
+.icon-btn.favorite-active:hover svg {
+  stroke: hsl(38 92% 40%);
+  fill: hsl(38 92% 40% / 0.3);
+}
+
+/* Favorite star icon in memory-id */
+.favorite-star {
+  color: hsl(38 92% 50%);
+}
+
+.favorite-star svg {
+  stroke: hsl(38 92% 50%);
+  fill: hsl(38 92% 50% / 0.2);
 }
 
 .icon-btn i {

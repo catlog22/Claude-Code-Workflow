@@ -19,6 +19,117 @@ function escapeHtml(str) {
 }
 
 // ============================================================
+// WORKSPACE INDEX STATUS
+// ============================================================
+
+/**
+ * Refresh workspace index status (FTS and Vector coverage)
+ */
+async function refreshWorkspaceIndexStatus() {
+  var container = document.getElementById('workspaceIndexStatusContent');
+  if (!container) return;
+
+  // Show loading state
+  container.innerHTML = '<div class="text-xs text-muted-foreground text-center py-2">' +
+    '<i data-lucide="loader-2" class="w-4 h-4 animate-spin inline mr-1"></i> ' + (t('common.loading') || 'Loading...') +
+    '</div>';
+  if (window.lucide) lucide.createIcons();
+
+  try {
+    var response = await fetch('/api/codexlens/workspace-status');
+    var result = await response.json();
+
+    if (result.success) {
+      var html = '';
+
+      if (!result.hasIndex) {
+        // No index for current workspace
+        html = '<div class="text-center py-3">' +
+          '<div class="text-sm text-muted-foreground mb-2">' +
+            '<i data-lucide="alert-circle" class="w-4 h-4 inline mr-1"></i> ' +
+            (t('codexlens.noIndexFound') || 'No index found for current workspace') +
+          '</div>' +
+          '<button onclick="runFtsFullIndex()" class="text-xs text-primary hover:underline">' +
+            (t('codexlens.createIndex') || 'Create Index') +
+          '</button>' +
+        '</div>';
+      } else {
+        // FTS Status
+        var ftsPercent = result.fts.percent || 0;
+        var ftsColor = ftsPercent >= 100 ? 'bg-success' : (ftsPercent > 0 ? 'bg-blue-500' : 'bg-muted-foreground');
+        var ftsTextColor = ftsPercent >= 100 ? 'text-success' : (ftsPercent > 0 ? 'text-blue-500' : 'text-muted-foreground');
+
+        html += '<div class="space-y-1">' +
+          '<div class="flex items-center justify-between text-xs">' +
+            '<span class="flex items-center gap-1.5">' +
+              '<i data-lucide="file-text" class="w-3.5 h-3.5 text-blue-500"></i> ' +
+              '<span class="font-medium">' + (t('codexlens.ftsIndex') || 'FTS Index') + '</span>' +
+            '</span>' +
+            '<span class="' + ftsTextColor + ' font-medium">' + ftsPercent + '%</span>' +
+          '</div>' +
+          '<div class="h-1.5 bg-muted rounded-full overflow-hidden">' +
+            '<div class="h-full ' + ftsColor + ' transition-all duration-300" style="width: ' + ftsPercent + '%"></div>' +
+          '</div>' +
+          '<div class="text-xs text-muted-foreground">' +
+            (result.fts.indexedFiles || 0) + ' / ' + (result.fts.totalFiles || 0) + ' ' + (t('codexlens.filesIndexed') || 'files indexed') +
+          '</div>' +
+        '</div>';
+
+        // Vector Status
+        var vectorPercent = result.vector.percent || 0;
+        var vectorColor = vectorPercent >= 100 ? 'bg-success' : (vectorPercent >= 50 ? 'bg-purple-500' : (vectorPercent > 0 ? 'bg-purple-400' : 'bg-muted-foreground'));
+        var vectorTextColor = vectorPercent >= 100 ? 'text-success' : (vectorPercent >= 50 ? 'text-purple-500' : (vectorPercent > 0 ? 'text-purple-400' : 'text-muted-foreground'));
+
+        html += '<div class="space-y-1 mt-3">' +
+          '<div class="flex items-center justify-between text-xs">' +
+            '<span class="flex items-center gap-1.5">' +
+              '<i data-lucide="brain" class="w-3.5 h-3.5 text-purple-500"></i> ' +
+              '<span class="font-medium">' + (t('codexlens.vectorIndex') || 'Vector Index') + '</span>' +
+            '</span>' +
+            '<span class="' + vectorTextColor + ' font-medium">' + vectorPercent.toFixed(1) + '%</span>' +
+          '</div>' +
+          '<div class="h-1.5 bg-muted rounded-full overflow-hidden">' +
+            '<div class="h-full ' + vectorColor + ' transition-all duration-300" style="width: ' + vectorPercent + '%"></div>' +
+          '</div>' +
+          '<div class="text-xs text-muted-foreground">' +
+            (result.vector.filesWithEmbeddings || 0) + ' / ' + (result.vector.totalFiles || 0) + ' ' + (t('codexlens.filesWithEmbeddings') || 'files with embeddings') +
+            (result.vector.totalChunks > 0 ? ' (' + result.vector.totalChunks + ' chunks)' : '') +
+          '</div>' +
+        '</div>';
+
+        // Vector search availability indicator
+        if (vectorPercent >= 50) {
+          html += '<div class="flex items-center gap-1.5 mt-2 pt-2 border-t border-border">' +
+            '<i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-success"></i>' +
+            '<span class="text-xs text-success">' + (t('codexlens.vectorSearchEnabled') || 'Vector search enabled') + '</span>' +
+          '</div>';
+        } else if (vectorPercent > 0) {
+          html += '<div class="flex items-center gap-1.5 mt-2 pt-2 border-t border-border">' +
+            '<i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-warning"></i>' +
+            '<span class="text-xs text-warning">' + (t('codexlens.vectorSearchPartial') || 'Vector search requires ≥50% coverage') + '</span>' +
+          '</div>';
+        }
+      }
+
+      container.innerHTML = html;
+    } else {
+      container.innerHTML = '<div class="text-xs text-destructive text-center py-2">' +
+        '<i data-lucide="alert-circle" class="w-4 h-4 inline mr-1"></i> ' +
+        (result.error || t('common.error') || 'Error loading status') +
+        '</div>';
+    }
+  } catch (err) {
+    console.error('[CodexLens] Failed to load workspace status:', err);
+    container.innerHTML = '<div class="text-xs text-destructive text-center py-2">' +
+      '<i data-lucide="alert-circle" class="w-4 h-4 inline mr-1"></i> ' +
+      (t('common.error') || 'Error') + ': ' + err.message +
+      '</div>';
+  }
+
+  if (window.lucide) lucide.createIcons();
+}
+
+// ============================================================
 // CODEXLENS CONFIGURATION MODAL
 // ============================================================
 
@@ -29,9 +140,23 @@ async function showCodexLensConfigModal() {
   try {
     showRefreshToast(t('codexlens.loadingConfig'), 'info');
 
-    // Fetch current config
-    const response = await fetch('/api/codexlens/config');
-    const config = await response.json();
+    // Fetch current config and status in parallel
+    const [configResponse, statusResponse] = await Promise.all([
+      fetch('/api/codexlens/config'),
+      fetch('/api/codexlens/status')
+    ]);
+    const config = await configResponse.json();
+    const status = await statusResponse.json();
+
+    // Update window.cliToolsStatus to ensure isInstalled is correct
+    if (!window.cliToolsStatus) {
+      window.cliToolsStatus = {};
+    }
+    window.cliToolsStatus.codexlens = {
+      ...(window.cliToolsStatus.codexlens || {}),
+      installed: status.ready || false,
+      version: status.version || null
+    };
 
     const modalHtml = buildCodexLensConfigContent(config);
 
@@ -147,14 +272,59 @@ function buildCodexLensConfigContent(config) {
           '</div>' +
         '</div>' +
 
-        // Quick Actions
-        '<div class="space-y-2">' +
-          '<h4 class="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Quick Actions</h4>' +
-          '<div class="grid grid-cols-2 gap-2">' +
-            (isInstalled
-              ? '<button class="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-colors" onclick="initCodexLensIndex()">' +
-                  '<i data-lucide="refresh-cw" class="w-4 h-4"></i> Update Index' +
+        // Workspace Index Status (only if installed)
+        (isInstalled
+          ? '<div class="rounded-lg border border-border p-4 mb-4 bg-card" id="workspaceIndexStatus">' +
+              '<div class="flex items-center justify-between mb-3">' +
+                '<h4 class="text-sm font-medium flex items-center gap-2">' +
+                  '<i data-lucide="hard-drive" class="w-4 h-4"></i> ' + (t('codexlens.workspaceStatus') || 'Workspace Index Status') +
+                '</h4>' +
+                '<button onclick="refreshWorkspaceIndexStatus()" class="text-xs text-primary hover:underline flex items-center gap-1" title="Refresh status">' +
+                  '<i data-lucide="refresh-cw" class="w-3 h-3"></i> ' + (t('common.refresh') || 'Refresh') +
                 '</button>' +
+              '</div>' +
+              '<div id="workspaceIndexStatusContent" class="space-y-3">' +
+                '<div class="text-xs text-muted-foreground text-center py-2">' +
+                  '<i data-lucide="loader-2" class="w-4 h-4 animate-spin inline mr-1"></i> Loading...' +
+                '</div>' +
+              '</div>' +
+            '</div>'
+          : '') +
+
+        // Index Operations - 4 buttons grid
+        '<div class="space-y-2">' +
+          '<h4 class="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">' + (t('codexlens.indexOperations') || 'Index Operations') + '</h4>' +
+          (isInstalled
+            ? '<div class="grid grid-cols-2 gap-2">' +
+                // FTS Full Index
+                '<button class="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-blue-500/30 bg-blue-500/5 text-blue-600 hover:bg-blue-500/10 transition-colors" onclick="runFtsFullIndex()" title="' + (t('codexlens.ftsFullIndexDesc') || 'Rebuild full-text search index') + '">' +
+                  '<i data-lucide="file-text" class="w-4 h-4"></i> FTS ' + (t('codexlens.fullIndex') || 'Full') +
+                '</button>' +
+                // FTS Incremental
+                '<button class="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-blue-500/30 bg-background text-blue-600 hover:bg-blue-500/5 transition-colors" onclick="runFtsIncrementalUpdate()" title="' + (t('codexlens.ftsIncrementalDesc') || 'Update FTS index for changed files') + '">' +
+                  '<i data-lucide="file-plus" class="w-4 h-4"></i> FTS ' + (t('codexlens.incremental') || 'Incremental') +
+                '</button>' +
+                // Vector Full Index
+                '<button class="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-purple-500/30 bg-purple-500/5 text-purple-600 hover:bg-purple-500/10 transition-colors" onclick="runVectorFullIndex()" title="' + (t('codexlens.vectorFullIndexDesc') || 'Generate all embeddings') + '">' +
+                  '<i data-lucide="brain" class="w-4 h-4"></i> Vector ' + (t('codexlens.fullIndex') || 'Full') +
+                '</button>' +
+                // Vector Incremental
+                '<button class="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-purple-500/30 bg-background text-purple-600 hover:bg-purple-500/5 transition-colors" onclick="runVectorIncrementalUpdate()" title="' + (t('codexlens.vectorIncrementalDesc') || 'Generate embeddings for new files only') + '">' +
+                  '<i data-lucide="brain" class="w-4 h-4"></i> Vector ' + (t('codexlens.incremental') || 'Incremental') +
+                '</button>' +
+              '</div>'
+            : '<div class="grid grid-cols-2 gap-2">' +
+                '<button class="col-span-2 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors" onclick="installCodexLensFromManager()">' +
+                  '<i data-lucide="download" class="w-4 h-4"></i> Install CodexLens' +
+                '</button>' +
+              '</div>') +
+        '</div>' +
+
+        // Quick Actions
+        '<div class="space-y-2 mt-3">' +
+          '<h4 class="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">' + (t('codexlens.quickActions') || 'Quick Actions') + '</h4>' +
+          (isInstalled
+            ? '<div class="grid grid-cols-2 gap-2">' +
                 '<button class="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-border bg-background hover:bg-muted/50 transition-colors" onclick="showWatcherControlModal()">' +
                   '<i data-lucide="eye" class="w-4 h-4"></i> File Watcher' +
                 '</button>' +
@@ -163,11 +333,9 @@ function buildCodexLensConfigContent(config) {
                 '</button>' +
                 '<button class="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-border bg-background hover:bg-muted/50 transition-colors" onclick="cleanCurrentWorkspaceIndex()">' +
                   '<i data-lucide="eraser" class="w-4 h-4"></i> Clean Workspace' +
-                '</button>'
-              : '<button class="col-span-2 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors" onclick="installCodexLensFromManager()">' +
-                  '<i data-lucide="download" class="w-4 h-4"></i> Install CodexLens' +
-                '</button>') +
-          '</div>' +
+                '</button>' +
+              '</div>'
+            : '') +
         '</div>' +
       '</div>' +
 
@@ -523,6 +691,9 @@ function initCodexLensConfigEvents(currentConfig) {
   // Load model lists (embedding and reranker)
   loadModelList();
   loadRerankerModelList();
+
+  // Load workspace index status
+  refreshWorkspaceIndexStatus();
 }
 
 // ============================================================
@@ -666,9 +837,9 @@ var ENV_VAR_GROUPS = {
     labelKey: 'codexlens.envGroup.embedding',
     icon: 'box',
     vars: {
-      'CODEXLENS_EMBEDDING_BACKEND': { label: 'Backend', type: 'select', options: ['local', 'api'], default: 'local', settingsPath: 'embedding.backend' },
+      'CODEXLENS_EMBEDDING_BACKEND': { labelKey: 'codexlens.envField.backend', type: 'select', options: ['local', 'api'], default: 'local', settingsPath: 'embedding.backend' },
       'CODEXLENS_EMBEDDING_MODEL': {
-        label: 'Model',
+        labelKey: 'codexlens.envField.model',
         type: 'model-select',
         placeholder: 'Select or enter model...',
         default: 'fast',
@@ -684,19 +855,20 @@ var ENV_VAR_GROUPS = {
           { group: 'Jina', items: ['jina-embeddings-v3', 'jina-embeddings-v2-base-en', 'jina-embeddings-v2-base-zh'] }
         ]
       },
-      'CODEXLENS_USE_GPU': { label: 'Use GPU', type: 'select', options: ['true', 'false'], default: 'true', settingsPath: 'embedding.use_gpu', showWhen: function(env) { return env['CODEXLENS_EMBEDDING_BACKEND'] !== 'litellm'; } },
-      'CODEXLENS_EMBEDDING_STRATEGY': { label: 'Load Balance', type: 'select', options: ['round_robin', 'latency_aware', 'weighted_random'], default: 'latency_aware', settingsPath: 'embedding.strategy', showWhen: function(env) { return env['CODEXLENS_EMBEDDING_BACKEND'] === 'litellm'; } },
-      'CODEXLENS_EMBEDDING_COOLDOWN': { label: 'Rate Limit Cooldown (s)', type: 'number', placeholder: '60', default: '60', settingsPath: 'embedding.cooldown', min: 0, max: 300, showWhen: function(env) { return env['CODEXLENS_EMBEDDING_BACKEND'] === 'litellm'; } }
+      'CODEXLENS_USE_GPU': { labelKey: 'codexlens.envField.useGpu', type: 'select', options: ['true', 'false'], default: 'true', settingsPath: 'embedding.use_gpu', showWhen: function(env) { return env['CODEXLENS_EMBEDDING_BACKEND'] === 'local'; } },
+      'CODEXLENS_EMBEDDING_POOL_ENABLED': { labelKey: 'codexlens.envField.highAvailability', type: 'select', options: ['true', 'false'], default: 'false', settingsPath: 'embedding.pool_enabled', showWhen: function(env) { return env['CODEXLENS_EMBEDDING_BACKEND'] === 'api'; } },
+      'CODEXLENS_EMBEDDING_STRATEGY': { labelKey: 'codexlens.envField.loadBalanceStrategy', type: 'select', options: ['round_robin', 'latency_aware', 'weighted_random'], default: 'latency_aware', settingsPath: 'embedding.strategy', showWhen: function(env) { return env['CODEXLENS_EMBEDDING_BACKEND'] === 'api' && env['CODEXLENS_EMBEDDING_POOL_ENABLED'] === 'true'; } },
+      'CODEXLENS_EMBEDDING_COOLDOWN': { labelKey: 'codexlens.envField.rateLimitCooldown', type: 'number', placeholder: '60', default: '60', settingsPath: 'embedding.cooldown', min: 0, max: 300, showWhen: function(env) { return env['CODEXLENS_EMBEDDING_BACKEND'] === 'api' && env['CODEXLENS_EMBEDDING_POOL_ENABLED'] === 'true'; } }
     }
   },
   reranker: {
     labelKey: 'codexlens.envGroup.reranker',
     icon: 'arrow-up-down',
     vars: {
-      'CODEXLENS_RERANKER_ENABLED': { label: 'Enabled', type: 'select', options: ['true', 'false'], default: 'true', settingsPath: 'reranker.enabled' },
-      'CODEXLENS_RERANKER_BACKEND': { label: 'Backend', type: 'select', options: ['local', 'api'], default: 'local', settingsPath: 'reranker.backend' },
+      'CODEXLENS_RERANKER_ENABLED': { labelKey: 'codexlens.envField.enabled', type: 'select', options: ['true', 'false'], default: 'true', settingsPath: 'reranker.enabled' },
+      'CODEXLENS_RERANKER_BACKEND': { labelKey: 'codexlens.envField.backend', type: 'select', options: ['local', 'api'], default: 'local', settingsPath: 'reranker.backend' },
       'CODEXLENS_RERANKER_MODEL': {
-        label: 'Model',
+        labelKey: 'codexlens.envField.model',
         type: 'model-select',
         placeholder: 'Select or enter model...',
         default: 'Xenova/ms-marco-MiniLM-L-6-v2',
@@ -711,33 +883,27 @@ var ENV_VAR_GROUPS = {
           { group: 'Jina', items: ['jina-reranker-v2-base-multilingual', 'jina-reranker-v1-base-en'] }
         ]
       },
-      'CODEXLENS_RERANKER_TOP_K': { label: 'Top K Results', type: 'number', placeholder: '50', default: '50', settingsPath: 'reranker.top_k', min: 5, max: 200 }
+      'CODEXLENS_RERANKER_TOP_K': { labelKey: 'codexlens.envField.topKResults', type: 'number', placeholder: '50', default: '50', settingsPath: 'reranker.top_k', min: 5, max: 200 },
+      'CODEXLENS_RERANKER_POOL_ENABLED': { labelKey: 'codexlens.envField.highAvailability', type: 'select', options: ['true', 'false'], default: 'false', settingsPath: 'reranker.pool_enabled', showWhen: function(env) { return env['CODEXLENS_RERANKER_BACKEND'] === 'api'; } },
+      'CODEXLENS_RERANKER_STRATEGY': { labelKey: 'codexlens.envField.loadBalanceStrategy', type: 'select', options: ['round_robin', 'latency_aware', 'weighted_random'], default: 'latency_aware', settingsPath: 'reranker.strategy', showWhen: function(env) { return env['CODEXLENS_RERANKER_BACKEND'] === 'api' && env['CODEXLENS_RERANKER_POOL_ENABLED'] === 'true'; } },
+      'CODEXLENS_RERANKER_COOLDOWN': { labelKey: 'codexlens.envField.rateLimitCooldown', type: 'number', placeholder: '60', default: '60', settingsPath: 'reranker.cooldown', min: 0, max: 300, showWhen: function(env) { return env['CODEXLENS_RERANKER_BACKEND'] === 'api' && env['CODEXLENS_RERANKER_POOL_ENABLED'] === 'true'; } }
     }
   },
   concurrency: {
     labelKey: 'codexlens.envGroup.concurrency',
     icon: 'cpu',
     vars: {
-      'CODEXLENS_API_MAX_WORKERS': { label: 'Max Workers', type: 'number', placeholder: '4', default: '4', settingsPath: 'api.max_workers', min: 1, max: 32 },
-      'CODEXLENS_API_BATCH_SIZE': { label: 'Batch Size', type: 'number', placeholder: '8', default: '8', settingsPath: 'api.batch_size', min: 1, max: 64 }
+      'CODEXLENS_API_MAX_WORKERS': { labelKey: 'codexlens.envField.maxWorkers', type: 'number', placeholder: '4', default: '4', settingsPath: 'api.max_workers', min: 1, max: 32 },
+      'CODEXLENS_API_BATCH_SIZE': { labelKey: 'codexlens.envField.batchSize', type: 'number', placeholder: '8', default: '8', settingsPath: 'api.batch_size', min: 1, max: 64 }
     }
   },
   cascade: {
     labelKey: 'codexlens.envGroup.cascade',
     icon: 'git-branch',
     vars: {
-      'CODEXLENS_CASCADE_STRATEGY': { label: 'Search Strategy', type: 'select', options: ['binary', 'hybrid', 'binary_rerank', 'dense_rerank'], default: 'dense_rerank', settingsPath: 'cascade.strategy' },
-      'CODEXLENS_CASCADE_COARSE_K': { label: 'Coarse K (1st stage)', type: 'number', placeholder: '100', default: '100', settingsPath: 'cascade.coarse_k', min: 10, max: 500 },
-      'CODEXLENS_CASCADE_FINE_K': { label: 'Fine K (final)', type: 'number', placeholder: '10', default: '10', settingsPath: 'cascade.fine_k', min: 1, max: 100 }
-    }
-  },
-  llm: {
-    labelKey: 'codexlens.envGroup.llm',
-    icon: 'sparkles',
-    collapsed: true,
-    vars: {
-      'CODEXLENS_LLM_ENABLED': { label: 'Enable LLM', type: 'select', options: ['true', 'false'], default: 'false', settingsPath: 'llm.enabled' },
-      'CODEXLENS_LLM_BATCH_SIZE': { label: 'Batch Size', type: 'number', placeholder: '5', default: '5', settingsPath: 'llm.batch_size', min: 1, max: 20 }
+      'CODEXLENS_CASCADE_STRATEGY': { labelKey: 'codexlens.envField.searchStrategy', type: 'select', options: ['binary', 'hybrid', 'binary_rerank', 'dense_rerank'], default: 'dense_rerank', settingsPath: 'cascade.strategy' },
+      'CODEXLENS_CASCADE_COARSE_K': { labelKey: 'codexlens.envField.coarseK', type: 'number', placeholder: '100', default: '100', settingsPath: 'cascade.coarse_k', min: 10, max: 500 },
+      'CODEXLENS_CASCADE_FINE_K': { labelKey: 'codexlens.envField.fineK', type: 'number', placeholder: '10', default: '10', settingsPath: 'cascade.fine_k', min: 1, max: 100 }
     }
   }
 };
@@ -859,12 +1025,11 @@ async function loadEnvVariables() {
 
       for (var key in group.vars) {
         var config = group.vars[key];
-        
-        // Check variable-level showWhen condition
-        if (config.showWhen && !config.showWhen(env)) {
-          continue;
-        }
-        
+
+        // Check variable-level showWhen condition - render but hide if condition is false
+        var shouldShow = !config.showWhen || config.showWhen(env);
+        var hiddenStyle = shouldShow ? '' : ' style="display:none"';
+
         // Priority: env file > settings.json > hardcoded default
         var value = env[key] || settings[key] || config.default || '';
 
@@ -874,8 +1039,9 @@ async function loadEnvVariables() {
           if (key === 'CODEXLENS_EMBEDDING_BACKEND' || key === 'CODEXLENS_RERANKER_BACKEND') {
             onchangeHandler = ' onchange="updateModelOptionsOnBackendChange(\'' + key + '\', this.value)"';
           }
-          html += '<div class="flex items-center gap-2">' +
-            '<label class="text-xs text-muted-foreground w-28 flex-shrink-0">' + escapeHtml(config.label) + '</label>' +
+          var fieldLabel = config.labelKey ? t(config.labelKey) : config.label;
+          html += '<div class="flex items-center gap-2"' + hiddenStyle + '>' +
+            '<label class="text-xs text-muted-foreground w-28 flex-shrink-0">' + escapeHtml(fieldLabel) + '</label>' +
             '<select class="tool-config-input flex-1 text-xs py-1" data-env-key="' + escapeHtml(key) + '"' + onchangeHandler + '>';
           config.options.forEach(function(opt) {
             html += '<option value="' + escapeHtml(opt) + '"' + (value === opt ? ' selected' : '') + '>' + escapeHtml(opt) + '</option>';
@@ -897,8 +1063,9 @@ async function loadEnvVariables() {
           // Fallback preset list for API models
           var apiModelList = config.apiModels || [];
 
-          html += '<div class="flex items-center gap-2">' +
-            '<label class="text-xs text-muted-foreground w-28 flex-shrink-0" title="' + escapeHtml(key) + '">' + escapeHtml(config.label) + '</label>' +
+          var modelFieldLabel = config.labelKey ? t(config.labelKey) : config.label;
+          html += '<div class="flex items-center gap-2"' + hiddenStyle + '>' +
+            '<label class="text-xs text-muted-foreground w-28 flex-shrink-0" title="' + escapeHtml(key) + '">' + escapeHtml(modelFieldLabel) + '</label>' +
             '<div class="relative flex-1">' +
               '<input type="text" class="tool-config-input w-full text-xs py-1 pr-6" ' +
                      'data-env-key="' + escapeHtml(key) + '" value="' + escapeHtml(value) + '" ' +
@@ -908,7 +1075,8 @@ async function loadEnvVariables() {
             '<datalist id="' + datalistId + '">';
 
           if (isApiBackend) {
-            // For API backend: show configured models from API settings first
+            // For API backend: show ONLY configured models from API settings
+            // (don't show unconfigured preset models - they won't work without configuration)
             if (configuredModels.length > 0) {
               html += '<option value="" disabled>-- ' + (t('codexlens.configuredModels') || 'Configured in API Settings') + ' --</option>';
               configuredModels.forEach(function(model) {
@@ -918,19 +1086,8 @@ async function loadEnvVariables() {
                   (providers ? ' (' + escapeHtml(providers) + ')' : '') +
                   '</option>';
               });
-            }
-            // Then show common API models as suggestions
-            if (apiModelList.length > 0) {
-              html += '<option value="" disabled>-- ' + (t('codexlens.commonModels') || 'Common Models') + ' --</option>';
-              apiModelList.forEach(function(group) {
-                group.items.forEach(function(model) {
-                  // Skip if already in configured list
-                  var exists = configuredModels.some(function(m) { return m.modelId === model; });
-                  if (!exists) {
-                    html += '<option value="' + escapeHtml(model) + '">' + escapeHtml(group.group) + ': ' + escapeHtml(model) + '</option>';
-                  }
-                });
-              });
+            } else {
+              html += '<option value="" disabled>-- ' + (t('codexlens.noConfiguredModels') || 'No models configured in API Settings') + ' --</option>';
             }
           } else {
             // For local backend (fastembed): show actually downloaded models
@@ -959,8 +1116,9 @@ async function loadEnvVariables() {
             if (config.max !== undefined) extraAttrs += ' max="' + config.max + '"';
             extraAttrs += ' step="1"';
           }
-          html += '<div class="flex items-center gap-2">' +
-            '<label class="text-xs text-muted-foreground w-28 flex-shrink-0" title="' + escapeHtml(key) + '">' + escapeHtml(config.label) + '</label>' +
+          var inputFieldLabel = config.labelKey ? t(config.labelKey) : config.label;
+          html += '<div class="flex items-center gap-2"' + hiddenStyle + '>' +
+            '<label class="text-xs text-muted-foreground w-28 flex-shrink-0" title="' + escapeHtml(key) + '">' + escapeHtml(inputFieldLabel) + '</label>' +
             '<input type="' + inputType + '" class="tool-config-input flex-1 text-xs py-1" ' +
                    'data-env-key="' + escapeHtml(key) + '" value="' + escapeHtml(value) + '" placeholder="' + escapeHtml(config.placeholder || '') + '"' + extraAttrs + ' />' +
           '</div>';
@@ -1021,7 +1179,8 @@ async function loadEnvVariables() {
               var optionsHtml = '';
 
               if (isApiBackend) {
-                // For API backend: show configured models from API settings first
+                // For API backend: show ONLY configured models from API settings
+                // (don't show unconfigured preset models - they won't work without configuration)
                 if (apiConfiguredModels.length > 0) {
                   optionsHtml += '<option value="" disabled>-- ' + (t('codexlens.configuredModels') || 'Configured in API Settings') + ' --</option>';
                   apiConfiguredModels.forEach(function(model) {
@@ -1031,18 +1190,8 @@ async function loadEnvVariables() {
                       (providers ? ' (' + escapeHtml(providers) + ')' : '') +
                       '</option>';
                   });
-                }
-                // Then show common API models as suggestions
-                if (apiModelList.length > 0) {
-                  optionsHtml += '<option value="" disabled>-- ' + (t('codexlens.commonModels') || 'Common Models') + ' --</option>';
-                  apiModelList.forEach(function(group) {
-                    group.items.forEach(function(model) {
-                      var exists = apiConfiguredModels.some(function(m) { return m.modelId === model; });
-                      if (!exists) {
-                        optionsHtml += '<option value="' + escapeHtml(model) + '">' + escapeHtml(group.group) + ': ' + escapeHtml(model) + '</option>';
-                      }
-                    });
-                  });
+                } else {
+                  optionsHtml += '<option value="" disabled>-- ' + (t('codexlens.noConfiguredModels') || 'No models configured in API Settings') + ' --</option>';
                 }
               } else {
                 // For local backend: show actually downloaded models
@@ -1070,7 +1219,63 @@ async function loadEnvVariables() {
             }
           }
         }
+
+        // Update visibility of dependent fields based on new backend value
+        var prefix = isEmbedding ? 'CODEXLENS_EMBEDDING_' : 'CODEXLENS_RERANKER_';
+        var gpuField = document.querySelector('[data-env-key="' + prefix + 'USE_GPU"]');
+        var poolField = document.querySelector('[data-env-key="' + prefix + 'POOL_ENABLED"]');
+        var strategyField = document.querySelector('[data-env-key="' + prefix + 'STRATEGY"]');
+        var cooldownField = document.querySelector('[data-env-key="' + prefix + 'COOLDOWN"]');
+
+        // GPU only for local backend
+        if (gpuField) {
+          var gpuRow = gpuField.closest('.flex.items-center');
+          if (gpuRow) gpuRow.style.display = isApiBackend ? 'none' : '';
+        }
+
+        // Pool, Strategy, Cooldown only for API backend
+        if (poolField) {
+          var poolRow = poolField.closest('.flex.items-center');
+          if (poolRow) poolRow.style.display = isApiBackend ? '' : 'none';
+          // Reset pool value when switching to local
+          if (!isApiBackend) poolField.value = 'false';
+        }
+
+        // Strategy and Cooldown depend on pool being enabled
+        var poolEnabled = poolField && poolField.value === 'true';
+        if (strategyField) {
+          var strategyRow = strategyField.closest('.flex.items-center');
+          if (strategyRow) strategyRow.style.display = (isApiBackend && poolEnabled) ? '' : 'none';
+        }
+        if (cooldownField) {
+          var cooldownRow = cooldownField.closest('.flex.items-center');
+          if (cooldownRow) cooldownRow.style.display = (isApiBackend && poolEnabled) ? '' : 'none';
+        }
+
         // Note: No auto-save here - user must click Save button
+      });
+    });
+
+    // Add change handler for pool_enabled selects to show/hide strategy and cooldown
+    var poolSelects = container.querySelectorAll('select[data-env-key*="POOL_ENABLED"]');
+    poolSelects.forEach(function(select) {
+      select.addEventListener('change', function() {
+        var poolKey = select.getAttribute('data-env-key');
+        var poolEnabled = select.value === 'true';
+        var isEmbedding = poolKey.indexOf('EMBEDDING') !== -1;
+        var prefix = isEmbedding ? 'CODEXLENS_EMBEDDING_' : 'CODEXLENS_RERANKER_';
+
+        var strategyField = document.querySelector('[data-env-key="' + prefix + 'STRATEGY"]');
+        var cooldownField = document.querySelector('[data-env-key="' + prefix + 'COOLDOWN"]');
+
+        if (strategyField) {
+          var strategyRow = strategyField.closest('.flex.items-center');
+          if (strategyRow) strategyRow.style.display = poolEnabled ? '' : 'none';
+        }
+        if (cooldownField) {
+          var cooldownRow = cooldownField.closest('.flex.items-center');
+          if (cooldownRow) cooldownRow.style.display = poolEnabled ? '' : 'none';
+        }
       });
     });
   } catch (err) {
@@ -2213,6 +2418,9 @@ async function loadModelList() {
             '<div class="flex items-center gap-2">' +
               statusIcon +
               '<span class="text-sm font-medium">' + model.profile + '</span>' +
+              '<button class="text-muted-foreground hover:text-foreground p-0.5" onclick="copyToClipboard(\'' + escapeHtml(model.model_name) + '\')" title="' + escapeHtml(model.model_name) + '">' +
+                '<i data-lucide="copy" class="w-3 h-3"></i>' +
+              '</button>' +
               '<span class="text-xs text-muted-foreground">' + model.dimensions + 'd</span>' +
             '</div>' +
             '<div class="flex items-center gap-3">' +
@@ -2491,6 +2699,9 @@ async function loadRerankerModelList() {
           '<div class="flex items-center gap-2">' +
             statusIcon +
             '<span class="text-sm font-medium">' + model.id + recBadge + '</span>' +
+            '<button class="text-muted-foreground hover:text-foreground p-0.5" onclick="copyToClipboard(\'' + escapeHtml(model.name) + '\')" title="' + escapeHtml(model.name) + '">' +
+              '<i data-lucide="copy" class="w-3 h-3"></i>' +
+            '</button>' +
             '<span class="text-xs text-muted-foreground">' + model.desc + '</span>' +
           '</div>' +
           '<div class="flex items-center gap-3">' +
@@ -2901,12 +3112,14 @@ async function updateSemanticStatusBadge() {
  * @param {string} embeddingModel - Model profile: 'code', 'fast'
  * @param {string} embeddingBackend - Backend: 'fastembed' (local) or 'litellm' (API)
  * @param {number} maxWorkers - Max concurrent API calls for embedding generation (default: 1)
+ * @param {boolean} incremental - Incremental mode: true=skip unchanged, false=full rebuild (default: false)
  */
-async function initCodexLensIndex(indexType, embeddingModel, embeddingBackend, maxWorkers) {
+async function initCodexLensIndex(indexType, embeddingModel, embeddingBackend, maxWorkers, incremental) {
   indexType = indexType || 'vector';
   embeddingModel = embeddingModel || 'code';
   embeddingBackend = embeddingBackend || 'fastembed';
   maxWorkers = maxWorkers || 1;
+  incremental = incremental !== undefined ? incremental : false;  // Default: full rebuild
 
   // For vector/full index with local backend, check if semantic dependencies are available
   // LiteLLM backend uses remote embeddings and does not require fastembed/ONNX deps.
@@ -3011,7 +3224,7 @@ async function initCodexLensIndex(indexType, embeddingModel, embeddingBackend, m
   var apiIndexType = (indexType === 'full') ? 'vector' : indexType;
 
   // Start indexing with specified type and model
-  startCodexLensIndexing(apiIndexType, embeddingModel, embeddingBackend, maxWorkers);
+  startCodexLensIndexing(apiIndexType, embeddingModel, embeddingBackend, maxWorkers, incremental);
 }
 
 /**
@@ -3020,12 +3233,14 @@ async function initCodexLensIndex(indexType, embeddingModel, embeddingBackend, m
  * @param {string} embeddingModel - Model profile: 'code', 'fast'
  * @param {string} embeddingBackend - Backend: 'fastembed' (local) or 'litellm' (API)
  * @param {number} maxWorkers - Max concurrent API calls for embedding generation (default: 1)
+ * @param {boolean} incremental - Incremental mode (default: false for full rebuild)
  */
-async function startCodexLensIndexing(indexType, embeddingModel, embeddingBackend, maxWorkers) {
+async function startCodexLensIndexing(indexType, embeddingModel, embeddingBackend, maxWorkers, incremental) {
   indexType = indexType || 'vector';
   embeddingModel = embeddingModel || 'code';
   embeddingBackend = embeddingBackend || 'fastembed';
   maxWorkers = maxWorkers || 1;
+  incremental = incremental !== undefined ? incremental : false;  // Default: full rebuild
   var statusText = document.getElementById('codexlensIndexStatus');
   var progressBar = document.getElementById('codexlensIndexProgressBar');
   var percentText = document.getElementById('codexlensIndexPercent');
@@ -3057,11 +3272,11 @@ async function startCodexLensIndexing(indexType, embeddingModel, embeddingBacken
   }
 
   try {
-    console.log('[CodexLens] Starting index for:', projectPath, 'type:', indexType, 'model:', embeddingModel, 'backend:', embeddingBackend, 'maxWorkers:', maxWorkers);
+    console.log('[CodexLens] Starting index for:', projectPath, 'type:', indexType, 'model:', embeddingModel, 'backend:', embeddingBackend, 'maxWorkers:', maxWorkers, 'incremental:', incremental);
     var response = await fetch('/api/codexlens/init', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: projectPath, indexType: indexType, embeddingModel: embeddingModel, embeddingBackend: embeddingBackend, maxWorkers: maxWorkers })
+      body: JSON.stringify({ path: projectPath, indexType: indexType, embeddingModel: embeddingModel, embeddingBackend: embeddingBackend, maxWorkers: maxWorkers, incremental: incremental })
     });
 
     var result = await response.json();
@@ -3693,6 +3908,8 @@ async function renderCodexLensManager() {
       loadIndexStatsForPage();
       // Check index health based on git history
       checkIndexHealth();
+      // Load workspace index status (FTS and Vector coverage)
+      refreshWorkspaceIndexStatus();
     }
   } catch (err) {
     container.innerHTML = '<div class="text-center py-12 text-destructive"><i data-lucide="alert-circle" class="w-8 h-8 mx-auto mb-2"></i><p>' + t('common.error') + ': ' + escapeHtml(err.message) + '</p></div>';
@@ -4165,6 +4382,121 @@ function initCodexLensIndexFromPage(indexType) {
   }
 }
 
+// ============================================================
+// INDEX OPERATIONS - 4 Button Functions
+// ============================================================
+
+/**
+ * Run FTS full index (rebuild full-text search index)
+ * Creates FTS index without embeddings
+ */
+window.runFtsFullIndex = async function runFtsFullIndex() {
+  showRefreshToast(t('codexlens.startingFtsFullIndex') || 'Starting FTS full index...', 'info');
+  // FTS only, no embeddings, full rebuild (incremental=false)
+  initCodexLensIndex('normal', null, 'fastembed', 1, false);
+}
+
+/**
+ * Run FTS incremental update
+ * Updates FTS index for changed files only
+ */
+window.runFtsIncrementalUpdate = async function runFtsIncrementalUpdate() {
+  var projectPath = window.CCW_PROJECT_ROOT || '.';
+  showRefreshToast(t('codexlens.startingFtsIncremental') || 'Starting FTS incremental update...', 'info');
+
+  try {
+    // Use index update endpoint for FTS incremental
+    var response = await fetch('/api/codexlens/init', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: projectPath,
+        indexType: 'normal',  // FTS only
+        incremental: true
+      })
+    });
+    var result = await response.json();
+
+    if (result.success) {
+      showRefreshToast(t('codexlens.ftsIncrementalComplete') || 'FTS incremental update completed', 'success');
+      renderCodexLensManager();
+    } else {
+      showRefreshToast((t('codexlens.ftsIncrementalFailed') || 'FTS incremental failed') + ': ' + (result.error || 'Unknown error'), 'error');
+    }
+  } catch (err) {
+    showRefreshToast((t('common.error') || 'Error') + ': ' + err.message, 'error');
+  }
+}
+
+/**
+ * Run Vector full index (generate all embeddings)
+ * Generates embeddings for all files
+ */
+window.runVectorFullIndex = async function runVectorFullIndex() {
+  showRefreshToast(t('codexlens.startingVectorFullIndex') || 'Starting Vector full index...', 'info');
+  
+  try {
+    // Fetch env settings to get the configured embedding model
+    var envResponse = await fetch('/api/codexlens/env');
+    var envData = await envResponse.json();
+    var embeddingModel = envData.CODEXLENS_EMBEDDING_MODEL || envData.LITELLM_EMBEDDING_MODEL || 'code';
+    
+    // Use litellm backend with env-configured model, full rebuild (incremental=false)
+    initCodexLensIndex('vector', embeddingModel, 'litellm', 4, false);
+  } catch (err) {
+    // Fallback to default model if env fetch fails
+    initCodexLensIndex('vector', 'code', 'litellm', 4, false);
+  }
+}
+
+/**
+ * Run Vector incremental update
+ * Generates embeddings for new/changed files only
+ */
+window.runVectorIncrementalUpdate = async function runVectorIncrementalUpdate() {
+  var projectPath = window.CCW_PROJECT_ROOT || '.';
+  showRefreshToast(t('codexlens.startingVectorIncremental') || 'Starting Vector incremental update...', 'info');
+
+  try {
+    // Fetch env settings to get the configured embedding model
+    var envResponse = await fetch('/api/codexlens/env');
+    var envData = await envResponse.json();
+    var embeddingModel = envData.CODEXLENS_EMBEDDING_MODEL || envData.LITELLM_EMBEDDING_MODEL || null;
+
+    // Use embeddings endpoint for vector incremental
+    var requestBody = {
+      path: projectPath,
+      incremental: true,  // Only new/changed files
+      backend: 'litellm',
+      maxWorkers: 4
+    };
+
+    // Add model if configured in env
+    if (embeddingModel) {
+      requestBody.model = embeddingModel;
+    }
+
+    var response = await fetch('/api/codexlens/embeddings/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    });
+    var result = await response.json();
+
+    if (result.success) {
+      var stats = result.result || {};
+      var msg = (t('codexlens.vectorIncrementalComplete') || 'Vector incremental completed') +
+        (stats.chunks_created ? ': ' + stats.chunks_created + ' chunks' : '');
+      showRefreshToast(msg, 'success');
+      renderCodexLensManager();
+    } else {
+      showRefreshToast((t('codexlens.vectorIncrementalFailed') || 'Vector incremental failed') + ': ' + (result.error || 'Unknown error'), 'error');
+    }
+  } catch (err) {
+    showRefreshToast((t('common.error') || 'Error') + ': ' + err.message, 'error');
+  }
+}
+
 /**
  * Run incremental update on the current workspace index
  */
@@ -4204,10 +4536,25 @@ window.toggleWatcher = async function toggleWatcher() {
   // Check current status first
   try {
     console.log('[CodexLens] Checking watcher status...');
-    var statusResponse = await fetch('/api/codexlens/watch/status');
+    // Pass path parameter to get specific watcher status
+    var statusResponse = await fetch('/api/codexlens/watch/status?path=' + encodeURIComponent(projectPath));
     var statusResult = await statusResponse.json();
     console.log('[CodexLens] Status result:', statusResult);
-    var isRunning = statusResult.success && statusResult.running;
+
+    // Handle both single watcher response and array response
+    var isRunning = false;
+    if (statusResult.success) {
+      if (typeof statusResult.running === 'boolean') {
+        isRunning = statusResult.running;
+      } else if (statusResult.watchers && Array.isArray(statusResult.watchers)) {
+        var normalizedPath = projectPath.toLowerCase().replace(/\\/g, '/');
+        var matchingWatcher = statusResult.watchers.find(function(w) {
+          var watcherPath = (w.root_path || '').toLowerCase().replace(/\\/g, '/');
+          return watcherPath === normalizedPath || watcherPath.includes(normalizedPath) || normalizedPath.includes(watcherPath);
+        });
+        isRunning = matchingWatcher ? matchingWatcher.running : false;
+      }
+    }
 
     // Toggle: if running, stop; if stopped, start
     var action = isRunning ? 'stop' : 'start';
@@ -4260,7 +4607,8 @@ function updateWatcherUI(running, stats) {
     var uptimeDisplay = document.getElementById('watcherUptimeDisplay');
 
     if (filesCount) filesCount.textContent = stats.files_watched || '-';
-    if (changesCount) changesCount.textContent = stats.changes_detected || '0';
+    // Support both changes_detected and events_processed
+    if (changesCount) changesCount.textContent = stats.events_processed || stats.changes_detected || '0';
     if (uptimeDisplay) uptimeDisplay.textContent = formatUptime(stats.uptime_seconds);
   }
 
@@ -4296,17 +4644,25 @@ function startWatcherPolling() {
   if (watcherPollInterval) return; // Already polling
 
   watcherStartTime = Date.now();
+  var projectPath = window.CCW_PROJECT_ROOT || '.';
+
   watcherPollInterval = setInterval(async function() {
     try {
-      var response = await fetch('/api/codexlens/watch/status');
+      // Must include path parameter to get specific watcher status
+      var response = await fetch('/api/codexlens/watch/status?path=' + encodeURIComponent(projectPath));
       var result = await response.json();
 
       if (result.success && result.running) {
-        // Update uptime
+        // Update uptime from server response
         var uptimeDisplay = document.getElementById('watcherUptimeDisplay');
-        if (uptimeDisplay) {
-          var uptime = (Date.now() - watcherStartTime) / 1000;
-          uptimeDisplay.textContent = formatUptime(uptime);
+        if (uptimeDisplay && result.uptime_seconds !== undefined) {
+          uptimeDisplay.textContent = formatUptime(result.uptime_seconds);
+        }
+
+        // Update changes count from events_processed
+        if (result.events_processed !== undefined) {
+          var changesCount = document.getElementById('watcherChangesCount');
+          if (changesCount) changesCount.textContent = result.events_processed;
         }
 
         // Update files count if available
@@ -4321,8 +4677,8 @@ function startWatcherPolling() {
             addWatcherLogEntry(event.type, event.path);
           });
         }
-      } else if (!result.running) {
-        // Watcher stopped externally
+      } else if (result.success && result.running === false) {
+        // Watcher stopped externally (only if running is explicitly false)
         updateWatcherUI(false);
         stopWatcherPolling();
       }
@@ -4367,13 +4723,15 @@ function addWatcherLogEntry(type, path) {
     'created': 'text-success',
     'modified': 'text-warning',
     'deleted': 'text-destructive',
-    'renamed': 'text-primary'
+    'renamed': 'text-primary',
+    'indexed': 'text-success'
   };
   var typeIcons = {
     'created': '+',
     'modified': '~',
     'deleted': '-',
-    'renamed': '→'
+    'renamed': '→',
+    'indexed': '✓'
   };
 
   var colorClass = typeColors[type] || 'text-muted-foreground';
@@ -4416,13 +4774,35 @@ function clearWatcherLog() {
  */
 async function initWatcherStatus() {
   try {
-    var response = await fetch('/api/codexlens/watch/status');
+    var projectPath = window.CCW_PROJECT_ROOT || '.';
+    // Pass path parameter to get specific watcher status
+    var response = await fetch('/api/codexlens/watch/status?path=' + encodeURIComponent(projectPath));
     var result = await response.json();
     if (result.success) {
-      updateWatcherUI(result.running, {
-        files_watched: result.files_watched,
+      // Handle both single watcher response (with path param) and array response (without path param)
+      var running = result.running;
+      var uptime = result.uptime_seconds || 0;
+      var filesWatched = result.files_watched;
+
+      // If response has watchers array (no path param), find matching watcher
+      if (result.watchers && Array.isArray(result.watchers)) {
+        var normalizedPath = projectPath.toLowerCase().replace(/\\/g, '/');
+        var matchingWatcher = result.watchers.find(function(w) {
+          var watcherPath = (w.root_path || '').toLowerCase().replace(/\\/g, '/');
+          return watcherPath === normalizedPath || watcherPath.includes(normalizedPath) || normalizedPath.includes(watcherPath);
+        });
+        if (matchingWatcher) {
+          running = matchingWatcher.running;
+          uptime = matchingWatcher.uptime_seconds || 0;
+        } else {
+          running = false;
+        }
+      }
+
+      updateWatcherUI(running, {
+        files_watched: filesWatched,
         changes_detected: 0,
-        uptime_seconds: result.uptime_seconds
+        uptime_seconds: uptime
       });
     }
   } catch (err) {
@@ -5514,6 +5894,45 @@ function buildWatcherControlContent(status, defaultPath) {
           '</div>' +
         '</div>' +
 
+        // Pending Queue Section (shown when running)
+        '<div id="watcherPendingQueue" class="tool-config-section" style="display:' + (running ? 'block' : 'none') + '">' +
+          '<div class="flex items-center justify-between mb-2">' +
+            '<h4 class="flex items-center gap-2 m-0">' +
+              '<i data-lucide="clock" class="w-4 h-4"></i>' +
+              (t('codexlens.pendingChanges') || 'Pending Changes') +
+            '</h4>' +
+            '<button onclick="flushWatcherNow()" class="btn btn-sm btn-primary" id="flushNowBtn" disabled>' +
+              '<i data-lucide="zap" class="w-3 h-3 mr-1"></i>' +
+              (t('codexlens.indexNow') || 'Index Now') +
+            '</button>' +
+          '</div>' +
+          '<div class="flex items-center justify-between p-3 bg-muted/20 rounded-lg mb-2">' +
+            '<div>' +
+              '<span class="text-2xl font-bold text-warning" id="pendingFileCount">0</span>' +
+              '<span class="text-sm text-muted-foreground ml-1">' + (t('codexlens.filesWaiting') || 'files waiting') + '</span>' +
+            '</div>' +
+            '<div class="text-right">' +
+              '<div class="text-lg font-mono" id="countdownTimer">--:--</div>' +
+              '<div class="text-xs text-muted-foreground">' + (t('codexlens.untilNextIndex') || 'until next index') + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div id="pendingFilesList" class="max-h-24 overflow-y-auto space-y-1 text-sm"></div>' +
+        '</div>' +
+
+        // Last Index Result (shown when running)
+        '<div id="watcherLastIndex" class="tool-config-section" style="display:none">' +
+          '<div class="flex items-center justify-between mb-2">' +
+            '<h4 class="flex items-center gap-2 m-0">' +
+              '<i data-lucide="check-circle" class="w-4 h-4"></i>' +
+              (t('codexlens.lastIndexResult') || 'Last Index Result') +
+            '</h4>' +
+            '<button onclick="showIndexHistory()" class="text-xs text-muted-foreground hover:text-foreground">' +
+              (t('codexlens.viewHistory') || 'View History') +
+            '</button>' +
+          '</div>' +
+          '<div class="grid grid-cols-4 gap-2 text-center" id="lastIndexStats"></div>' +
+        '</div>' +
+
         // Start Configuration (shown when not running)
         '<div id="watcherStartConfig" class="tool-config-section" style="display:' + (running ? 'none' : 'block') + '">' +
           '<h4>' + (t('codexlens.watcherConfig') || 'Configuration') + '</h4>' +
@@ -5525,7 +5944,7 @@ function buildWatcherControlContent(status, defaultPath) {
             '</div>' +
             '<div>' +
               '<label class="block text-sm font-medium mb-1.5">' + (t('codexlens.debounceMs') || 'Debounce (ms)') + '</label>' +
-              '<input type="number" id="watcherDebounce" value="1000" min="100" max="10000" step="100" ' +
+              '<input type="number" id="watcherDebounce" value="60000" min="1000" max="120000" step="1000" ' +
                 'class="w-full px-3 py-2 border border-border rounded-lg bg-background text-sm" />' +
               '<p class="text-xs text-muted-foreground mt-1">' + (t('codexlens.debounceHint') || 'Time to wait before processing file changes') + '</p>' +
             '</div>' +
@@ -5611,24 +6030,37 @@ function startWatcherStatusPolling() {
 
   watcherPollingInterval = setInterval(async function() {
     try {
+      // Check if modal elements still exist (modal may be closed)
+      var eventsCountEl = document.getElementById('watcherEventsCount');
+      var uptimeEl = document.getElementById('watcherUptime');
+      var toggleEl = document.getElementById('watcherToggle');
+      var statsEl = document.getElementById('watcherStats');
+      var configEl = document.getElementById('watcherStartConfig');
+
+      // If modal elements don't exist, stop polling
+      if (!eventsCountEl && !toggleEl) {
+        stopWatcherStatusPolling();
+        return;
+      }
+
       var response = await fetch('/api/codexlens/watch/status');
       var status = await response.json();
 
       if (status.running) {
-        document.getElementById('watcherEventsCount').textContent = status.events_processed || 0;
+        if (eventsCountEl) eventsCountEl.textContent = status.events_processed || 0;
 
         // Format uptime
         var seconds = status.uptime_seconds || 0;
         var formatted = seconds < 60 ? seconds + 's' :
           seconds < 3600 ? Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's' :
           Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm';
-        document.getElementById('watcherUptime').textContent = formatted;
+        if (uptimeEl) uptimeEl.textContent = formatted;
       } else {
         // Watcher stopped externally
         stopWatcherStatusPolling();
-        document.getElementById('watcherToggle').checked = false;
-        document.getElementById('watcherStats').style.display = 'none';
-        document.getElementById('watcherStartConfig').style.display = 'block';
+        if (toggleEl) toggleEl.checked = false;
+        if (statsEl) statsEl.style.display = 'none';
+        if (configEl) configEl.style.display = 'block';
       }
     } catch (err) {
       console.error('Failed to poll watcher status:', err);
@@ -5641,6 +6073,204 @@ function stopWatcherStatusPolling() {
     clearInterval(watcherPollingInterval);
     watcherPollingInterval = null;
   }
+  stopCountdownTimer();
+}
+
+// Countdown timer for pending queue
+var countdownInterval = null;
+var currentCountdownSeconds = 0;
+
+function startCountdownTimer(seconds) {
+  currentCountdownSeconds = seconds;
+  if (countdownInterval) return;
+
+  countdownInterval = setInterval(function() {
+    var timerEl = document.getElementById('countdownTimer');
+    if (!timerEl) {
+      stopCountdownTimer();
+      return;
+    }
+
+    if (currentCountdownSeconds <= 0) {
+      timerEl.textContent = '--:--';
+    } else {
+      currentCountdownSeconds--;
+      timerEl.textContent = formatCountdown(currentCountdownSeconds);
+    }
+  }, 1000);
+}
+
+function stopCountdownTimer() {
+  if (countdownInterval) {
+    clearInterval(countdownInterval);
+    countdownInterval = null;
+  }
+}
+
+function formatCountdown(seconds) {
+  if (seconds <= 0) return '--:--';
+  var mins = Math.floor(seconds / 60);
+  var secs = seconds % 60;
+  return (mins < 10 ? '0' : '') + mins + ':' + (secs < 10 ? '0' : '') + secs;
+}
+
+/**
+ * Immediately flush pending queue and trigger indexing
+ */
+async function flushWatcherNow() {
+  var btn = document.getElementById('flushNowBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader-2" class="w-3 h-3 mr-1 animate-spin"></i> Indexing...';
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  }
+
+  try {
+    var watchPath = document.getElementById('watcherPath');
+    var path = watchPath ? watchPath.value.trim() : '';
+
+    var response = await fetch('/api/codexlens/watch/flush', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: path || undefined })
+    });
+
+    var result = await response.json();
+
+    if (result.success) {
+      showRefreshToast(t('codexlens.indexTriggered') || 'Indexing triggered', 'success');
+    } else {
+      showRefreshToast(t('common.error') + ': ' + result.error, 'error');
+    }
+  } catch (err) {
+    showRefreshToast(t('common.error') + ': ' + err.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="zap" class="w-3 h-3 mr-1"></i>' + (t('codexlens.indexNow') || 'Index Now');
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+  }
+}
+window.flushWatcherNow = flushWatcherNow;
+
+/**
+ * Show index history in a modal
+ */
+async function showIndexHistory() {
+  try {
+    var watchPath = document.getElementById('watcherPath');
+    var path = watchPath ? watchPath.value.trim() : '';
+
+    var response = await fetch('/api/codexlens/watch/history?limit=10&path=' + encodeURIComponent(path));
+    var result = await response.json();
+
+    if (!result.success || !result.history || result.history.length === 0) {
+      showRefreshToast(t('codexlens.noHistory') || 'No index history available', 'info');
+      return;
+    }
+
+    var historyHtml = result.history.slice().reverse().map(function(h, i) {
+      var timestamp = h.timestamp ? new Date(h.timestamp * 1000).toLocaleString() : 'Unknown';
+      return '<div class="p-3 border-b border-border last:border-0">' +
+        '<div class="flex justify-between items-center mb-2">' +
+          '<span class="text-sm font-medium">#' + (result.history.length - i) + '</span>' +
+          '<span class="text-xs text-muted-foreground">' + timestamp + '</span>' +
+        '</div>' +
+        '<div class="grid grid-cols-4 gap-2 text-center text-sm">' +
+          '<div><span class="text-success">' + (h.files_indexed || 0) + '</span> indexed</div>' +
+          '<div><span class="text-warning">' + (h.files_removed || 0) + '</span> removed</div>' +
+          '<div><span class="text-primary">+' + (h.symbols_added || 0) + '</span> symbols</div>' +
+          '<div><span class="text-destructive">' + ((h.errors && h.errors.length) || 0) + '</span> errors</div>' +
+        '</div>' +
+        (h.errors && h.errors.length > 0 ? '<div class="mt-2 text-xs text-destructive">' +
+          h.errors.slice(0, 2).map(function(e) { return '<div>• ' + e + '</div>'; }).join('') +
+          (h.errors.length > 2 ? '<div>... and ' + (h.errors.length - 2) + ' more</div>' : '') +
+        '</div>' : '') +
+      '</div>';
+    }).join('');
+
+    var modal = document.createElement('div');
+    modal.id = 'indexHistoryModal';
+    modal.className = 'modal-backdrop';
+    modal.innerHTML = '<div class="modal-container max-w-md">' +
+      '<div class="modal-header">' +
+        '<h2 class="text-lg font-bold">' + (t('codexlens.indexHistory') || 'Index History') + '</h2>' +
+        '<button onclick="document.getElementById(\'indexHistoryModal\').remove()" class="text-muted-foreground hover:text-foreground">' +
+          '<i data-lucide="x" class="w-5 h-5"></i>' +
+        '</button>' +
+      '</div>' +
+      '<div class="modal-body max-h-96 overflow-y-auto">' + historyHtml + '</div>' +
+    '</div>';
+    document.body.appendChild(modal);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  } catch (err) {
+    showRefreshToast(t('common.error') + ': ' + err.message, 'error');
+  }
+}
+window.showIndexHistory = showIndexHistory;
+
+/**
+ * Update pending queue UI elements
+ */
+function updatePendingQueueUI(queue) {
+  var countEl = document.getElementById('pendingFileCount');
+  var timerEl = document.getElementById('countdownTimer');
+  var listEl = document.getElementById('pendingFilesList');
+  var flushBtn = document.getElementById('flushNowBtn');
+
+  if (countEl) countEl.textContent = queue.file_count || 0;
+
+  if (queue.countdown_seconds > 0) {
+    currentCountdownSeconds = queue.countdown_seconds;
+    if (timerEl) timerEl.textContent = formatCountdown(queue.countdown_seconds);
+    startCountdownTimer(queue.countdown_seconds);
+  } else {
+    if (timerEl) timerEl.textContent = '--:--';
+  }
+
+  if (flushBtn) flushBtn.disabled = (queue.file_count || 0) === 0;
+
+  if (listEl && queue.files) {
+    listEl.innerHTML = queue.files.map(function(f) {
+      return '<div class="flex items-center gap-2 text-muted-foreground">' +
+        '<i data-lucide="file" class="w-3 h-3"></i>' +
+        '<span class="truncate">' + f + '</span>' +
+      '</div>';
+    }).join('');
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  }
+}
+
+/**
+ * Update last index result UI
+ */
+function updateLastIndexResult(result) {
+  var statsEl = document.getElementById('lastIndexStats');
+  var sectionEl = document.getElementById('watcherLastIndex');
+
+  if (sectionEl) sectionEl.style.display = 'block';
+  if (statsEl) {
+    statsEl.innerHTML = '<div class="p-2 bg-success/10 rounded">' +
+        '<div class="text-lg font-bold text-success">' + (result.files_indexed || 0) + '</div>' +
+        '<div class="text-xs text-muted-foreground">Indexed</div>' +
+      '</div>' +
+      '<div class="p-2 bg-warning/10 rounded">' +
+        '<div class="text-lg font-bold text-warning">' + (result.files_removed || 0) + '</div>' +
+        '<div class="text-xs text-muted-foreground">Removed</div>' +
+      '</div>' +
+      '<div class="p-2 bg-primary/10 rounded">' +
+        '<div class="text-lg font-bold text-primary">' + (result.symbols_added || 0) + '</div>' +
+        '<div class="text-xs text-muted-foreground">+Symbols</div>' +
+      '</div>' +
+      '<div class="p-2 bg-destructive/10 rounded">' +
+        '<div class="text-lg font-bold text-destructive">' + ((result.errors && result.errors.length) || 0) + '</div>' +
+        '<div class="text-xs text-muted-foreground">Errors</div>' +
+      '</div>';
+  }
+
+  // Clear pending queue after indexing
+  updatePendingQueueUI({ file_count: 0, files: [], countdown_seconds: 0 });
 }
 
 /**
@@ -5654,12 +6284,37 @@ function closeWatcherModal() {
 
 /**
  * Handle watcher status update from WebSocket
- * @param {Object} payload - { running: boolean, path?: string, error?: string }
+ * @param {Object} payload - { running: boolean, path?: string, error?: string, events_processed?: number, uptime_seconds?: number }
  */
 function handleWatcherStatusUpdate(payload) {
   var toggle = document.getElementById('watcherToggle');
   var statsDiv = document.getElementById('watcherStats');
   var configDiv = document.getElementById('watcherStartConfig');
+  var eventsCountEl = document.getElementById('watcherEventsCount');
+  var uptimeEl = document.getElementById('watcherUptime');
+
+  // Update events count if provided (real-time updates)
+  if (payload.events_processed !== undefined && eventsCountEl) {
+    eventsCountEl.textContent = payload.events_processed;
+  }
+
+  // Update uptime if provided
+  if (payload.uptime_seconds !== undefined && uptimeEl) {
+    var seconds = payload.uptime_seconds;
+    var formatted = seconds < 60 ? seconds + 's' :
+      seconds < 3600 ? Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's' :
+      Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm';
+    uptimeEl.textContent = formatted;
+  }
+
+  // Also update main page watcher status badge if it exists
+  var statusBadge = document.getElementById('watcherStatusBadge');
+  if (statusBadge && payload.running !== undefined) {
+    updateWatcherUI(payload.running, {
+      events_processed: payload.events_processed,
+      uptime_seconds: payload.uptime_seconds
+    });
+  }
 
   if (payload.error) {
     // Watcher failed - update UI to show stopped state
@@ -5673,8 +6328,8 @@ function handleWatcherStatusUpdate(payload) {
     if (statsDiv) statsDiv.style.display = 'block';
     if (configDiv) configDiv.style.display = 'none';
     startWatcherStatusPolling();
-  } else {
-    // Watcher stopped normally
+  } else if (payload.running === false) {
+    // Watcher stopped normally (only if running is explicitly false)
     if (toggle) toggle.checked = false;
     if (statsDiv) statsDiv.style.display = 'none';
     if (configDiv) configDiv.style.display = 'block';

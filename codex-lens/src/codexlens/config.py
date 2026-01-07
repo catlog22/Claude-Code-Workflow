@@ -86,10 +86,6 @@ class Config:
             "c": {"extensions": [".c", ".h"], "tree_sitter_language": "c", "category": "code"},
             "cpp": {"extensions": [".cc", ".cpp", ".hpp", ".cxx"], "tree_sitter_language": "cpp", "category": "code"},
             "rust": {"extensions": [".rs"], "tree_sitter_language": "rust", "category": "code"},
-            # Documentation languages (category: "doc")
-            "markdown": {"extensions": [".md", ".mdx"], "tree_sitter_language": None, "category": "doc"},
-            "text": {"extensions": [".txt"], "tree_sitter_language": None, "category": "doc"},
-            "rst": {"extensions": [".rst"], "tree_sitter_language": None, "category": "doc"},
         }
     )
     parsing_rules: Dict[str, Dict[str, Any]] = field(
@@ -144,6 +140,7 @@ class Config:
     reranker_backend: str = "onnx"
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     reranker_top_k: int = 50
+    reranker_max_input_tokens: int = 8192  # Maximum tokens for reranker API batching
 
     # Cascade search configuration (two-stage retrieval)
     enable_cascade_search: bool = False  # Enable cascade search (coarse + fine ranking)
@@ -161,8 +158,14 @@ class Config:
     # Multi-endpoint configuration for litellm backend
     embedding_endpoints: List[Dict[str, Any]] = field(default_factory=list)
     # List of endpoint configs: [{"model": "...", "api_key": "...", "api_base": "...", "weight": 1.0}]
+    embedding_pool_enabled: bool = False  # Enable high availability pool for embeddings
     embedding_strategy: str = "latency_aware"  # round_robin, latency_aware, weighted_random
     embedding_cooldown: float = 60.0  # Default cooldown seconds for rate-limited endpoints
+
+    # Reranker multi-endpoint configuration
+    reranker_pool_enabled: bool = False  # Enable high availability pool for reranker
+    reranker_strategy: str = "latency_aware"  # round_robin, latency_aware, weighted_random
+    reranker_cooldown: float = 60.0  # Default cooldown seconds for rate-limited endpoints
 
     # API concurrency settings
     api_max_workers: int = 4  # Max concurrent API calls for embedding/reranking
@@ -254,12 +257,13 @@ class Config:
             "backend": self.embedding_backend,
             "model": self.embedding_model,
             "use_gpu": self.embedding_use_gpu,
+            "pool_enabled": self.embedding_pool_enabled,
+            "strategy": self.embedding_strategy,
+            "cooldown": self.embedding_cooldown,
         }
         # Include multi-endpoint config if present
         if self.embedding_endpoints:
             embedding_config["endpoints"] = self.embedding_endpoints
-            embedding_config["strategy"] = self.embedding_strategy
-            embedding_config["cooldown"] = self.embedding_cooldown
 
         settings = {
             "embedding": embedding_config,
@@ -274,6 +278,10 @@ class Config:
                 "backend": self.reranker_backend,
                 "model": self.reranker_model,
                 "top_k": self.reranker_top_k,
+                "max_input_tokens": self.reranker_max_input_tokens,
+                "pool_enabled": self.reranker_pool_enabled,
+                "strategy": self.reranker_strategy,
+                "cooldown": self.reranker_cooldown,
             },
             "cascade": {
                 "strategy": self.cascade_strategy,
@@ -317,6 +325,8 @@ class Config:
             # Load multi-endpoint configuration
             if "endpoints" in embedding:
                 self.embedding_endpoints = embedding["endpoints"]
+            if "pool_enabled" in embedding:
+                self.embedding_pool_enabled = embedding["pool_enabled"]
             if "strategy" in embedding:
                 self.embedding_strategy = embedding["strategy"]
             if "cooldown" in embedding:
@@ -351,6 +361,14 @@ class Config:
                 self.reranker_model = reranker["model"]
             if "top_k" in reranker:
                 self.reranker_top_k = reranker["top_k"]
+            if "max_input_tokens" in reranker:
+                self.reranker_max_input_tokens = reranker["max_input_tokens"]
+            if "pool_enabled" in reranker:
+                self.reranker_pool_enabled = reranker["pool_enabled"]
+            if "strategy" in reranker:
+                self.reranker_strategy = reranker["strategy"]
+            if "cooldown" in reranker:
+                self.reranker_cooldown = reranker["cooldown"]
 
             # Load cascade settings
             cascade = settings.get("cascade", {})
@@ -394,9 +412,15 @@ class Config:
         Supported variables:
             EMBEDDING_MODEL: Override embedding model/profile
             EMBEDDING_BACKEND: Override embedding backend (fastembed/litellm)
+            EMBEDDING_POOL_ENABLED: Enable embedding high availability pool
+            EMBEDDING_STRATEGY: Load balance strategy for embedding
+            EMBEDDING_COOLDOWN: Rate limit cooldown for embedding
             RERANKER_MODEL: Override reranker model
             RERANKER_BACKEND: Override reranker backend
             RERANKER_ENABLED: Override reranker enabled state (true/false)
+            RERANKER_POOL_ENABLED: Enable reranker high availability pool
+            RERANKER_STRATEGY: Load balance strategy for reranker
+            RERANKER_COOLDOWN: Rate limit cooldown for reranker
         """
         from .env_config import load_global_env
 
@@ -417,6 +441,26 @@ class Config:
             else:
                 log.warning("Invalid EMBEDDING_BACKEND in .env: %r", backend)
 
+        if "EMBEDDING_POOL_ENABLED" in env_vars:
+            value = env_vars["EMBEDDING_POOL_ENABLED"].lower()
+            self.embedding_pool_enabled = value in {"true", "1", "yes", "on"}
+            log.debug("Overriding embedding_pool_enabled from .env: %s", self.embedding_pool_enabled)
+
+        if "EMBEDDING_STRATEGY" in env_vars:
+            strategy = env_vars["EMBEDDING_STRATEGY"].lower()
+            if strategy in {"round_robin", "latency_aware", "weighted_random"}:
+                self.embedding_strategy = strategy
+                log.debug("Overriding embedding_strategy from .env: %s", strategy)
+            else:
+                log.warning("Invalid EMBEDDING_STRATEGY in .env: %r", strategy)
+
+        if "EMBEDDING_COOLDOWN" in env_vars:
+            try:
+                self.embedding_cooldown = float(env_vars["EMBEDDING_COOLDOWN"])
+                log.debug("Overriding embedding_cooldown from .env: %s", self.embedding_cooldown)
+            except ValueError:
+                log.warning("Invalid EMBEDDING_COOLDOWN in .env: %r", env_vars["EMBEDDING_COOLDOWN"])
+
         # Reranker overrides
         if "RERANKER_MODEL" in env_vars:
             self.reranker_model = env_vars["RERANKER_MODEL"]
@@ -434,6 +478,33 @@ class Config:
             value = env_vars["RERANKER_ENABLED"].lower()
             self.enable_cross_encoder_rerank = value in {"true", "1", "yes", "on"}
             log.debug("Overriding reranker_enabled from .env: %s", self.enable_cross_encoder_rerank)
+
+        if "RERANKER_POOL_ENABLED" in env_vars:
+            value = env_vars["RERANKER_POOL_ENABLED"].lower()
+            self.reranker_pool_enabled = value in {"true", "1", "yes", "on"}
+            log.debug("Overriding reranker_pool_enabled from .env: %s", self.reranker_pool_enabled)
+
+        if "RERANKER_STRATEGY" in env_vars:
+            strategy = env_vars["RERANKER_STRATEGY"].lower()
+            if strategy in {"round_robin", "latency_aware", "weighted_random"}:
+                self.reranker_strategy = strategy
+                log.debug("Overriding reranker_strategy from .env: %s", strategy)
+            else:
+                log.warning("Invalid RERANKER_STRATEGY in .env: %r", strategy)
+
+        if "RERANKER_COOLDOWN" in env_vars:
+            try:
+                self.reranker_cooldown = float(env_vars["RERANKER_COOLDOWN"])
+                log.debug("Overriding reranker_cooldown from .env: %s", self.reranker_cooldown)
+            except ValueError:
+                log.warning("Invalid RERANKER_COOLDOWN in .env: %r", env_vars["RERANKER_COOLDOWN"])
+
+        if "RERANKER_MAX_INPUT_TOKENS" in env_vars:
+            try:
+                self.reranker_max_input_tokens = int(env_vars["RERANKER_MAX_INPUT_TOKENS"])
+                log.debug("Overriding reranker_max_input_tokens from .env: %s", self.reranker_max_input_tokens)
+            except ValueError:
+                log.warning("Invalid RERANKER_MAX_INPUT_TOKENS in .env: %r", env_vars["RERANKER_MAX_INPUT_TOKENS"])
 
     @classmethod
     def load(cls) -> "Config":

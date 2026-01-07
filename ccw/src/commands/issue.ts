@@ -213,6 +213,7 @@ interface IssueOptions {
   executor?: string;
   priority?: string;
   solution?: string;
+  solutionId?: string;  // --solution-id <id> for filtering solutions
   result?: string;
   reason?: string;
   json?: boolean;
@@ -884,16 +885,16 @@ async function createAction(options: IssueOptions): Promise<void> {
 }
 
 /**
- * solution - Create solution from JSON data
- * Usage: ccw issue solution <issue-id> --data '{"tasks":[...]}'
- *        echo '{"tasks":[...]}' | ccw issue solution <issue-id>
- * Output: JSON with created solution (includes auto-generated ID)
+ * solution - Create or read solutions
+ * Create: ccw issue solution <issue-id> --data '{"tasks":[...]}'
+ * Read:   ccw issue solution <issue-id> [--brief] [--solution-id <id>]
+ * Brief:  Returns { solution_id, files_touched[], task_count } for each solution
  */
 async function solutionAction(issueId: string | undefined, options: IssueOptions): Promise<void> {
   if (!issueId) {
     console.error(chalk.red('Issue ID required'));
-    console.error(chalk.gray('Usage: ccw issue solution <issue-id> --data \'{"tasks":[...]}\''));
-    console.error(chalk.gray('       echo \'{"tasks":[...]}\' | ccw issue solution <issue-id>'));
+    console.error(chalk.gray('Usage: ccw issue solution <issue-id> [--brief] [--solution-id <id>]'));
+    console.error(chalk.gray('       ccw issue solution <issue-id> --data \'{"tasks":[...]}\''));
     process.exit(1);
   }
 
@@ -908,20 +909,84 @@ async function solutionAction(issueId: string | undefined, options: IssueOptions
     }
   }
 
-  if (!jsonData) {
-    console.error(chalk.red('JSON data required'));
-    console.error(chalk.gray('Usage: ccw issue solution <issue-id> --data \'{"tasks":[...]}\''));
-    console.error(chalk.gray('       echo \'{"tasks":[...]}\' | ccw issue solution <issue-id>'));
+  // CREATE mode: if --data provided
+  if (jsonData) {
+    try {
+      const data = JSON.parse(jsonData);
+      const solution = createSolution(issueId, data);
+      console.log(JSON.stringify(solution, null, 2));
+    } catch (err) {
+      console.error(chalk.red((err as Error).message));
+      process.exit(1);
+    }
+    return;
+  }
+
+  // READ mode: list solutions for issue
+  const issue = findIssue(issueId);
+  if (!issue) {
+    console.error(chalk.red(`Issue "${issueId}" not found`));
     process.exit(1);
   }
 
-  try {
-    const data = JSON.parse(jsonData);
-    const solution = createSolution(issueId, data);
-    console.log(JSON.stringify(solution, null, 2));
-  } catch (err) {
-    console.error(chalk.red((err as Error).message));
-    process.exit(1);
+  const solutions = readSolutions(issueId);
+  if (solutions.length === 0) {
+    if (options.json || options.brief) {
+      console.log('[]');
+    } else {
+      console.log(chalk.yellow(`No solutions found for ${issueId}`));
+    }
+    return;
+  }
+
+  // Filter by solution-id if specified
+  let targetSolutions = solutions;
+  if (options.solutionId) {
+    targetSolutions = solutions.filter(s => s.id === options.solutionId);
+    if (targetSolutions.length === 0) {
+      console.error(chalk.red(`Solution "${options.solutionId}" not found`));
+      process.exit(1);
+    }
+  }
+
+  // Brief mode: extract files_touched from modification_points
+  if (options.brief) {
+    const briefSolutions = targetSolutions.map(sol => {
+      const filesTouched = new Set<string>();
+      for (const task of sol.tasks) {
+        if (task.modification_points) {
+          for (const mp of task.modification_points) {
+            if (mp.file) filesTouched.add(mp.file);
+          }
+        }
+      }
+      return {
+        solution_id: sol.id,
+        is_bound: sol.is_bound,
+        task_count: sol.tasks.length,
+        files_touched: Array.from(filesTouched)
+      };
+    });
+    console.log(JSON.stringify(briefSolutions, null, 2));
+    return;
+  }
+
+  // JSON mode: full solutions
+  if (options.json) {
+    console.log(JSON.stringify(targetSolutions, null, 2));
+    return;
+  }
+
+  // Human-readable output
+  console.log(chalk.bold.cyan(`\nSolutions for ${issueId}:\n`));
+  for (const sol of targetSolutions) {
+    const marker = sol.is_bound ? chalk.green('◉ BOUND') : chalk.gray('○');
+    console.log(`${marker} ${sol.id}`);
+    console.log(chalk.gray(`  Tasks: ${sol.tasks.length}`));
+    if (sol.description) {
+      console.log(chalk.gray(`  ${sol.description.substring(0, 80)}...`));
+    }
+    console.log();
   }
 }
 
@@ -2458,6 +2523,8 @@ export async function issueCommand(
       console.log(chalk.gray('  list [issue-id]                    List issues or tasks'));
       console.log(chalk.gray('  history                            List completed issues (from history)'));
       console.log(chalk.gray('  status [issue-id]                  Show detailed status'));
+      console.log(chalk.gray('  solution <id>                      List solutions for issue'));
+      console.log(chalk.gray('  solution <id> --brief              Brief: solution_id, files_touched, task_count'));
       console.log(chalk.gray('  solution <id> --data \'{...}\'       Create solution (auto-generates ID)'));
       console.log(chalk.gray('  bind <issue-id> [sol-id]           Bind solution'));
       console.log(chalk.gray('  update <issue-id> --status <s>     Update issue status'));

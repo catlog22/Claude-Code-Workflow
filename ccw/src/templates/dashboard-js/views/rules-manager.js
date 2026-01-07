@@ -347,7 +347,8 @@ var ruleCreateState = {
   generationType: 'description',
   description: '',
   extractScope: '',
-  extractFocus: ''
+  extractFocus: '',
+  enableReview: false
 };
 
 function openRuleCreateModal() {
@@ -363,7 +364,8 @@ function openRuleCreateModal() {
     generationType: 'description',
     description: '',
     extractScope: '',
-    extractFocus: ''
+    extractFocus: '',
+    enableReview: false
   };
 
   // Create modal HTML
@@ -504,6 +506,18 @@ function openRuleCreateModal() {
                 <p class="text-xs text-muted-foreground mt-1">${t('rules.extractFocusHint')}</p>
               </div>
             </div>
+          </div>
+
+          <!-- Review Option (CLI mode only) -->
+          <div id="ruleReviewSection" style="display: ${ruleCreateState.mode === 'cli-generate' ? 'block' : 'none'}">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="ruleEnableReview"
+                     class="w-4 h-4 text-primary bg-background border-border rounded focus:ring-2 focus:ring-primary"
+                     ${ruleCreateState.enableReview ? 'checked' : ''}
+                     onchange="toggleRuleReview()">
+              <span class="text-sm font-medium text-foreground">${t('rules.enableReview')}</span>
+            </label>
+            <p class="text-xs text-muted-foreground mt-1 ml-6">${t('rules.enableReviewHint')}</p>
           </div>
 
           <!-- Conditional Rule Toggle (Manual mode only) -->
@@ -667,11 +681,13 @@ function switchRuleCreateMode(mode) {
   const generationTypeSection = document.getElementById('ruleGenerationTypeSection');
   const descriptionSection = document.getElementById('ruleDescriptionSection');
   const extractSection = document.getElementById('ruleExtractSection');
+  const reviewSection = document.getElementById('ruleReviewSection');
   const conditionalSection = document.getElementById('ruleConditionalSection');
   const contentSection = document.getElementById('ruleContentSection');
 
   if (mode === 'cli-generate') {
     if (generationTypeSection) generationTypeSection.style.display = 'block';
+    if (reviewSection) reviewSection.style.display = 'block';
     if (conditionalSection) conditionalSection.style.display = 'none';
     if (contentSection) contentSection.style.display = 'none';
 
@@ -687,6 +703,7 @@ function switchRuleCreateMode(mode) {
     if (generationTypeSection) generationTypeSection.style.display = 'none';
     if (descriptionSection) descriptionSection.style.display = 'none';
     if (extractSection) extractSection.style.display = 'none';
+    if (reviewSection) reviewSection.style.display = 'none';
     if (conditionalSection) conditionalSection.style.display = 'block';
     if (contentSection) contentSection.style.display = 'block';
   }
@@ -722,6 +739,11 @@ function switchRuleGenerationType(type) {
     if (descriptionSection) descriptionSection.style.display = 'none';
     if (extractSection) extractSection.style.display = 'block';
   }
+}
+
+function toggleRuleReview() {
+  const checkbox = document.getElementById('ruleEnableReview');
+  ruleCreateState.enableReview = checkbox ? checkbox.checked : false;
 }
 
 async function createRule() {
@@ -784,7 +806,8 @@ async function createRule() {
       generationType: ruleCreateState.generationType,
       description: ruleCreateState.generationType === 'description' ? description : undefined,
       extractScope: ruleCreateState.generationType === 'extract' ? extractScope : undefined,
-      extractFocus: ruleCreateState.generationType === 'extract' ? extractFocus : undefined
+      extractFocus: ruleCreateState.generationType === 'extract' ? extractFocus : undefined,
+      enableReview: ruleCreateState.enableReview || undefined
     };
 
     // Show progress message

@@ -69,13 +69,13 @@ class LiteLLMEmbedderWrapper(BaseEmbedder):
 
         Returns:
             int: Maximum number of tokens that can be embedded at once.
-                Inferred from model config or model name patterns.
+                Reads from LiteLLM config's max_input_tokens property.
         """
-        # Try to get from LiteLLM config first
-        if hasattr(self._embedder, 'max_input_tokens') and self._embedder.max_input_tokens:
+        # Get from LiteLLM embedder's max_input_tokens property (now exposed)
+        if hasattr(self._embedder, 'max_input_tokens'):
             return self._embedder.max_input_tokens
 
-        # Infer from model name
+        # Fallback: infer from model name
         model_name_lower = self.model_name.lower()
 
         # Large models (8B or "large" in name)

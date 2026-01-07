@@ -34,6 +34,18 @@ class EmbeddingModelConfig(BaseModel):
     provider: str  # "openai", "fastembed", "ollama", etc.
     model: str
     dimensions: int
+    max_input_tokens: int = 8192  # Maximum tokens per embedding request
+
+    model_config = {"extra": "allow"}
+
+
+class RerankerModelConfig(BaseModel):
+    """Reranker model configuration."""
+
+    provider: str  # "siliconflow", "cohere", "jina", etc.
+    model: str
+    max_input_tokens: int = 8192  # Maximum tokens per reranking request
+    top_k: int = 50  # Default top_k for reranking
 
     model_config = {"extra": "allow"}
 
@@ -69,6 +81,7 @@ class LiteLLMConfig(BaseModel):
     providers: dict[str, ProviderConfig] = Field(default_factory=dict)
     llm_models: dict[str, LLMModelConfig] = Field(default_factory=dict)
     embedding_models: dict[str, EmbeddingModelConfig] = Field(default_factory=dict)
+    reranker_models: dict[str, RerankerModelConfig] = Field(default_factory=dict)
 
     model_config = {"extra": "allow"}
 
@@ -109,6 +122,25 @@ class LiteLLMConfig(BaseModel):
                 f"Available models: {list(self.embedding_models.keys())}"
             )
         return self.embedding_models[model]
+
+    def get_reranker_model(self, model: str = "default") -> RerankerModelConfig:
+        """Get reranker model configuration by name.
+
+        Args:
+            model: Model name or "default"
+
+        Returns:
+            Reranker model configuration
+
+        Raises:
+            ValueError: If model not found
+        """
+        if model not in self.reranker_models:
+            raise ValueError(
+                f"Reranker model '{model}' not found in configuration. "
+                f"Available models: {list(self.reranker_models.keys())}"
+            )
+        return self.reranker_models[model]
 
     def get_provider(self, provider: str) -> ProviderConfig:
         """Get provider configuration by name.

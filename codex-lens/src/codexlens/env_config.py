@@ -27,11 +27,17 @@ ENV_VARS = {
     "RERANKER_API_KEY": "API key for reranker service (SiliconFlow/Cohere/Jina)",
     "RERANKER_API_BASE": "Base URL for reranker API (overrides provider default)",
     "RERANKER_PROVIDER": "Reranker provider: siliconflow, cohere, jina",
+    "RERANKER_POOL_ENABLED": "Enable reranker high availability pool: true/false",
+    "RERANKER_STRATEGY": "Reranker load balance strategy: round_robin, latency_aware, weighted_random",
+    "RERANKER_COOLDOWN": "Reranker rate limit cooldown in seconds",
     # Embedding configuration (overrides settings.json)
     "EMBEDDING_MODEL": "Embedding model/profile name (overrides settings.json)",
     "EMBEDDING_BACKEND": "Embedding backend: fastembed, litellm",
     "EMBEDDING_API_KEY": "API key for embedding service",
     "EMBEDDING_API_BASE": "Base URL for embedding API",
+    "EMBEDDING_POOL_ENABLED": "Enable embedding high availability pool: true/false",
+    "EMBEDDING_STRATEGY": "Embedding load balance strategy: round_robin, latency_aware, weighted_random",
+    "EMBEDDING_COOLDOWN": "Embedding rate limit cooldown in seconds",
     # LiteLLM configuration
     "LITELLM_API_KEY": "API key for LiteLLM",
     "LITELLM_API_BASE": "Base URL for LiteLLM",

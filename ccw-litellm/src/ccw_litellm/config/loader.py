@@ -109,6 +109,7 @@ def _convert_json_to_internal_format(json_config: dict[str, Any]) -> dict[str, A
     providers: dict[str, Any] = {}
     llm_models: dict[str, Any] = {}
     embedding_models: dict[str, Any] = {}
+    reranker_models: dict[str, Any] = {}
     default_provider: str | None = None
 
     for provider in json_config.get("providers", []):
@@ -186,6 +187,7 @@ def _convert_json_to_internal_format(json_config: dict[str, Any]) -> dict[str, A
                 "provider": provider_id,
                 "model": model.get("name", ""),
                 "dimensions": model.get("capabilities", {}).get("embeddingDimension", 1536),
+                "max_input_tokens": model.get("capabilities", {}).get("maxInputTokens", 8192),
             }
             # Add model-specific endpoint settings
             endpoint = model.get("endpointSettings", {})
@@ -195,6 +197,29 @@ def _convert_json_to_internal_format(json_config: dict[str, Any]) -> dict[str, A
                 embedding_model_config["timeout"] = endpoint["timeout"]
 
             embedding_models[model_id] = embedding_model_config
+
+        # Convert reranker models
+        for model in provider.get("rerankerModels", []):
+            if not model.get("enabled", True):
+                continue
+            model_id = model.get("id", "")
+            if not model_id:
+                continue
+
+            reranker_model_config: dict[str, Any] = {
+                "provider": provider_id,
+                "model": model.get("name", ""),
+                "max_input_tokens": model.get("capabilities", {}).get("maxInputTokens", 8192),
+                "top_k": model.get("capabilities", {}).get("topK", 50),
+            }
+            # Add model-specific endpoint settings
+            endpoint = model.get("endpointSettings", {})
+            if endpoint.get("baseUrl"):
+                reranker_model_config["api_base"] = endpoint["baseUrl"]
+            if endpoint.get("timeout"):
+                reranker_model_config["timeout"] = endpoint["timeout"]
+
+            reranker_models[model_id] = reranker_model_config
 
     # Ensure we have defaults if no models found
     if not llm_models:
@@ -208,6 +233,7 @@ def _convert_json_to_internal_format(json_config: dict[str, Any]) -> dict[str, A
             "provider": default_provider or "openai",
             "model": "text-embedding-3-small",
             "dimensions": 1536,
+            "max_input_tokens": 8191,
         }
 
     return {
@@ -216,6 +242,7 @@ def _convert_json_to_internal_format(json_config: dict[str, Any]) -> dict[str, A
         "providers": providers,
         "llm_models": llm_models,
         "embedding_models": embedding_models,
+        "reranker_models": reranker_models,
     }
 
 
