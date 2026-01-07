@@ -1,21 +1,14 @@
-// @ts-nocheck
 /**
  * Hooks Routes Module
  * Handles all hooks-related API endpoints
  */
-import type { IncomingMessage, ServerResponse } from 'http';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
 
-export interface RouteContext {
-  pathname: string;
-  url: URL;
-  req: IncomingMessage;
-  res: ServerResponse;
-  initialPath: string;
-  handlePostRequest: (req: IncomingMessage, res: ServerResponse, handler: (body: unknown) => Promise<any>) => void;
-  broadcastToClients: (data: unknown) => void;
+import type { RouteContext } from './types.js';
+
+interface HooksRouteContext extends RouteContext {
   extractSessionIdFromPath: (filePath: string) => string | null;
 }
 
@@ -30,7 +23,7 @@ const GLOBAL_SETTINGS_PATH = join(homedir(), '.claude', 'settings.json');
  * @param {string} projectPath
  * @returns {string}
  */
-function getProjectSettingsPath(projectPath) {
+function getProjectSettingsPath(projectPath: string): string {
   // path.join automatically handles cross-platform path separators
   return join(projectPath, '.claude', 'settings.json');
 }
@@ -40,7 +33,7 @@ function getProjectSettingsPath(projectPath) {
  * @param {string} filePath
  * @returns {Object}
  */
-function readSettingsFile(filePath) {
+function readSettingsFile(filePath: string): Record<string, unknown> {
   try {
     if (!existsSync(filePath)) {
       return {};
@@ -58,7 +51,7 @@ function readSettingsFile(filePath) {
  * @param {string} projectPath
  * @returns {Object}
  */
-function getHooksConfig(projectPath) {
+function getHooksConfig(projectPath: string): { global: { path: string; hooks: unknown }; project: { path: string | null; hooks: unknown } } {
   const globalSettings = readSettingsFile(GLOBAL_SETTINGS_PATH);
   const projectSettingsPath = projectPath ? getProjectSettingsPath(projectPath) : null;
   const projectSettings = projectSettingsPath ? readSettingsFile(projectSettingsPath) : {};
@@ -66,11 +59,11 @@ function getHooksConfig(projectPath) {
   return {
     global: {
       path: GLOBAL_SETTINGS_PATH,
-      hooks: globalSettings.hooks || {}
+      hooks: (globalSettings as { hooks?: unknown }).hooks || {}
     },
     project: {
       path: projectSettingsPath,
-      hooks: projectSettings.hooks || {}
+      hooks: (projectSettings as { hooks?: unknown }).hooks || {}
     }
   };
 }
@@ -83,15 +76,18 @@ function getHooksConfig(projectPath) {
  * @param {Object} hookData - Hook configuration
  * @returns {Object}
  */
-function saveHookToSettings(projectPath, scope, event, hookData) {
+function saveHookToSettings(
+  projectPath: string,
+  scope: 'global' | 'project',
+  event: string,
+  hookData: Record<string, unknown> & { replaceIndex?: unknown }
+): Record<string, unknown> {
   try {
     const filePath = scope === 'global' ? GLOBAL_SETTINGS_PATH : getProjectSettingsPath(projectPath);
-    const settings = readSettingsFile(filePath);
+    const settings = readSettingsFile(filePath) as Record<string, unknown> & { hooks?: Record<string, unknown> };
 
     // Ensure hooks object exists
-    if (!settings.hooks) {
-      settings.hooks = {};
-    }
+    settings.hooks = settings.hooks || {};
 
     // Ensure the event array exists
     if (!settings.hooks[event]) {
@@ -104,15 +100,16 @@ function saveHookToSettings(projectPath, scope, event, hookData) {
     }
 
     // Check if we're replacing an existing hook
-    if (hookData.replaceIndex !== undefined) {
+    if (typeof hookData.replaceIndex === 'number') {
       const index = hookData.replaceIndex;
       delete hookData.replaceIndex;
-      if (index >= 0 && index < settings.hooks[event].length) {
-        settings.hooks[event][index] = hookData;
+      const hooksForEvent = settings.hooks[event] as unknown[];
+      if (index >= 0 && index < hooksForEvent.length) {
+        hooksForEvent[index] = hookData;
       }
     } else {
       // Add new hook
-      settings.hooks[event].push(hookData);
+      (settings.hooks[event] as unknown[]).push(hookData);
     }
 
     // Ensure directory exists and write file
@@ -141,10 +138,15 @@ function saveHookToSettings(projectPath, scope, event, hookData) {
  * @param {number} hookIndex - Index of hook to delete
  * @returns {Object}
  */
-function deleteHookFromSettings(projectPath, scope, event, hookIndex) {
+function deleteHookFromSettings(
+  projectPath: string,
+  scope: 'global' | 'project',
+  event: string,
+  hookIndex: number
+): Record<string, unknown> {
   try {
     const filePath = scope === 'global' ? GLOBAL_SETTINGS_PATH : getProjectSettingsPath(projectPath);
-    const settings = readSettingsFile(filePath);
+    const settings = readSettingsFile(filePath) as Record<string, unknown> & { hooks?: Record<string, unknown> };
 
     if (!settings.hooks || !settings.hooks[event]) {
       return { error: 'Hook not found' };
@@ -155,15 +157,17 @@ function deleteHookFromSettings(projectPath, scope, event, hookIndex) {
       settings.hooks[event] = [settings.hooks[event]];
     }
 
-    if (hookIndex < 0 || hookIndex >= settings.hooks[event].length) {
+    const hooksForEvent = settings.hooks[event] as unknown[];
+
+    if (hookIndex < 0 || hookIndex >= hooksForEvent.length) {
       return { error: 'Invalid hook index' };
     }
 
     // Remove the hook
-    settings.hooks[event].splice(hookIndex, 1);
+    hooksForEvent.splice(hookIndex, 1);
 
     // Remove empty event arrays
-    if (settings.hooks[event].length === 0) {
+    if (hooksForEvent.length === 0) {
       delete settings.hooks[event];
     }
 
@@ -197,18 +201,29 @@ function deleteHookFromSettings(projectPath, scope, event, hookIndex) {
  * Handle hooks routes
  * @returns true if route was handled, false otherwise
  */
-export async function handleHooksRoutes(ctx: RouteContext): Promise<boolean> {
+export async function handleHooksRoutes(ctx: HooksRouteContext): Promise<boolean> {
   const { pathname, url, req, res, initialPath, handlePostRequest, broadcastToClients, extractSessionIdFromPath } = ctx;
 
   // API: Hook endpoint for Claude Code notifications
   if (pathname === '/api/hook' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { type, filePath, sessionId, ...extraData } = body;
+      if (typeof body !== 'object' || body === null) {
+        return { error: 'Invalid request body', status: 400 };
+      }
+
+      const payload = body as Record<string, unknown>;
+      const type = payload.type;
+      const filePath = payload.filePath;
+      const sessionId = payload.sessionId;
+      const extraData: Record<string, unknown> = { ...payload };
+      delete extraData.type;
+      delete extraData.filePath;
+      delete extraData.sessionId;
 
       // Determine session ID from file path if not provided
-      let resolvedSessionId = sessionId;
-      if (!resolvedSessionId && filePath) {
-        resolvedSessionId = extractSessionIdFromPath(filePath);
+      let resolvedSessionId = typeof sessionId === 'string' ? sessionId : undefined;
+      if (!resolvedSessionId && typeof filePath === 'string') {
+        resolvedSessionId = extractSessionIdFromPath(filePath) ?? undefined;
       }
 
       // Handle context hooks (session-start, context)
@@ -226,7 +241,7 @@ export async function handleHooksRoutes(ctx: RouteContext): Promise<boolean> {
           const index = await clusteringService.getProgressiveIndex({
             type: type as 'session-start' | 'context',
             sessionId: resolvedSessionId,
-            prompt: extraData.prompt // Pass user prompt for intent matching
+            prompt: typeof extraData.prompt === 'string' ? extraData.prompt : undefined // Pass user prompt for intent matching
           });
 
           // Return context directly
@@ -253,10 +268,10 @@ export async function handleHooksRoutes(ctx: RouteContext): Promise<boolean> {
 
       // Broadcast to all connected WebSocket clients
       const notification = {
-        type: type || 'session_updated',
+        type: typeof type === 'string' && type.trim().length > 0 ? type : 'session_updated',
         payload: {
           sessionId: resolvedSessionId,
-          filePath: filePath,
+          filePath: typeof filePath === 'string' ? filePath : undefined,
           timestamp: new Date().toISOString(),
           ...extraData  // Pass through toolName, status, result, params, error, etc.
         }
@@ -365,7 +380,7 @@ export async function handleHooksRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Get hooks configuration
   if (pathname === '/api/hooks' && req.method === 'GET') {
     const projectPathParam = url.searchParams.get('path');
-    const hooksData = getHooksConfig(projectPathParam);
+    const hooksData = getHooksConfig(projectPathParam || initialPath);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(hooksData));
     return true;
@@ -374,11 +389,23 @@ export async function handleHooksRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Save hook
   if (pathname === '/api/hooks' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { projectPath, scope, event, hookData } = body;
-      if (!scope || !event || !hookData) {
+      if (typeof body !== 'object' || body === null) {
+        return { error: 'Invalid request body', status: 400 };
+      }
+
+      const { projectPath, scope, event, hookData } = body as {
+        projectPath?: unknown;
+        scope?: unknown;
+        event?: unknown;
+        hookData?: unknown;
+      };
+
+      if ((scope !== 'global' && scope !== 'project') || typeof event !== 'string' || typeof hookData !== 'object' || hookData === null) {
         return { error: 'scope, event, and hookData are required', status: 400 };
       }
-      return saveHookToSettings(projectPath, scope, event, hookData);
+
+      const resolvedProjectPath = typeof projectPath === 'string' && projectPath.trim().length > 0 ? projectPath : initialPath;
+      return saveHookToSettings(resolvedProjectPath, scope, event, hookData as Record<string, unknown>);
     });
     return true;
   }
@@ -386,11 +413,23 @@ export async function handleHooksRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Delete hook
   if (pathname === '/api/hooks' && req.method === 'DELETE') {
     handlePostRequest(req, res, async (body) => {
-      const { projectPath, scope, event, hookIndex } = body;
-      if (!scope || !event || hookIndex === undefined) {
+      if (typeof body !== 'object' || body === null) {
+        return { error: 'Invalid request body', status: 400 };
+      }
+
+      const { projectPath, scope, event, hookIndex } = body as {
+        projectPath?: unknown;
+        scope?: unknown;
+        event?: unknown;
+        hookIndex?: unknown;
+      };
+
+      if ((scope !== 'global' && scope !== 'project') || typeof event !== 'string' || typeof hookIndex !== 'number') {
         return { error: 'scope, event, and hookIndex are required', status: 400 };
       }
-      return deleteHookFromSettings(projectPath, scope, event, hookIndex);
+
+      const resolvedProjectPath = typeof projectPath === 'string' && projectPath.trim().length > 0 ? projectPath : initialPath;
+      return deleteHookFromSettings(resolvedProjectPath, scope, event, hookIndex);
     });
     return true;
   }

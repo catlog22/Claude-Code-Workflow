@@ -1,22 +1,11 @@
-// @ts-nocheck
 /**
  * Files Routes Module
  * Handles all file browsing related API endpoints
  */
-import type { IncomingMessage, ServerResponse } from 'http';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { validatePath as validateAllowedPath } from '../../utils/path-validator.js';
-
-export interface RouteContext {
-  pathname: string;
-  url: URL;
-  req: IncomingMessage;
-  res: ServerResponse;
-  initialPath: string;
-  handlePostRequest: (req: IncomingMessage, res: ServerResponse, handler: (body: unknown) => Promise<any>) => void;
-  broadcastToClients: (data: unknown) => void;
-}
+import type { RouteContext } from './types.js';
 
 // ========================================
 // Constants
@@ -79,6 +68,39 @@ const EXT_TO_LANGUAGE = {
   '.svelte': 'html'
 };
 
+interface ExplorerFileEntry {
+  name: string;
+  type: 'directory' | 'file';
+  path: string;
+  hasClaudeMd?: boolean;
+}
+
+interface ExplorerDirectoryFilesResult {
+  path?: string;
+  files: ExplorerFileEntry[];
+  gitignorePatterns?: string[];
+  error?: string;
+}
+
+interface ExplorerFileContentResult {
+  error?: string;
+  content?: string;
+  language?: string;
+  isMarkdown?: boolean;
+  fileName?: string;
+  path?: string;
+  size?: number;
+  lines?: number;
+}
+
+interface UpdateClaudeMdResult {
+  success?: boolean;
+  error?: string;
+  message?: string;
+  output?: string;
+  path?: string;
+}
+
 // ========================================
 // Helper Functions
 // ========================================
@@ -88,7 +110,7 @@ const EXT_TO_LANGUAGE = {
  * @param {string} gitignorePath - Path to .gitignore file
  * @returns {string[]} Array of gitignore patterns
  */
-function parseGitignore(gitignorePath) {
+function parseGitignore(gitignorePath: string): string[] {
   try {
     if (!existsSync(gitignorePath)) return [];
     const content = readFileSync(gitignorePath, 'utf8');
@@ -109,7 +131,7 @@ function parseGitignore(gitignorePath) {
  * @param {boolean} isDirectory - Whether the entry is a directory
  * @returns {boolean}
  */
-function shouldIgnore(name, patterns, isDirectory) {
+function shouldIgnore(name: string, patterns: string[], isDirectory: boolean): boolean {
   // Always exclude certain directories
   if (isDirectory && EXPLORER_EXCLUDE_DIRS.includes(name)) {
     return true;
@@ -156,7 +178,7 @@ function shouldIgnore(name, patterns, isDirectory) {
  * @param {string} dirPath - Directory path to list
  * @returns {Promise<Object>}
  */
-async function listDirectoryFiles(dirPath) {
+async function listDirectoryFiles(dirPath: string): Promise<ExplorerDirectoryFilesResult> {
   try {
     // Normalize path
     let normalizedPath = dirPath.replace(/\\/g, '/');
@@ -179,7 +201,7 @@ async function listDirectoryFiles(dirPath) {
     // Read directory entries
     const entries = readdirSync(normalizedPath, { withFileTypes: true });
 
-    const files = [];
+    const files: ExplorerFileEntry[] = [];
     for (const entry of entries) {
       const isDirectory = entry.isDirectory();
 
@@ -189,7 +211,7 @@ async function listDirectoryFiles(dirPath) {
       }
 
       const entryPath = join(normalizedPath, entry.name);
-      const fileInfo = {
+      const fileInfo: ExplorerFileEntry = {
         name: entry.name,
         type: isDirectory ? 'directory' : 'file',
         path: entryPath.replace(/\\/g, '/')
@@ -227,7 +249,7 @@ async function listDirectoryFiles(dirPath) {
  * @param {string} filePath - Path to file
  * @returns {Promise<Object>}
  */
-async function getFileContent(filePath) {
+async function getFileContent(filePath: string): Promise<ExplorerFileContentResult> {
   try {
     // Normalize path
     let normalizedPath = filePath.replace(/\\/g, '/');
@@ -252,9 +274,11 @@ async function getFileContent(filePath) {
     // Read file content
     const content = readFileSync(normalizedPath, 'utf8');
     const ext = normalizedPath.substring(normalizedPath.lastIndexOf('.')).toLowerCase();
-    const language = EXT_TO_LANGUAGE[ext] || 'plaintext';
+    const language = Object.prototype.hasOwnProperty.call(EXT_TO_LANGUAGE, ext)
+      ? EXT_TO_LANGUAGE[ext as keyof typeof EXT_TO_LANGUAGE]
+      : 'plaintext';
     const isMarkdown = ext === '.md' || ext === '.markdown';
-    const fileName = normalizedPath.split('/').pop();
+    const fileName = normalizedPath.split('/').pop() ?? normalizedPath;
 
     return {
       content,
@@ -278,7 +302,7 @@ async function getFileContent(filePath) {
  * @param {string} strategy - Update strategy (single-layer, multi-layer)
  * @returns {Promise<Object>}
  */
-async function triggerUpdateClaudeMd(targetPath, tool, strategy) {
+async function triggerUpdateClaudeMd(targetPath: string, tool: string, strategy: string): Promise<UpdateClaudeMdResult> {
   const { spawn } = await import('child_process');
 
   // Normalize path
@@ -304,7 +328,7 @@ async function triggerUpdateClaudeMd(targetPath, tool, strategy) {
 
   console.log(`[Explorer] Running async: ccw tool exec update_module_claude with ${tool} (${strategy})`);
 
-  return new Promise((resolve) => {
+  return new Promise<UpdateClaudeMdResult>((resolve) => {
     const isWindows = process.platform === 'win32';
 
     // Spawn the process
@@ -317,34 +341,39 @@ async function triggerUpdateClaudeMd(targetPath, tool, strategy) {
     let stdout = '';
     let stderr = '';
 
-    child.stdout.on('data', (data) => {
+    child.stdout.on('data', (data: Buffer) => {
       stdout += data.toString();
     });
 
-    child.stderr.on('data', (data) => {
+    child.stderr.on('data', (data: Buffer) => {
       stderr += data.toString();
     });
 
-    child.on('close', (code) => {
+    child.on('close', (code: number | null) => {
       if (code === 0) {
         // Parse the JSON output from the tool
-        let result;
+        let result: unknown;
         try {
           result = JSON.parse(stdout);
         } catch {
           result = { output: stdout };
         }
 
-        if (result.success === false || result.error) {
+        const parsed = typeof result === 'object' && result !== null ? (result as Record<string, unknown>) : null;
+        const parsedSuccess = typeof parsed?.success === 'boolean' ? parsed.success : undefined;
+        const parsedError = typeof parsed?.error === 'string' ? parsed.error : undefined;
+        const parsedMessage = typeof parsed?.message === 'string' ? parsed.message : undefined;
+
+        if (parsedSuccess === false || parsedError) {
           resolve({
             success: false,
-            error: result.error || result.message || 'Update failed',
+            error: parsedError || parsedMessage || 'Update failed',
             output: stdout
           });
         } else {
           resolve({
             success: true,
-            message: result.message || `CLAUDE.md updated successfully using ${tool} (${strategy})`,
+            message: parsedMessage || `CLAUDE.md updated successfully using ${tool} (${strategy})`,
             output: stdout,
             path: normalizedPath
           });
@@ -358,11 +387,11 @@ async function triggerUpdateClaudeMd(targetPath, tool, strategy) {
       }
     });
 
-    child.on('error', (error) => {
+    child.on('error', (error: unknown) => {
       console.error('Error spawning process:', error);
       resolve({
         success: false,
-        error: (error as Error).message,
+        error: error instanceof Error ? error.message : String(error),
         output: ''
       });
     });
@@ -436,14 +465,27 @@ export async function handleFilesRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Update CLAUDE.md using CLI tools (Explorer view)
   if (pathname === '/api/update-claude-md' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { path: targetPath, tool = 'gemini', strategy = 'single-layer' } = body;
-      if (!targetPath) {
+      if (typeof body !== 'object' || body === null) {
+        return { error: 'Invalid request body', status: 400 };
+      }
+
+      const {
+        path: targetPath,
+        tool = 'gemini',
+        strategy = 'single-layer'
+      } = body as { path?: unknown; tool?: unknown; strategy?: unknown };
+
+      if (typeof targetPath !== 'string' || targetPath.trim().length === 0) {
         return { error: 'path is required', status: 400 };
       }
 
       try {
         const validatedPath = await validateAllowedPath(targetPath, { mustExist: true, allowedDirectories: [initialPath] });
-        return await triggerUpdateClaudeMd(validatedPath, tool, strategy);
+        return await triggerUpdateClaudeMd(
+          validatedPath,
+          typeof tool === 'string' ? tool : 'gemini',
+          typeof strategy === 'string' ? strategy : 'single-layer'
+        );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         const status = message.includes('Access denied') ? 403 : 400;

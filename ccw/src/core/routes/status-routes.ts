@@ -1,14 +1,13 @@
-// @ts-nocheck
 /**
  * Status Routes Module
  * Aggregated status endpoint for faster dashboard loading
  */
-import type { IncomingMessage, ServerResponse } from 'http';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { getCliToolsStatus } from '../../tools/cli-executor.js';
 import { checkVenvStatus, checkSemanticStatus } from '../../tools/codex-lens.js';
+import type { RouteContext } from './types.js';
 
 /**
  * Check CCW installation status
@@ -52,16 +51,6 @@ function checkCcwInstallStatus(): {
     missingFiles,
     installPath: claudeDir
   };
-}
-
-export interface RouteContext {
-  pathname: string;
-  url: URL;
-  req: IncomingMessage;
-  res: ServerResponse;
-  initialPath: string;
-  handlePostRequest: (req: IncomingMessage, res: ServerResponse, handler: (body: unknown) => Promise<any>) => void;
-  broadcastToClients: (data: unknown) => void;
 }
 
 /**

@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * MCP Templates Database Module
  * Stores MCP server configurations as reusable templates

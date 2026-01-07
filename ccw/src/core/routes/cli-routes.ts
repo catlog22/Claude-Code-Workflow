@@ -1,9 +1,7 @@
-// @ts-nocheck
 /**
  * CLI Routes Module
  * Handles all CLI-related API endpoints
  */
-import type { IncomingMessage, ServerResponse } from 'http';
 import {
   getCliToolsStatus,
   getCliToolsFullStatus,
@@ -44,16 +42,7 @@ import {
   updateCodeIndexMcp,
   getCodeIndexMcp
 } from '../../tools/claude-cli-tools.js';
-
-export interface RouteContext {
-  pathname: string;
-  url: URL;
-  req: IncomingMessage;
-  res: ServerResponse;
-  initialPath: string;
-  handlePostRequest: (req: IncomingMessage, res: ServerResponse, handler: (body: unknown) => Promise<any>) => void;
-  broadcastToClients: (data: unknown) => void;
-}
+import type { RouteContext } from './types.js';
 
 // ========== Active Executions State ==========
 // Stores running CLI executions for state recovery when view is opened/refreshed

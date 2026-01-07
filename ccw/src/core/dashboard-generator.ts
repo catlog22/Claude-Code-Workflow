@@ -1,7 +1,58 @@
-// @ts-nocheck
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+
+interface ReviewDimensionInfo {
+  count: number;
+  [key: string]: unknown;
+}
+
+interface ReviewData {
+  totalFindings: number;
+  severityDistribution: Record<string, number>;
+  dimensionSummary: Record<string, ReviewDimensionInfo>;
+  [key: string]: unknown;
+}
+
+interface SessionTaskData {
+  status?: string;
+  title?: string;
+  task_id?: string;
+  [key: string]: unknown;
+}
+
+interface SessionData {
+  session_id?: string;
+  project?: string;
+  created_at?: string;
+  tasks: SessionTaskData[];
+  taskCount: number;
+  [key: string]: unknown;
+}
+
+interface DashboardStatistics {
+  totalSessions: number;
+  activeSessions: number;
+  totalTasks: number;
+  completedTasks: number;
+  [key: string]: unknown;
+}
+
+interface DashboardData {
+  generatedAt?: string;
+  activeSessions: SessionData[];
+  archivedSessions: SessionData[];
+  statistics: DashboardStatistics;
+  reviewData?: ReviewData;
+  liteTasks?: {
+    litePlan?: unknown[];
+    liteFix?: unknown[];
+    [key: string]: unknown;
+  };
+  projectPath?: string;
+  recentPaths?: string[];
+  [key: string]: unknown;
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -111,18 +162,19 @@ const MODULE_FILES = [
  * @returns {Promise<string>} - Generated HTML
  */
 export async function generateDashboard(data: unknown): Promise<string> {
+  const dashboardData = (data ?? {}) as DashboardData;
   // Use new unified template (with sidebar layout)
   if (existsSync(UNIFIED_TEMPLATE)) {
-    return generateFromUnifiedTemplate(data);
+    return generateFromUnifiedTemplate(dashboardData);
   }
 
   // Fallback to legacy workflow template
   if (existsSync(WORKFLOW_TEMPLATE)) {
-    return generateFromBundledTemplate(data, WORKFLOW_TEMPLATE);
+    return generateFromBundledTemplate(dashboardData, WORKFLOW_TEMPLATE);
   }
 
   // Fallback to inline dashboard if templates missing
-  return generateInlineDashboard(data);
+  return generateInlineDashboard(dashboardData);
 }
 
 /**
@@ -130,7 +182,7 @@ export async function generateDashboard(data: unknown): Promise<string> {
  * @param {Object} data - Dashboard data
  * @returns {string} - Generated HTML
  */
-function generateFromUnifiedTemplate(data: unknown): string {
+function generateFromUnifiedTemplate(data: DashboardData): string {
   let html = readFileSync(UNIFIED_TEMPLATE, 'utf8');
 
   // Read and concatenate modular CSS files in load order
@@ -198,7 +250,7 @@ function generateFromUnifiedTemplate(data: unknown): string {
  * @param {string} templatePath - Path to workflow-dashboard.html
  * @returns {string} - Generated HTML
  */
-function generateFromBundledTemplate(data: unknown, templatePath: string): string {
+function generateFromBundledTemplate(data: DashboardData, templatePath: string): string {
   let html = readFileSync(templatePath, 'utf8');
 
   // Prepare workflow data for injection
@@ -224,7 +276,7 @@ function generateFromBundledTemplate(data: unknown, templatePath: string): strin
  * @param {Object} reviewData - Review data to display
  * @returns {string} - Modified HTML with review tab
  */
-function injectReviewTab(html, reviewData) {
+function injectReviewTab(html: string, reviewData: ReviewData): string {
   // Add review tab button in header controls
   const tabButtonHtml = `
     <button class="btn" data-tab="reviews" id="reviewTabBtn">Reviews (${reviewData.totalFindings})</button>
@@ -266,10 +318,10 @@ function injectReviewTab(html, reviewData) {
  * @param {Object} reviewData - Review data
  * @returns {string} - HTML for review section
  */
-function generateReviewSection(reviewData) {
+function generateReviewSection(reviewData: ReviewData): string {
   const severityBars = Object.entries(reviewData.severityDistribution)
     .map(([severity, count]) => {
-      const colors = {
+      const colors: Record<string, string> = {
         critical: '#c53030',
         high: '#f56565',
         medium: '#ed8936',
@@ -404,7 +456,7 @@ function generateReviewSection(reviewData) {
  * @param {Object} reviewData - Review data
  * @returns {string} - JavaScript code
  */
-function generateReviewScript(reviewData) {
+function generateReviewScript(reviewData: ReviewData): string {
   return `
         // Review tab functionality
         const reviewTabBtn = document.getElementById('reviewTabBtn');
@@ -444,7 +496,7 @@ function generateReviewScript(reviewData) {
  * @param {Object} data - Dashboard data
  * @returns {string}
  */
-function generateInlineDashboard(data: unknown): string {
+function generateInlineDashboard(data: DashboardData): string {
   const stats = data.statistics;
   const hasReviews = data.reviewData && data.reviewData.totalFindings > 0;
 
@@ -623,7 +675,7 @@ function generateInlineDashboard(data: unknown): string {
             </div>
         </div>
 
-        ${hasReviews ? renderReviewTab(data.reviewData) : ''}
+        ${hasReviews ? renderReviewTab(data.reviewData as ReviewData) : ''}
     </div>
 
     <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
@@ -666,7 +718,7 @@ function generateInlineDashboard(data: unknown): string {
  * @param {boolean} isActive - Whether session is active
  * @returns {string} - HTML string
  */
-function renderSessionCard(session, isActive) {
+function renderSessionCard(session: SessionData, isActive: boolean): string {
   const completedTasks = isActive
     ? session.tasks.filter(t => t.status === 'completed').length
     : session.taskCount;
@@ -704,7 +756,7 @@ function renderSessionCard(session, isActive) {
  * @param {Object} reviewData - Review data
  * @returns {string} - HTML string
  */
-function renderReviewTab(reviewData) {
+function renderReviewTab(reviewData: ReviewData): string {
   const { severityDistribution, dimensionSummary } = reviewData;
 
   return `

@@ -2,22 +2,12 @@
  * Graph Routes Module
  * Handles graph visualization API endpoints for codex-lens data
  */
-import type { IncomingMessage, ServerResponse } from 'http';
 import { homedir } from 'os';
 import { join, resolve, normalize } from 'path';
 import { existsSync, readdirSync } from 'fs';
 import Database from 'better-sqlite3';
 import { validatePath as validateAllowedPath } from '../../utils/path-validator.js';
-
-export interface RouteContext {
-  pathname: string;
-  url: URL;
-  req: IncomingMessage;
-  res: ServerResponse;
-  initialPath: string;
-  handlePostRequest: (req: IncomingMessage, res: ServerResponse, handler: (body: unknown) => Promise<any>) => void;
-  broadcastToClients: (data: unknown) => void;
-}
+import type { RouteContext } from './types.js';
 
 /**
  * PathMapper utility class (simplified from codex-lens Python implementation)

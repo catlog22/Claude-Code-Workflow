@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Issue Routes Module (Optimized - Flat JSONL Storage)
  *
@@ -23,19 +22,9 @@
  * - GET    /api/queue               - Get execution queue
  * - POST   /api/queue/reorder       - Reorder queue items
  */
-import type { IncomingMessage, ServerResponse } from 'http';
 import { readFileSync, existsSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
-
-export interface RouteContext {
-  pathname: string;
-  url: URL;
-  req: IncomingMessage;
-  res: ServerResponse;
-  initialPath: string;
-  handlePostRequest: (req: IncomingMessage, res: ServerResponse, handler: (body: unknown) => Promise<any>) => void;
-  broadcastToClients: (data: unknown) => void;
-}
+import type { RouteContext } from './types.js';
 
 // ========== JSONL Helper Functions ==========
 

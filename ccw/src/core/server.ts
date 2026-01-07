@@ -1,4 +1,3 @@
-// @ts-nocheck
 import http from 'http';
 import { URL } from 'url';
 import { readFileSync, existsSync } from 'fs';
@@ -30,7 +29,7 @@ import { handleNavStatusRoutes } from './routes/nav-status-routes.js';
 import { handleAuthRoutes } from './routes/auth-routes.js';
 
 // Import WebSocket handling
-import { handleWebSocketUpgrade, broadcastToClients } from './websocket.js';
+import { handleWebSocketUpgrade, broadcastToClients, extractSessionIdFromPath } from './websocket.js';
 
 import { getTokenManager } from './auth/token-manager.js';
 import { authMiddleware, isLocalhostRequest, setAuthCookie } from './auth/middleware.js';
@@ -40,6 +39,7 @@ import { getCsrfTokenManager } from './auth/csrf-manager.js';
 import { randomBytes } from 'crypto';
 
 import type { ServerConfig } from '../types/config.js';
+import type { PostRequestHandler } from './routes/types.js';
 
 interface ServerOptions {
   port?: number;
@@ -48,13 +48,7 @@ interface ServerOptions {
   open?: boolean;
 }
 
-interface PostResult {
-  error?: string;
-  status?: number;
-  [key: string]: unknown;
-}
-
-type PostHandler = (body: unknown) => Promise<PostResult>;
+type PostHandler = PostRequestHandler;
 
 // Template paths
 const TEMPLATE_PATH = join(import.meta.dirname, '../../src/templates/dashboard.html');
@@ -173,17 +167,23 @@ function handlePostRequest(req: http.IncomingMessage, res: http.ServerResponse, 
     try {
       const result = await handler(parsed);
 
-      if (result.error) {
-        const status = result.status || 500;
+      const isObjectResult = typeof result === 'object' && result !== null;
+      const errorValue = isObjectResult && 'error' in result ? (result as { error?: unknown }).error : undefined;
+      const statusValue = isObjectResult && 'status' in result ? (result as { status?: unknown }).status : undefined;
+
+      if (typeof errorValue === 'string' && errorValue.length > 0) {
+        const status = typeof statusValue === 'number' ? statusValue : 500;
         res.writeHead(status, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: result.error }));
-      } else {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(result));
+        res.end(JSON.stringify({ error: errorValue }));
+        return;
       }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
     } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: (error as Error).message }));
+      res.end(JSON.stringify({ error: message }));
     }
   };
 
@@ -196,14 +196,15 @@ function handlePostRequest(req: http.IncomingMessage, res: http.ServerResponse, 
     try {
       void handleBody(JSON.parse(cachedRawBody));
     } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: (error as Error).message }));
+      res.end(JSON.stringify({ error: message }));
     }
     return;
   }
 
   let body = '';
-  req.on('data', chunk => { body += chunk; });
+  req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
   req.on('end', async () => {
     try {
       (req as any).__ccwRawBody = body;
@@ -211,8 +212,9 @@ function handlePostRequest(req: http.IncomingMessage, res: http.ServerResponse, 
       (req as any).body = parsed;
       await handleBody(parsed);
     } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: (error as Error).message }));
+      res.end(JSON.stringify({ error: message }));
     }
   });
 }
@@ -357,7 +359,7 @@ export async function startServer(options: ServerOptions = {}): Promise<http.Ser
   const unauthenticatedPaths = new Set<string>(['/api/auth/token', '/api/csrf-token']);
 
   const server = http.createServer(async (req, res) => {
-    const url = new URL(req.url, `http://localhost:${serverPort}`);
+    const url = new URL(req.url ?? '/', `http://localhost:${serverPort}`);
     const pathname = url.pathname;
 
     // CORS headers for API requests
@@ -390,6 +392,7 @@ export async function startServer(options: ServerOptions = {}): Promise<http.Ser
         initialPath,
         handlePostRequest,
         broadcastToClients,
+        extractSessionIdFromPath,
         server
       };
 
@@ -570,8 +573,8 @@ export async function startServer(options: ServerOptions = {}): Promise<http.Ser
       if (pathname.startsWith('/assets/')) {
         const assetPath = join(ASSETS_DIR, pathname.replace('/assets/', ''));
         if (existsSync(assetPath)) {
-          const ext = assetPath.split('.').pop().toLowerCase();
-          const mimeTypes = {
+          const ext = assetPath.split('.').pop()?.toLowerCase();
+          const mimeTypes: Record<string, string> = {
             'js': 'application/javascript',
             'css': 'text/css',
             'json': 'application/json',
@@ -583,7 +586,7 @@ export async function startServer(options: ServerOptions = {}): Promise<http.Ser
             'woff2': 'font/woff2',
             'ttf': 'font/ttf'
           };
-          const contentType = mimeTypes[ext] || 'application/octet-stream';
+          const contentType = ext ? mimeTypes[ext] ?? 'application/octet-stream' : 'application/octet-stream';
           const content = readFileSync(assetPath);
           res.writeHead(200, {
             'Content-Type': contentType,
@@ -600,8 +603,9 @@ export async function startServer(options: ServerOptions = {}): Promise<http.Ser
 
     } catch (error: unknown) {
       console.error('Server error:', error);
+      const message = error instanceof Error ? error.message : String(error);
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: (error as Error).message }));
+      res.end(JSON.stringify({ error: message }));
     }
   });
 

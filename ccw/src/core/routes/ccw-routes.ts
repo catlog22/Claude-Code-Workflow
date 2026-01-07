@@ -1,21 +1,10 @@
-// @ts-nocheck
 /**
  * CCW Routes Module
  * Handles all CCW-related API endpoints
  */
-import type { IncomingMessage, ServerResponse } from 'http';
 import { getAllManifests } from '../manifest.js';
 import { listTools } from '../../tools/index.js';
-
-export interface RouteContext {
-  pathname: string;
-  url: URL;
-  req: IncomingMessage;
-  res: ServerResponse;
-  initialPath: string;
-  handlePostRequest: (req: IncomingMessage, res: ServerResponse, handler: (body: unknown) => Promise<any>) => void;
-  broadcastToClients: (data: unknown) => void;
-}
+import type { RouteContext } from './types.js';
 
 /**
  * Handle CCW routes
@@ -43,13 +32,14 @@ export async function handleCcwRoutes(ctx: RouteContext): Promise<boolean> {
   // API: CCW Upgrade
   if (pathname === '/api/ccw/upgrade' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { path: installPath } = body;
+      const { path: installPath } = body as { path?: unknown };
+      const resolvedInstallPath = typeof installPath === 'string' && installPath.trim().length > 0 ? installPath : undefined;
 
       try {
         const { spawn } = await import('child_process');
 
         // Run ccw upgrade command
-        const args = installPath ? ['upgrade', '--all'] : ['upgrade', '--all'];
+        const args = resolvedInstallPath ? ['upgrade', '--all'] : ['upgrade', '--all'];
         const upgradeProcess = spawn('ccw', args, {
           shell: true,
           stdio: ['ignore', 'pipe', 'pipe']
@@ -58,16 +48,16 @@ export async function handleCcwRoutes(ctx: RouteContext): Promise<boolean> {
         let stdout = '';
         let stderr = '';
 
-        upgradeProcess.stdout.on('data', (data) => {
+        upgradeProcess.stdout?.on('data', (data: Buffer) => {
           stdout += data.toString();
         });
 
-        upgradeProcess.stderr.on('data', (data) => {
+        upgradeProcess.stderr?.on('data', (data: Buffer) => {
           stderr += data.toString();
         });
 
         return new Promise((resolve) => {
-          upgradeProcess.on('close', (code) => {
+          upgradeProcess.on('close', (code: number | null) => {
             if (code === 0) {
               resolve({ success: true, message: 'Upgrade completed', output: stdout });
             } else {
@@ -75,7 +65,7 @@ export async function handleCcwRoutes(ctx: RouteContext): Promise<boolean> {
             }
           });
 
-          upgradeProcess.on('error', (err) => {
+          upgradeProcess.on('error', (err: Error) => {
             resolve({ success: false, error: err.message, status: 500 });
           });
 
@@ -85,8 +75,8 @@ export async function handleCcwRoutes(ctx: RouteContext): Promise<boolean> {
             resolve({ success: false, error: 'Upgrade timed out', status: 504 });
           }, 120000);
         });
-      } catch (err) {
-        return { success: false, error: err.message, status: 500 };
+      } catch (err: unknown) {
+        return { success: false, error: err instanceof Error ? err.message : String(err), status: 500 };
       }
     });
     return true;

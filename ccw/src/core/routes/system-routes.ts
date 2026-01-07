@@ -1,9 +1,7 @@
-// @ts-nocheck
 /**
  * System Routes Module
  * Handles all system-related API endpoints
  */
-import type { IncomingMessage, ServerResponse } from 'http';
 import type { Server } from 'http';
 import { readFileSync, existsSync, promises as fsPromises } from 'fs';
 import { join } from 'path';
@@ -17,17 +15,11 @@ import {
   cleanAllStorage,
   resolveProjectId,
   projectExists,
-  formatBytes
-} from '../../tools/storage-manager.js';
+   formatBytes
+ } from '../../tools/storage-manager.js';
+import type { RouteContext } from './types.js';
 
-export interface RouteContext {
-  pathname: string;
-  url: URL;
-  req: IncomingMessage;
-  res: ServerResponse;
-  initialPath: string;
-  handlePostRequest: (req: IncomingMessage, res: ServerResponse, handler: (body: unknown) => Promise<any>) => void;
-  broadcastToClients: (data: unknown) => void;
+interface SystemRouteContext extends RouteContext {
   server: Server;
 }
 
@@ -39,7 +31,7 @@ export interface RouteContext {
 const NPM_PACKAGE_NAME = 'claude-code-workflow';
 
 // Cache for version check (avoid too frequent requests)
-let versionCheckCache = null;
+let versionCheckCache: Record<string, unknown> | null = null;
 let versionCheckTime = 0;
 const VERSION_CHECK_CACHE_TTL = 3600000; // 1 hour
 
@@ -83,7 +75,7 @@ function compareVersions(v1: string, v2: string): number {
  * Check npm registry for latest version
  * @returns {Promise<Object>}
  */
-async function checkNpmVersion(): Promise<any> {
+async function checkNpmVersion(): Promise<Record<string, unknown>> {
   // Return cached result if still valid
   const now = Date.now();
   if (versionCheckCache && (now - versionCheckTime) < VERSION_CHECK_CACHE_TTL) {
@@ -103,8 +95,8 @@ async function checkNpmVersion(): Promise<any> {
       throw new Error('HTTP ' + response.status);
     }
 
-    const data = await response.json();
-    const latestVersion = data.version;
+    const data = await response.json() as { version?: unknown };
+    const latestVersion = typeof data.version === 'string' ? data.version : currentVersion;
 
     // Compare versions
     const hasUpdate = compareVersions(latestVersion, currentVersion) > 0;
@@ -174,10 +166,11 @@ async function getWorkflowData(projectPath: string): Promise<any> {
   const sessions = await scanSessions(workflowDir);
   const data = await aggregateData(sessions, workflowDir);
 
-  data.projectPath = normalizePathForDisplay(resolvedPath);
-  data.recentPaths = getRecentPaths();
-
-  return data;
+  return {
+    ...data,
+    projectPath: normalizePathForDisplay(resolvedPath),
+    recentPaths: getRecentPaths()
+  };
 }
 
 // ========================================
@@ -188,7 +181,7 @@ async function getWorkflowData(projectPath: string): Promise<any> {
  * Handle System routes
  * @returns true if route was handled, false otherwise
  */
-export async function handleSystemRoutes(ctx: RouteContext): Promise<boolean> {
+export async function handleSystemRoutes(ctx: SystemRouteContext): Promise<boolean> {
   const { pathname, url, req, res, initialPath, handlePostRequest, broadcastToClients, server } = ctx;
 
   // API: Get workflow data for a path

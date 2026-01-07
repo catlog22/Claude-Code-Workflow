@@ -1,12 +1,11 @@
-// @ts-nocheck
 /**
  * LiteLLM API Routes Module
  * Handles LiteLLM provider management, endpoint configuration, and cache management
  */
-import type { IncomingMessage, ServerResponse } from 'http';
 import { fileURLToPath } from 'url';
 import { dirname, join as pathJoin } from 'path';
 import { getSystemPython } from '../../utils/python-utils.js';
+import type { RouteContext } from './types.js';
 
 // Get current module path for package-relative lookups
 const __filename = fileURLToPath(import.meta.url);
@@ -66,16 +65,6 @@ export function clearCcwLitellmStatusCache() {
   ccwLitellmStatusCache.timestamp = 0;
 }
 
-export interface RouteContext {
-  pathname: string;
-  url: URL;
-  req: IncomingMessage;
-  res: ServerResponse;
-  initialPath: string;
-  handlePostRequest: (req: IncomingMessage, res: ServerResponse, handler: (body: unknown) => Promise<any>) => void;
-  broadcastToClients: (data: unknown) => void;
-}
-
 function sanitizeProviderForResponse(provider: any): any {
   if (!provider) return provider;
   return {
@@ -99,11 +88,11 @@ function sanitizeRotationEndpointForResponse(endpoint: any): any {
 interface ModelInfo {
   id: string;
   name: string;
-  provider: ProviderType;
+  provider: string;
   description?: string;
 }
 
-const PROVIDER_MODELS: Record<ProviderType, ModelInfo[]> = {
+const PROVIDER_MODELS: Record<string, ModelInfo[]> = {
   openai: [
     { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: 'openai', description: '128K context' },
     { id: 'gpt-4', name: 'GPT-4', provider: 'openai', description: '8K context' },
@@ -415,7 +404,7 @@ export async function handleLiteLLMApiRoutes(ctx: RouteContext): Promise<boolean
   // GET /api/litellm-api/models/:providerType - Get available models for provider type
   const modelsMatch = pathname.match(/^\/api\/litellm-api\/models\/([^/]+)$/);
   if (modelsMatch && req.method === 'GET') {
-    const providerType = modelsMatch[1] as ProviderType;
+    const providerType = modelsMatch[1];
 
     try {
       const models = PROVIDER_MODELS[providerType];
@@ -607,7 +596,6 @@ export async function handleLiteLLMApiRoutes(ctx: RouteContext): Promise<boolean
         const { stdout } = await execAsync('pip show ccw-litellm', {
           timeout: 10000,
           windowsHide: true,
-          shell: true,
         });
         // Parse version from pip show output
         const versionMatch = stdout.match(/Version:\s*(.+)/i);
@@ -626,7 +614,6 @@ export async function handleLiteLLMApiRoutes(ctx: RouteContext): Promise<boolean
             const { stdout } = await execAsync(`${pythonExe} -c "import ccw_litellm; print(ccw_litellm.__version__)"`, {
               timeout: 5000,
               windowsHide: true,
-              shell: true,
             });
             const version = stdout.trim();
             if (version) {

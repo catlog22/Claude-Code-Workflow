@@ -1,21 +1,10 @@
-// @ts-nocheck
 /**
  * Session Routes Module
  * Handles all Session/Task-related API endpoints
  */
-import type { IncomingMessage, ServerResponse } from 'http';
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'fs';
 import { join } from 'path';
-
-export interface RouteContext {
-  pathname: string;
-  url: URL;
-  req: IncomingMessage;
-  res: ServerResponse;
-  initialPath: string;
-  handlePostRequest: (req: IncomingMessage, res: ServerResponse, handler: (body: unknown) => Promise<any>) => void;
-  broadcastToClients: (data: unknown) => void;
-}
+import type { RouteContext } from './types.js';
 
 /**
  * Get session detail data (context, summaries, impl-plan, review)
@@ -23,8 +12,8 @@ export interface RouteContext {
  * @param {string} dataType - Type of data to load ('all', 'context', 'tasks', 'summary', 'plan', 'explorations', 'conflict', 'impl-plan', 'review')
  * @returns {Promise<Object>}
  */
-async function getSessionDetailData(sessionPath, dataType) {
-  const result = {};
+async function getSessionDetailData(sessionPath: string, dataType: string): Promise<Record<string, unknown>> {
+  const result: any = {};
 
   // Normalize path
   const normalizedPath = sessionPath.replace(/\\/g, '/');
@@ -66,7 +55,7 @@ async function getSessionDetailData(sessionPath, dataType) {
           }
         }
         // Sort by task ID
-        result.tasks.sort((a, b) => a.task_id.localeCompare(b.task_id));
+        result.tasks.sort((a: { task_id: string }, b: { task_id: string }) => a.task_id.localeCompare(b.task_id));
       }
     }
 
@@ -341,7 +330,7 @@ async function getSessionDetailData(sessionPath, dataType) {
  * @param {string} newStatus - New status (pending, in_progress, completed)
  * @returns {Promise<Object>}
  */
-async function updateTaskStatus(sessionPath, taskId, newStatus) {
+async function updateTaskStatus(sessionPath: string, taskId: string, newStatus: string): Promise<Record<string, unknown>> {
   // Normalize path (handle both forward and back slashes)
   let normalizedPath = sessionPath.replace(/\\/g, '/');
 
@@ -429,9 +418,17 @@ export async function handleSessionRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Update task status
   if (pathname === '/api/update-task-status' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { sessionPath, taskId, newStatus } = body;
+      if (typeof body !== 'object' || body === null) {
+        return { error: 'Invalid request body', status: 400 };
+      }
 
-      if (!sessionPath || !taskId || !newStatus) {
+      const { sessionPath, taskId, newStatus } = body as {
+        sessionPath?: unknown;
+        taskId?: unknown;
+        newStatus?: unknown;
+      };
+
+      if (typeof sessionPath !== 'string' || typeof taskId !== 'string' || typeof newStatus !== 'string') {
         return { error: 'sessionPath, taskId, and newStatus are required', status: 400 };
       }
 
@@ -443,19 +440,28 @@ export async function handleSessionRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Bulk update task status
   if (pathname === '/api/bulk-update-task-status' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { sessionPath, taskIds, newStatus } = body;
+      if (typeof body !== 'object' || body === null) {
+        return { error: 'Invalid request body', status: 400 };
+      }
 
-      if (!sessionPath || !taskIds || !newStatus) {
+      const { sessionPath, taskIds, newStatus } = body as {
+        sessionPath?: unknown;
+        taskIds?: unknown;
+        newStatus?: unknown;
+      };
+
+      if (typeof sessionPath !== 'string' || !Array.isArray(taskIds) || typeof newStatus !== 'string') {
         return { error: 'sessionPath, taskIds, and newStatus are required', status: 400 };
       }
 
-      const results = [];
+      const results: Array<Record<string, unknown>> = [];
       for (const taskId of taskIds) {
+        if (typeof taskId !== 'string') continue;
         try {
           const result = await updateTaskStatus(sessionPath, taskId, newStatus);
           results.push(result);
         } catch (err) {
-          results.push({ taskId, error: err.message });
+          results.push({ taskId, error: err instanceof Error ? err.message : String(err) });
         }
       }
       return { success: true, results };

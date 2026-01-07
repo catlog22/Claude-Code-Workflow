@@ -1,23 +1,64 @@
-// @ts-nocheck
 /**
  * Skills Routes Module
  * Handles all Skills-related API endpoints
  */
-import type { IncomingMessage, ServerResponse } from 'http';
 import { readFileSync, existsSync, readdirSync, statSync, unlinkSync, promises as fsPromises } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { executeCliTool } from '../../tools/cli-executor.js';
 import { validatePath as validateAllowedPath } from '../../utils/path-validator.js';
+import type { RouteContext } from './types.js';
 
-export interface RouteContext {
-  pathname: string;
-  url: URL;
-  req: IncomingMessage;
-  res: ServerResponse;
-  initialPath: string;
-  handlePostRequest: (req: IncomingMessage, res: ServerResponse, handler: (body: unknown) => Promise<any>) => void;
-  broadcastToClients: (data: unknown) => void;
+type SkillLocation = 'project' | 'user';
+
+interface ParsedSkillFrontmatter {
+  name: string;
+  description: string;
+  version: string | null;
+  allowedTools: string[];
+  content: string;
+}
+
+interface SkillSummary {
+  name: string;
+  folderName: string;
+  description: string;
+  version: string | null;
+  allowedTools: string[];
+  location: SkillLocation;
+  path: string;
+  supportingFiles: string[];
+}
+
+interface SkillsConfig {
+  projectSkills: SkillSummary[];
+  userSkills: SkillSummary[];
+}
+
+interface SkillInfo {
+  name: string;
+  description: string;
+  version: string | null;
+  allowedTools: string[];
+  supportingFiles: string[];
+}
+
+type SkillFolderValidation =
+  | { valid: true; errors: string[]; skillInfo: SkillInfo }
+  | { valid: false; errors: string[]; skillInfo: null };
+
+type GenerationType = 'description' | 'template';
+
+interface GenerationParams {
+  generationType: GenerationType;
+  description?: string;
+  skillName: string;
+  location: SkillLocation;
+  projectPath: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
 // ========== Skills Helper Functions ==========
@@ -27,8 +68,8 @@ export interface RouteContext {
  * @param {string} content - Skill file content
  * @returns {Object} Parsed frontmatter and content
  */
-function parseSkillFrontmatter(content) {
-  const result = {
+function parseSkillFrontmatter(content: string): ParsedSkillFrontmatter {
+  const result: ParsedSkillFrontmatter = {
     name: '',
     description: '',
     version: null,
@@ -59,7 +100,11 @@ function parseSkillFrontmatter(content) {
             result.version = value.replace(/^["']|["']$/g, '');
           } else if (key === 'allowed-tools' || key === 'allowedtools') {
             // Parse as comma-separated or YAML array
-            result.allowedTools = value.replace(/^\[|\]$/g, '').split(',').map(t => t.trim()).filter(Boolean);
+            result.allowedTools = value
+              .replace(/^\[|\]$/g, '')
+              .split(',')
+              .map((tool) => tool.trim())
+              .filter(Boolean);
           }
         }
       }
@@ -76,8 +121,8 @@ function parseSkillFrontmatter(content) {
  * @param {string} skillDir
  * @returns {string[]}
  */
-function getSupportingFiles(skillDir) {
-  const files = [];
+function getSupportingFiles(skillDir: string): string[] {
+  const files: string[] = [];
   try {
     const entries = readdirSync(skillDir, { withFileTypes: true });
     for (const entry of entries) {
@@ -100,8 +145,8 @@ function getSupportingFiles(skillDir) {
  * @param {string} projectPath
  * @returns {Object}
  */
-function getSkillsConfig(projectPath) {
-  const result = {
+function getSkillsConfig(projectPath: string): SkillsConfig {
+  const result: SkillsConfig = {
     projectSkills: [],
     userSkills: []
   };
@@ -180,7 +225,7 @@ function getSkillsConfig(projectPath) {
  * @param {string} projectPath
  * @returns {Object}
  */
-async function getSkillDetail(skillName, location, projectPath, initialPath) {
+async function getSkillDetail(skillName: string, location: SkillLocation, projectPath: string, initialPath: string) {
   try {
     if (skillName.includes('/') || skillName.includes('\\')) {
       return { error: 'Access denied', status: 403 };
@@ -249,7 +294,7 @@ async function getSkillDetail(skillName, location, projectPath, initialPath) {
  * @param {string} projectPath
  * @returns {Object}
  */
-async function deleteSkill(skillName, location, projectPath, initialPath) {
+async function deleteSkill(skillName: string, location: SkillLocation, projectPath: string, initialPath: string) {
   try {
     if (skillName.includes('/') || skillName.includes('\\')) {
       return { error: 'Access denied', status: 403 };
@@ -301,8 +346,8 @@ async function deleteSkill(skillName, location, projectPath, initialPath) {
  * @param {string} folderPath - Path to skill folder
  * @returns {Object} Validation result with skill info
  */
-function validateSkillFolder(folderPath) {
-  const errors = [];
+function validateSkillFolder(folderPath: string): SkillFolderValidation {
+  const errors: string[] = [];
 
   // Check if folder exists
   if (!existsSync(folderPath)) {
@@ -367,7 +412,7 @@ function validateSkillFolder(folderPath) {
  * @param {string} source - Source directory path
  * @param {string} target - Target directory path
  */
-async function copyDirectoryRecursive(source, target) {
+async function copyDirectoryRecursive(source: string, target: string): Promise<void> {
   await fsPromises.mkdir(target, { recursive: true });
 
   const entries = await fsPromises.readdir(source, { withFileTypes: true });
@@ -392,7 +437,7 @@ async function copyDirectoryRecursive(source, target) {
  * @param {string} customName - Optional custom name for skill
  * @returns {Object}
  */
-async function importSkill(sourcePath, location, projectPath, customName) {
+async function importSkill(sourcePath: string, location: SkillLocation, projectPath: string, customName?: string) {
   try {
     // Validate source folder
     const validation = validateSkillFolder(sourcePath);
@@ -445,7 +490,7 @@ async function importSkill(sourcePath, location, projectPath, customName) {
  * @param {string} params.projectPath - Project root path
  * @returns {Object}
  */
-async function generateSkillViaCLI({ generationType, description, skillName, location, projectPath }) {
+async function generateSkillViaCLI({ generationType, description, skillName, location, projectPath }: GenerationParams) {
   try {
     // Validate inputs
     if (!skillName) {
@@ -732,13 +777,20 @@ export async function handleSkillsRoutes(ctx: RouteContext): Promise<boolean> {
     const skillName = decodeURIComponent(pathParts[3]);
 
     handlePostRequest(req, res, async (body) => {
-      const { fileName, content, location, projectPath: projectPathParam } = body;
+      if (!isRecord(body)) {
+        return { error: 'Invalid request body', status: 400 };
+      }
 
-      if (!fileName) {
+      const fileName = body.fileName;
+      const content = body.content;
+      const location: SkillLocation = body.location === 'project' ? 'project' : 'user';
+      const projectPathParam = typeof body.projectPath === 'string' ? body.projectPath : undefined;
+
+      if (typeof fileName !== 'string' || !fileName) {
         return { error: 'fileName is required' };
       }
 
-      if (content === undefined) {
+      if (typeof content !== 'string') {
         return { error: 'content is required' };
       }
 
@@ -789,7 +841,8 @@ export async function handleSkillsRoutes(ctx: RouteContext): Promise<boolean> {
   if (pathname.startsWith('/api/skills/') && req.method === 'GET' &&
       !pathname.endsWith('/skills/') && !pathname.endsWith('/dir') && !pathname.endsWith('/file')) {
     const skillName = decodeURIComponent(pathname.replace('/api/skills/', ''));
-    const location = url.searchParams.get('location') || 'project';
+    const locationParam = url.searchParams.get('location');
+    const location: SkillLocation = locationParam === 'user' ? 'user' : 'project';
     const projectPathParam = url.searchParams.get('path') || initialPath;
     const skillDetail = await getSkillDetail(skillName, location, projectPathParam, initialPath);
     if (skillDetail.error) {
@@ -817,7 +870,13 @@ export async function handleSkillsRoutes(ctx: RouteContext): Promise<boolean> {
       return true;
     }
     handlePostRequest(req, res, async (body) => {
-      const { location, projectPath: projectPathParam } = body;
+      if (!isRecord(body)) {
+        return { error: 'Invalid request body', status: 400 };
+      }
+
+      const location: SkillLocation = body.location === 'project' ? 'project' : 'user';
+      const projectPathParam = typeof body.projectPath === 'string' ? body.projectPath : undefined;
+
       return deleteSkill(skillName, location, projectPathParam || initialPath, initialPath);
     });
     return true;
@@ -826,8 +885,12 @@ export async function handleSkillsRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Validate skill import
   if (pathname === '/api/skills/validate-import' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { sourcePath } = body;
-      if (!sourcePath) {
+      if (!isRecord(body)) {
+        return { valid: false, errors: ['Source path is required'], skillInfo: null };
+      }
+
+      const sourcePath = body.sourcePath;
+      if (typeof sourcePath !== 'string' || !sourcePath.trim()) {
         return { valid: false, errors: ['Source path is required'], skillInfo: null };
       }
 
@@ -847,16 +910,27 @@ export async function handleSkillsRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Create/Import skill
   if (pathname === '/api/skills/create' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { mode, location, sourcePath, skillName, description, generationType, projectPath: projectPathParam } = body;
+      if (!isRecord(body)) {
+        return { error: 'Invalid request body', status: 400 };
+      }
 
-      if (!mode) {
+      const mode = body.mode;
+      const locationValue = body.location;
+      const sourcePath = typeof body.sourcePath === 'string' ? body.sourcePath : undefined;
+      const skillName = typeof body.skillName === 'string' ? body.skillName : undefined;
+      const description = typeof body.description === 'string' ? body.description : undefined;
+      const generationType = typeof body.generationType === 'string' ? body.generationType : undefined;
+      const projectPathParam = typeof body.projectPath === 'string' ? body.projectPath : undefined;
+
+      if (typeof mode !== 'string' || !mode) {
         return { error: 'Mode is required (import or cli-generate)' };
       }
 
-      if (!location) {
+      if (locationValue !== 'project' && locationValue !== 'user') {
         return { error: 'Location is required (project or user)' };
       }
 
+      const location: SkillLocation = locationValue;
       const projectPath = projectPathParam || initialPath;
 
       let validatedProjectPath = projectPath;
@@ -902,7 +976,7 @@ export async function handleSkillsRoutes(ctx: RouteContext): Promise<boolean> {
         }
 
         return await generateSkillViaCLI({
-          generationType: generationType || 'description',
+          generationType: generationType === 'template' ? 'template' : 'description',
           description,
           skillName,
           location,

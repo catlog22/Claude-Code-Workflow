@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Discovery Routes Module
  *
@@ -24,19 +23,9 @@
  * - PATCH  /api/discoveries/:id/findings/:fid - Update finding status
  * - DELETE /api/discoveries/:id          - Delete discovery session
  */
-import type { IncomingMessage, ServerResponse } from 'http';
 import { readFileSync, existsSync, writeFileSync, mkdirSync, readdirSync, rmSync } from 'fs';
 import { join } from 'path';
-
-export interface RouteContext {
-  pathname: string;
-  url: URL;
-  req: IncomingMessage;
-  res: ServerResponse;
-  initialPath: string;
-  handlePostRequest: (req: IncomingMessage, res: ServerResponse, handler: (body: unknown) => Promise<any>) => void;
-  broadcastToClients: (data: unknown) => void;
-}
+import type { RouteContext } from './types.js';
 
 // ========== Helper Functions ==========
 

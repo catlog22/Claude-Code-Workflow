@@ -2,14 +2,8 @@
  * CodexLens Routes Module
  * Handles all CodexLens-related API endpoints
  *
- * TODO: Remove @ts-nocheck and add proper types:
- * - Define interfaces for request body types (ConfigBody, CleanBody, InitBody, etc.)
- * - Type error catches: (e: unknown) => { const err = e as Error; ... }
- * - Add null checks for extractJSON results
- * - Type the handlePostRequest callback body parameter
+ * Note: This file uses runtime validation for request bodies and parses JSON output from CodexLens CLI tools.
  */
-// @ts-nocheck
-import type { IncomingMessage, ServerResponse } from 'http';
 import {
   checkVenvStatus,
   bootstrapVenv,
@@ -25,6 +19,7 @@ import {
 } from '../../tools/codex-lens.js';
 import type { ProgressInfo, GpuMode } from '../../tools/codex-lens.js';
 import { loadLiteLLMApiConfig } from '../../config/litellm-api-config-manager.js';
+import type { RouteContext } from './types.js';
 
 // File watcher state (persisted across requests)
 let watcherProcess: any = null;
@@ -34,16 +29,6 @@ let watcherStats = {
   events_processed: 0,
   start_time: null as Date | null
 };
-
-export interface RouteContext {
-  pathname: string;
-  url: URL;
-  req: IncomingMessage;
-  res: ServerResponse;
-  initialPath: string;
-  handlePostRequest: (req: IncomingMessage, res: ServerResponse, handler: (body: unknown) => Promise<any>) => void;
-  broadcastToClients: (data: unknown) => void;
-}
 
 /**
  * Strip ANSI color codes from string
@@ -162,13 +147,13 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
       let indexDir = '';
       if (configResult.success) {
         try {
-          const config = extractJSON(configResult.output);
+          const config = extractJSON(configResult.output ?? '');
           if (config.success && config.result) {
             // CLI returns index_dir (not index_root)
             indexDir = config.result.index_dir || config.result.index_root || '';
           }
-        } catch (e) {
-          console.error('[CodexLens] Failed to parse config for index list:', e.message);
+        } catch (e: unknown) {
+          console.error('[CodexLens] Failed to parse config for index list:', e instanceof Error ? e.message : String(e));
         }
       }
 
@@ -179,7 +164,7 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
 
       if (projectsResult.success) {
         try {
-          const projectsData = extractJSON(projectsResult.output);
+          const projectsData = extractJSON(projectsResult.output ?? '');
           if (projectsData.success && Array.isArray(projectsData.result)) {
             const { stat, readdir } = await import('fs/promises');
             const { existsSync } = await import('fs');
@@ -255,8 +240,8 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
               return a.id.localeCompare(b.id);
             });
           }
-        } catch (e) {
-          console.error('[CodexLens] Failed to parse projects list:', e.message);
+        } catch (e: unknown) {
+          console.error('[CodexLens] Failed to parse projects list:', e instanceof Error ? e.message : String(e));
         }
       }
 
@@ -265,7 +250,7 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
 
       if (statusResult.success) {
         try {
-          const status = extractJSON(statusResult.output);
+          const status = extractJSON(statusResult.output ?? '');
           if (status.success && status.result) {
             statusSummary = {
               totalProjects: status.result.projects_count || indexes.length,
@@ -281,8 +266,8 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
               fullIndexDirSizeFormatted: formatSize(status.result.index_size_bytes || 0)
             };
           }
-        } catch (e) {
-          console.error('[CodexLens] Failed to parse status:', e.message);
+        } catch (e: unknown) {
+          console.error('[CodexLens] Failed to parse status:', e instanceof Error ? e.message : String(e));
         }
       }
 
@@ -300,9 +285,9 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
           ...statusSummary
         }
       }));
-    } catch (err) {
+    } catch (err: unknown) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: err.message }));
+      res.end(JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }));
     }
     return true;
   }
@@ -342,12 +327,12 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
       let config = { index_dir: '~/.codexlens/indexes', index_count: 0 };
       if (configResult.success) {
         try {
-          const configData = extractJSON(configResult.output);
+          const configData = extractJSON(configResult.output ?? '');
           if (configData.success && configData.result) {
             config.index_dir = configData.result.index_dir || configData.result.index_root || config.index_dir;
           }
-        } catch (e) {
-          console.error('[CodexLens] Failed to parse config for dashboard init:', e.message);
+        } catch (e: unknown) {
+          console.error('[CodexLens] Failed to parse config for dashboard init:', e instanceof Error ? e.message : String(e));
         }
       }
       
@@ -355,13 +340,13 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
       let statusData: any = {};
       if (statusResult.success) {
         try {
-          const status = extractJSON(statusResult.output);
+          const status = extractJSON(statusResult.output ?? '');
           if (status.success && status.result) {
             config.index_count = status.result.projects_count || 0;
             statusData = status.result;
           }
-        } catch (e) {
-          console.error('[CodexLens] Failed to parse status for dashboard init:', e.message);
+        } catch (e: unknown) {
+          console.error('[CodexLens] Failed to parse status for dashboard init:', e instanceof Error ? e.message : String(e));
         }
       }
       
@@ -373,9 +358,9 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         semantic: semanticStatus,
         statusData
       }));
-    } catch (err) {
+    } catch (err: unknown) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: err.message }));
+      res.end(JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }));
     }
     return true;
   }
@@ -397,7 +382,7 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
           return { success: false, error: result.error, status: 500 };
         }
       } catch (err) {
-        return { success: false, error: err.message, status: 500 };
+        return { success: false, error: err instanceof Error ? err.message : String(err), status: 500 };
       }
     });
     return true;
@@ -448,7 +433,7 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
           return { success: false, error: result.error, status: 500 };
         }
       } catch (err) {
-        return { success: false, error: err.message, status: 500 };
+        return { success: false, error: err instanceof Error ? err.message : String(err), status: 500 };
       }
     });
     return true;
@@ -478,7 +463,7 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
       // Parse config (extract JSON from output that may contain log messages)
       if (configResult.success) {
         try {
-          const config = extractJSON(configResult.output);
+          const config = extractJSON(configResult.output ?? '');
           if (config.success && config.result) {
             // CLI returns index_dir (not index_root)
             responseData.index_dir = config.result.index_dir || config.result.index_root || responseData.index_dir;
@@ -490,38 +475,42 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
               responseData.api_batch_size = config.result.api_batch_size;
             }
           }
-        } catch (e) {
-          console.error('[CodexLens] Failed to parse config:', e.message);
-          console.error('[CodexLens] Config output:', configResult.output.substring(0, 200));
+        } catch (e: unknown) {
+          console.error('[CodexLens] Failed to parse config:', e instanceof Error ? e.message : String(e));
+          console.error('[CodexLens] Config output:', (configResult.output ?? '').substring(0, 200));
         }
       }
 
       // Parse status to get index_count (projects_count)
       if (statusResult.success) {
         try {
-          const status = extractJSON(statusResult.output);
+          const status = extractJSON(statusResult.output ?? '');
           if (status.success && status.result) {
             responseData.index_count = status.result.projects_count || 0;
           }
-        } catch (e) {
-          console.error('[CodexLens] Failed to parse status:', e.message);
-          console.error('[CodexLens] Status output:', statusResult.output.substring(0, 200));
+        } catch (e: unknown) {
+          console.error('[CodexLens] Failed to parse status:', e instanceof Error ? e.message : String(e));
+          console.error('[CodexLens] Status output:', (statusResult.output ?? '').substring(0, 200));
         }
       }
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(responseData));
-    } catch (err) {
+    } catch (err: unknown) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
+      res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
     }
     return true;
   }
 
   // API: CodexLens Config - POST (Set configuration)
   if (pathname === '/api/codexlens/config' && req.method === 'POST') {
-    handlePostRequest(req, res, async (body) => {
-      const { index_dir, api_max_workers, api_batch_size } = body;
+    handlePostRequest(req, res, async (body: unknown) => {
+      const { index_dir, api_max_workers, api_batch_size } = body as {
+        index_dir?: unknown;
+        api_max_workers?: unknown;
+        api_batch_size?: unknown;
+      };
 
       if (!index_dir) {
         return { success: false, error: 'index_dir is required', status: 400 };
@@ -584,8 +573,8 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         }
 
         return { success: true, message: 'Configuration updated successfully' };
-      } catch (err) {
-        return { success: false, error: err.message, status: 500 };
+      } catch (err: unknown) {
+        return { success: false, error: err instanceof Error ? err.message : String(err), status: 500 };
       }
     });
     return true;
@@ -594,13 +583,13 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
   // API: CodexLens Clean (Clean indexes)
   if (pathname === '/api/codexlens/clean' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { all = false, path } = body;
+      const { all = false, path } = body as { all?: unknown; path?: unknown };
 
       try {
         const args = ['clean'];
-        if (all) {
+        if (all === true) {
           args.push('--all');
-        } else if (path) {
+        } else if (typeof path === 'string' && path.trim().length > 0) {
           // Path is passed as a positional argument, not as a flag
           args.push(path);
         }
@@ -612,8 +601,8 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         } else {
           return { success: false, error: result.error || 'Failed to clean indexes', status: 500 };
         }
-      } catch (err) {
-        return { success: false, error: err.message, status: 500 };
+      } catch (err: unknown) {
+        return { success: false, error: err instanceof Error ? err.message : String(err), status: 500 };
       }
     });
     return true;
@@ -622,11 +611,21 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
   // API: CodexLens Init (Initialize workspace index)
   if (pathname === '/api/codexlens/init' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { path: projectPath, indexType = 'vector', embeddingModel = 'code', embeddingBackend = 'fastembed', maxWorkers = 1 } = body;
-      const targetPath = projectPath || initialPath;
+      const { path: projectPath, indexType = 'vector', embeddingModel = 'code', embeddingBackend = 'fastembed', maxWorkers = 1 } = body as {
+        path?: unknown;
+        indexType?: unknown;
+        embeddingModel?: unknown;
+        embeddingBackend?: unknown;
+        maxWorkers?: unknown;
+      };
+      const targetPath = typeof projectPath === 'string' && projectPath.trim().length > 0 ? projectPath : initialPath;
+      const resolvedIndexType = indexType === 'normal' ? 'normal' : 'vector';
+      const resolvedEmbeddingModel = typeof embeddingModel === 'string' && embeddingModel.trim().length > 0 ? embeddingModel : 'code';
+      const resolvedEmbeddingBackend = typeof embeddingBackend === 'string' && embeddingBackend.trim().length > 0 ? embeddingBackend : 'fastembed';
+      const resolvedMaxWorkers = typeof maxWorkers === 'number' ? maxWorkers : Number(maxWorkers);
 
       // Ensure LiteLLM backend dependencies are installed before running the CLI
-      if (indexType !== 'normal' && embeddingBackend === 'litellm') {
+      if (resolvedIndexType !== 'normal' && resolvedEmbeddingBackend === 'litellm') {
         const installResult = await ensureLiteLLMEmbedderReady();
         if (!installResult.success) {
           return { success: false, error: installResult.error || 'Failed to prepare LiteLLM embedder', status: 500 };
@@ -636,25 +635,25 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
       // Build CLI arguments based on index type
       // Use 'index init' subcommand (new CLI structure)
       const args = ['index', 'init', targetPath, '--json'];
-      if (indexType === 'normal') {
+      if (resolvedIndexType === 'normal') {
         args.push('--no-embeddings');
       } else {
         // Add embedding model selection for vector index (use --model, not --embedding-model)
-        args.push('--model', embeddingModel);
+        args.push('--model', resolvedEmbeddingModel);
         // Add embedding backend if not using default fastembed (use --backend, not --embedding-backend)
-        if (embeddingBackend && embeddingBackend !== 'fastembed') {
-          args.push('--backend', embeddingBackend);
+        if (resolvedEmbeddingBackend && resolvedEmbeddingBackend !== 'fastembed') {
+          args.push('--backend', resolvedEmbeddingBackend);
         }
         // Add max workers for concurrent API calls (useful for litellm backend)
-        if (maxWorkers && maxWorkers > 1) {
-          args.push('--max-workers', String(maxWorkers));
+        if (!Number.isNaN(resolvedMaxWorkers) && resolvedMaxWorkers > 1) {
+          args.push('--max-workers', String(resolvedMaxWorkers));
         }
       }
 
       // Broadcast start event
       broadcastToClients({
         type: 'CODEXLENS_INDEX_PROGRESS',
-        payload: { stage: 'start', message: 'Starting index...', percent: 0, path: targetPath, indexType }
+        payload: { stage: 'start', message: 'Starting index...', percent: 0, path: targetPath, indexType: resolvedIndexType }
       });
 
       try {
@@ -678,10 +677,10 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
           });
 
           try {
-            const parsed = extractJSON(result.output);
+            const parsed = extractJSON(result.output ?? '');
             return { success: true, result: parsed };
           } catch {
-            return { success: true, output: result.output };
+            return { success: true, output: result.output ?? '' };
           }
         } else {
           // Broadcast error
@@ -691,13 +690,14 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
           });
           return { success: false, error: result.error, status: 500 };
         }
-      } catch (err) {
+      } catch (err: unknown) {
         // Broadcast error
+        const message = err instanceof Error ? err.message : String(err);
         broadcastToClients({
           type: 'CODEXLENS_INDEX_PROGRESS',
-          payload: { stage: 'error', message: err.message, percent: 0, path: targetPath }
+          payload: { stage: 'error', message, percent: 0, path: targetPath }
         });
-        return { success: false, error: err.message, status: 500 };
+        return { success: false, error: message, status: 500 };
       }
     });
     return true;
@@ -759,14 +759,14 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
 
       if (result.success) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(result.output);
+        res.end(result.output ?? '');
       } else {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: result.error }));
       }
-    } catch (err) {
+    } catch (err: unknown) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: err.message }));
+      res.end(JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }));
     }
     return true;
   }
@@ -774,24 +774,33 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
   // API: CodexLens LLM Enhancement (run enhance command)
   if (pathname === '/api/codexlens/enhance' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { path: projectPath, tool = 'gemini', batchSize = 5, timeoutMs = 300000 } = body;
-      const targetPath = projectPath || initialPath;
+      const { path: projectPath, tool = 'gemini', batchSize = 5, timeoutMs = 300000 } = body as {
+        path?: unknown;
+        tool?: unknown;
+        batchSize?: unknown;
+        timeoutMs?: unknown;
+      };
+      const targetPath = typeof projectPath === 'string' && projectPath.trim().length > 0 ? projectPath : initialPath;
+      const resolvedTool = typeof tool === 'string' && tool.trim().length > 0 ? tool : 'gemini';
+      const resolvedBatchSize = typeof batchSize === 'number' ? batchSize : Number(batchSize);
+      const resolvedTimeoutMs = typeof timeoutMs === 'number' ? timeoutMs : Number(timeoutMs);
 
       try {
-        const args = ['enhance', targetPath, '--tool', tool, '--batch-size', batchSize.toString()];
-        const result = await executeCodexLens(args, { cwd: targetPath, timeout: timeoutMs + 30000 });
+        const args = ['enhance', targetPath, '--tool', resolvedTool, '--batch-size', String(resolvedBatchSize)];
+        const timeout = !Number.isNaN(resolvedTimeoutMs) ? resolvedTimeoutMs + 30000 : 330000;
+        const result = await executeCodexLens(args, { cwd: targetPath, timeout });
         if (result.success) {
           try {
-            const parsed = extractJSON(result.output);
+            const parsed = extractJSON(result.output ?? '');
             return { success: true, result: parsed };
           } catch {
-            return { success: true, output: result.output };
+            return { success: true, output: result.output ?? '' };
           }
         } else {
           return { success: false, error: result.error, status: 500 };
         }
-      } catch (err) {
-        return { success: false, error: err.message, status: 500 };
+      } catch (err: unknown) {
+        return { success: false, error: err instanceof Error ? err.message : String(err), status: 500 };
       }
     });
     return true;
@@ -823,7 +832,7 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
 
       if (result.success) {
         try {
-          const parsed = extractJSON(result.output);
+          const parsed = extractJSON(result.output ?? '');
           const allResults = parsed.result?.results || [];
 
           // Truncate content and split results
@@ -863,9 +872,9 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: result.error }));
       }
-    } catch (err) {
+    } catch (err: unknown) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: err.message }));
+      res.end(JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }));
     }
     return true;
   }
@@ -891,7 +900,7 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
 
       if (result.success) {
         try {
-          const parsed = extractJSON(result.output);
+          const parsed = extractJSON(result.output ?? '');
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true, ...parsed.result }));
         } catch {
@@ -902,9 +911,9 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: result.error }));
       }
-    } catch (err) {
+    } catch (err: unknown) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: err.message }));
+      res.end(JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }));
     }
     return true;
   }
@@ -936,7 +945,7 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
 
       if (result.success) {
         try {
-          const parsed = extractJSON(result.output);
+          const parsed = extractJSON(result.output ?? '');
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true, ...parsed.result }));
         } catch {
@@ -947,9 +956,9 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: result.error }));
       }
-    } catch (err) {
+    } catch (err: unknown) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: err.message }));
+      res.end(JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }));
     }
     return true;
   }
@@ -961,9 +970,9 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
       const gpuInfo = await detectGpuSupport();
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, ...gpuInfo }));
-    } catch (err) {
+    } catch (err: unknown) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: err.message }));
+      res.end(JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }));
     }
     return true;
   }
@@ -977,7 +986,7 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         const result = await executeCodexLens(['gpu-list', '--json']);
         if (result.success) {
           try {
-            const parsed = extractJSON(result.output);
+            const parsed = extractJSON(result.output ?? '');
             if (parsed.devices && parsed.devices.length > 0) {
               res.writeHead(200, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify(parsed));
@@ -1045,9 +1054,9 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, devices: devices, selected_device_id: null }));
-    } catch (err) {
+    } catch (err: unknown) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: err.message }));
+      res.end(JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }));
     }
     return true;
   }
@@ -1055,17 +1064,18 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
   // API: Select GPU device for embedding
   if (pathname === '/api/codexlens/gpu/select' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { device_id } = body;
+      const { device_id } = body as { device_id?: unknown };
+      const resolvedDeviceId = typeof device_id === 'string' || typeof device_id === 'number' ? device_id : undefined;
 
-      if (device_id === undefined || device_id === null) {
+      if (resolvedDeviceId === undefined) {
         return { success: false, error: 'device_id is required', status: 400 };
       }
 
       try {
-        const result = await executeCodexLens(['gpu-select', String(device_id), '--json']);
+        const result = await executeCodexLens(['gpu-select', String(resolvedDeviceId), '--json']);
         if (result.success) {
           try {
-            const parsed = extractJSON(result.output);
+            const parsed = extractJSON(result.output ?? '');
             return parsed;
           } catch {
             return { success: true, message: 'GPU selected', output: result.output };
@@ -1073,8 +1083,8 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         } else {
           return { success: false, error: result.error, status: 500 };
         }
-      } catch (err) {
-        return { success: false, error: err.message, status: 500 };
+      } catch (err: unknown) {
+        return { success: false, error: err instanceof Error ? err.message : String(err), status: 500 };
       }
     });
     return true;
@@ -1087,7 +1097,7 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         const result = await executeCodexLens(['gpu-reset', '--json']);
         if (result.success) {
           try {
-            const parsed = extractJSON(result.output);
+            const parsed = extractJSON(result.output ?? '');
             return parsed;
           } catch {
             return { success: true, message: 'GPU selection reset', output: result.output };
@@ -1095,8 +1105,8 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         } else {
           return { success: false, error: result.error, status: 500 };
         }
-      } catch (err) {
-        return { success: false, error: err.message, status: 500 };
+      } catch (err: unknown) {
+        return { success: false, error: err instanceof Error ? err.message : String(err), status: 500 };
       }
     });
     return true;
@@ -1107,14 +1117,20 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
     handlePostRequest(req, res, async (body) => {
       try {
         // Get GPU mode from request body, default to 'cpu'
-        const gpuMode: GpuMode = body?.gpuMode || 'cpu';
+        const { gpuMode } = body as { gpuMode?: unknown };
+        const resolvedGpuModeCandidate = typeof gpuMode === 'string' && gpuMode.trim().length > 0 ? gpuMode : 'cpu';
         const validModes: GpuMode[] = ['cpu', 'cuda', 'directml'];
 
-        if (!validModes.includes(gpuMode)) {
-          return { success: false, error: `Invalid GPU mode: ${gpuMode}. Valid modes: ${validModes.join(', ')}`, status: 400 };
+        if (!validModes.includes(resolvedGpuModeCandidate as GpuMode)) {
+          return {
+            success: false,
+            error: `Invalid GPU mode: ${resolvedGpuModeCandidate}. Valid modes: ${validModes.join(', ')}`,
+            status: 400
+          };
         }
 
-        const result = await installSemantic(gpuMode);
+        const resolvedGpuMode = resolvedGpuModeCandidate as GpuMode;
+        const result = await installSemantic(resolvedGpuMode);
         if (result.success) {
           const status = await checkSemanticStatus();
           const modeDescriptions = {
@@ -1124,15 +1140,15 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
           };
           return {
             success: true,
-            message: `Semantic search installed successfully with ${modeDescriptions[gpuMode]}`,
-            gpuMode,
+            message: `Semantic search installed successfully with ${modeDescriptions[resolvedGpuMode]}`,
+            gpuMode: resolvedGpuMode,
             ...status
           };
         } else {
           return { success: false, error: result.error, status: 500 };
         }
-      } catch (err) {
-        return { success: false, error: err.message, status: 500 };
+      } catch (err: unknown) {
+        return { success: false, error: err instanceof Error ? err.message : String(err), status: 500 };
       }
     });
     return true;
@@ -1151,7 +1167,7 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
       const result = await executeCodexLens(['model-list', '--json']);
       if (result.success) {
         try {
-          const parsed = extractJSON(result.output);
+          const parsed = extractJSON(result.output ?? '');
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(parsed));
         } catch {
@@ -1162,9 +1178,9 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: result.error }));
       }
-    } catch (err) {
+    } catch (err: unknown) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: err.message }));
+      res.end(JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }));
     }
     return true;
   }
@@ -1172,17 +1188,18 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
   // API: CodexLens Model Download (download embedding model by profile)
   if (pathname === '/api/codexlens/models/download' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { profile } = body;
+      const { profile } = body as { profile?: unknown };
+      const resolvedProfile = typeof profile === 'string' && profile.trim().length > 0 ? profile.trim() : undefined;
 
-      if (!profile) {
+      if (!resolvedProfile) {
         return { success: false, error: 'profile is required', status: 400 };
       }
 
       try {
-        const result = await executeCodexLens(['model-download', profile, '--json'], { timeout: 600000 }); // 10 min for download
+        const result = await executeCodexLens(['model-download', resolvedProfile, '--json'], { timeout: 600000 }); // 10 min for download
         if (result.success) {
           try {
-            const parsed = extractJSON(result.output);
+            const parsed = extractJSON(result.output ?? '');
             return { success: true, ...parsed };
           } catch {
             return { success: true, output: result.output };
@@ -1190,8 +1207,8 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         } else {
           return { success: false, error: result.error, status: 500 };
         }
-      } catch (err) {
-        return { success: false, error: err.message, status: 500 };
+      } catch (err: unknown) {
+        return { success: false, error: err instanceof Error ? err.message : String(err), status: 500 };
       }
     });
     return true;
@@ -1200,17 +1217,18 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
   // API: CodexLens Model Delete (delete embedding model by profile)
   if (pathname === '/api/codexlens/models/delete' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { profile } = body;
+      const { profile } = body as { profile?: unknown };
+      const resolvedProfile = typeof profile === 'string' && profile.trim().length > 0 ? profile.trim() : undefined;
 
-      if (!profile) {
+      if (!resolvedProfile) {
         return { success: false, error: 'profile is required', status: 400 };
       }
 
       try {
-        const result = await executeCodexLens(['model-delete', profile, '--json']);
+        const result = await executeCodexLens(['model-delete', resolvedProfile, '--json']);
         if (result.success) {
           try {
-            const parsed = extractJSON(result.output);
+            const parsed = extractJSON(result.output ?? '');
             return { success: true, ...parsed };
           } catch {
             return { success: true, output: result.output };
@@ -1218,8 +1236,8 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         } else {
           return { success: false, error: result.error, status: 500 };
         }
-      } catch (err) {
-        return { success: false, error: err.message, status: 500 };
+      } catch (err: unknown) {
+        return { success: false, error: err instanceof Error ? err.message : String(err), status: 500 };
       }
     });
     return true;
@@ -1239,7 +1257,7 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
       const result = await executeCodexLens(['model-info', profile, '--json']);
       if (result.success) {
         try {
-          const parsed = extractJSON(result.output);
+          const parsed = extractJSON(result.output ?? '');
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(parsed));
         } catch {
@@ -1250,9 +1268,9 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: result.error }));
       }
-    } catch (err) {
+    } catch (err: unknown) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: err.message }));
+      res.end(JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }));
     }
     return true;
   }
@@ -1295,7 +1313,7 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         try {
           const result = await executeCodexLens(['config', '--json']);
           if (result.success) {
-            const config = extractJSON(result.output);
+            const config = extractJSON(result.output ?? '');
             if (config.success && config.result) {
               // Map config values
               if (config.result.reranker_backend) {
@@ -1321,9 +1339,9 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, ...rerankerConfig }));
-    } catch (err) {
+    } catch (err: unknown) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: err.message }));
+      res.end(JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }));
     }
     return true;
   }
@@ -1331,52 +1349,78 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
   // API: Set Reranker Configuration
   if (pathname === '/api/codexlens/reranker/config' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { backend, model_name, api_provider, api_key, litellm_endpoint } = body;
+      const { backend, model_name, api_provider, api_key, litellm_endpoint } = body as {
+        backend?: unknown;
+        model_name?: unknown;
+        api_provider?: unknown;
+        api_key?: unknown;
+        litellm_endpoint?: unknown;
+      };
+      const resolvedBackend = typeof backend === 'string' && backend.trim().length > 0 ? backend : undefined;
+      const resolvedModelName = typeof model_name === 'string' && model_name.trim().length > 0 ? model_name : undefined;
+      const resolvedApiProvider = typeof api_provider === 'string' && api_provider.trim().length > 0 ? api_provider : undefined;
+      const resolvedApiKey = typeof api_key === 'string' && api_key.trim().length > 0 ? api_key : undefined;
+      const resolvedLiteLLMEndpoint =
+        typeof litellm_endpoint === 'string' && litellm_endpoint.trim().length > 0 ? litellm_endpoint : undefined;
 
       // Validate backend
       const validBackends = ['onnx', 'api', 'litellm', 'legacy', 'fastembed'];
-      if (backend && !validBackends.includes(backend)) {
-        return { success: false, error: `Invalid backend: ${backend}. Valid options: ${validBackends.join(', ')}`, status: 400 };
+      if (resolvedBackend && !validBackends.includes(resolvedBackend)) {
+        return {
+          success: false,
+          error: `Invalid backend: ${resolvedBackend}. Valid options: ${validBackends.join(', ')}`,
+          status: 400
+        };
       }
 
       // Validate api_provider
       const validProviders = ['siliconflow', 'cohere', 'jina'];
-      if (api_provider && !validProviders.includes(api_provider)) {
-        return { success: false, error: `Invalid api_provider: ${api_provider}. Valid options: ${validProviders.join(', ')}`, status: 400 };
+      if (resolvedApiProvider && !validProviders.includes(resolvedApiProvider)) {
+        return {
+          success: false,
+          error: `Invalid api_provider: ${resolvedApiProvider}. Valid options: ${validProviders.join(', ')}`,
+          status: 400
+        };
       }
 
       try {
         const updates: string[] = [];
 
         // Set backend
-        if (backend) {
-          const result = await executeCodexLens(['config', 'set', 'reranker_backend', backend, '--json']);
+        if (resolvedBackend) {
+          const result = await executeCodexLens(['config', 'set', 'reranker_backend', resolvedBackend, '--json']);
           if (result.success) updates.push('backend');
         }
 
         // Set model
-        if (model_name) {
-          const result = await executeCodexLens(['config', 'set', 'reranker_model', model_name, '--json']);
+        if (resolvedModelName) {
+          const result = await executeCodexLens(['config', 'set', 'reranker_model', resolvedModelName, '--json']);
           if (result.success) updates.push('model_name');
         }
 
         // Set API provider
-        if (api_provider) {
-          const result = await executeCodexLens(['config', 'set', 'reranker_api_provider', api_provider, '--json']);
+        if (resolvedApiProvider) {
+          const result = await executeCodexLens(['config', 'set', 'reranker_api_provider', resolvedApiProvider, '--json']);
           if (result.success) updates.push('api_provider');
         }
 
         // Set LiteLLM endpoint
-        if (litellm_endpoint) {
-          const result = await executeCodexLens(['config', 'set', 'reranker_litellm_endpoint', litellm_endpoint, '--json']);
+        if (resolvedLiteLLMEndpoint) {
+          const result = await executeCodexLens([
+            'config',
+            'set',
+            'reranker_litellm_endpoint',
+            resolvedLiteLLMEndpoint,
+            '--json'
+          ]);
           if (result.success) updates.push('litellm_endpoint');
         }
 
         // Handle API key - write to .env file or environment
-        if (api_key) {
+        if (resolvedApiKey) {
           // For security, we store in process.env for the current session
           // In production, this should be written to a secure .env file
-          process.env.RERANKER_API_KEY = api_key;
+          process.env.RERANKER_API_KEY = resolvedApiKey;
           updates.push('api_key');
         }
 
@@ -1385,8 +1429,8 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
           message: `Updated: ${updates.join(', ')}`,
           updated_fields: updates
         };
-      } catch (err) {
-        return { success: false, error: err.message, status: 500 };
+      } catch (err: unknown) {
+        return { success: false, error: err instanceof Error ? err.message : String(err), status: 500 };
       }
     });
     return true;
@@ -1409,7 +1453,7 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
       const result = await executeCodexLens(['reranker-model-list', '--json']);
       if (result.success) {
         try {
-          const parsed = extractJSON(result.output);
+          const parsed = extractJSON(result.output ?? '');
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(parsed));
         } catch {
@@ -1420,9 +1464,9 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: result.error }));
       }
-    } catch (err) {
+    } catch (err: unknown) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: err.message }));
+      res.end(JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }));
     }
     return true;
   }
@@ -1430,17 +1474,18 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
   // API: Download Reranker Model (download reranker model by profile)
   if (pathname === '/api/codexlens/reranker/models/download' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { profile } = body;
+      const { profile } = body as { profile?: unknown };
+      const resolvedProfile = typeof profile === 'string' && profile.trim().length > 0 ? profile.trim() : undefined;
 
-      if (!profile) {
+      if (!resolvedProfile) {
         return { success: false, error: 'profile is required', status: 400 };
       }
 
       try {
-        const result = await executeCodexLens(['reranker-model-download', profile, '--json'], { timeout: 600000 }); // 10 min for download
+        const result = await executeCodexLens(['reranker-model-download', resolvedProfile, '--json'], { timeout: 600000 }); // 10 min for download
         if (result.success) {
           try {
-            const parsed = extractJSON(result.output);
+            const parsed = extractJSON(result.output ?? '');
             return { success: true, ...parsed };
           } catch {
             return { success: true, output: result.output };
@@ -1448,8 +1493,8 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         } else {
           return { success: false, error: result.error, status: 500 };
         }
-      } catch (err) {
-        return { success: false, error: err.message, status: 500 };
+      } catch (err: unknown) {
+        return { success: false, error: err instanceof Error ? err.message : String(err), status: 500 };
       }
     });
     return true;
@@ -1458,17 +1503,18 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
   // API: Delete Reranker Model (delete reranker model by profile)
   if (pathname === '/api/codexlens/reranker/models/delete' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { profile } = body;
+      const { profile } = body as { profile?: unknown };
+      const resolvedProfile = typeof profile === 'string' && profile.trim().length > 0 ? profile.trim() : undefined;
 
-      if (!profile) {
+      if (!resolvedProfile) {
         return { success: false, error: 'profile is required', status: 400 };
       }
 
       try {
-        const result = await executeCodexLens(['reranker-model-delete', profile, '--json']);
+        const result = await executeCodexLens(['reranker-model-delete', resolvedProfile, '--json']);
         if (result.success) {
           try {
-            const parsed = extractJSON(result.output);
+            const parsed = extractJSON(result.output ?? '');
             return { success: true, ...parsed };
           } catch {
             return { success: true, output: result.output };
@@ -1476,8 +1522,8 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         } else {
           return { success: false, error: result.error, status: 500 };
         }
-      } catch (err) {
-        return { success: false, error: err.message, status: 500 };
+      } catch (err: unknown) {
+        return { success: false, error: err instanceof Error ? err.message : String(err), status: 500 };
       }
     });
     return true;
@@ -1497,7 +1543,7 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
       const result = await executeCodexLens(['reranker-model-info', profile, '--json']);
       if (result.success) {
         try {
-          const parsed = extractJSON(result.output);
+          const parsed = extractJSON(result.output ?? '');
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(parsed));
         } catch {
@@ -1508,9 +1554,9 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: result.error }));
       }
-    } catch (err) {
+    } catch (err: unknown) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: err.message }));
+      res.end(JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }));
     }
     return true;
   }
@@ -1538,8 +1584,10 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
   // API: Start File Watcher
   if (pathname === '/api/codexlens/watch/start' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { path: watchPath, debounce_ms = 1000 } = body;
-      const targetPath = watchPath || initialPath;
+      const { path: watchPath, debounce_ms = 1000 } = body as { path?: unknown; debounce_ms?: unknown };
+      const targetPath = typeof watchPath === 'string' && watchPath.trim().length > 0 ? watchPath : initialPath;
+      const resolvedDebounceMs = typeof debounce_ms === 'number' ? debounce_ms : Number(debounce_ms);
+      const debounceMs = !Number.isNaN(resolvedDebounceMs) && resolvedDebounceMs > 0 ? resolvedDebounceMs : 1000;
 
       if (watcherStats.running) {
         return { success: false, error: 'Watcher already running', status: 400 };
@@ -1568,11 +1616,11 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         // Verify directory is indexed before starting watcher
         try {
           const statusResult = await executeCodexLens(['projects', 'list', '--json']);
-          if (statusResult.success && statusResult.stdout) {
-            const parsed = extractJSON(statusResult.stdout);
+          if (statusResult.success && statusResult.output) {
+            const parsed = extractJSON(statusResult.output);
             const projects = parsed.result || parsed || [];
             const normalizedTarget = targetPath.toLowerCase().replace(/\\/g, '/');
-            const isIndexed = Array.isArray(projects) && projects.some((p: { source_root: string }) =>
+            const isIndexed = Array.isArray(projects) && projects.some((p: { source_root?: string }) =>
               p.source_root && p.source_root.toLowerCase().replace(/\\/g, '/') === normalizedTarget
             );
             if (!isIndexed) {
@@ -1591,7 +1639,7 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         // Spawn watch process using Python (no shell: true for security)
         // CodexLens is a Python package, must run via python -m codexlens
         const pythonPath = getVenvPythonPath();
-        const args = ['-m', 'codexlens', 'watch', targetPath, '--debounce', String(debounce_ms)];
+        const args = ['-m', 'codexlens', 'watch', targetPath, '--debounce', String(debounceMs)];
         watcherProcess = spawn(pythonPath, args, {
           cwd: targetPath,
           stdio: ['ignore', 'pipe', 'pipe'],
@@ -1676,8 +1724,8 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
           path: targetPath,
           pid: watcherProcess.pid
         };
-      } catch (err) {
-        return { success: false, error: err.message, status: 500 };
+      } catch (err: unknown) {
+        return { success: false, error: err instanceof Error ? err.message : String(err), status: 500 };
       }
     });
     return true;
@@ -1728,8 +1776,8 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
           message: 'Watcher stopped',
           ...finalStats
         };
-      } catch (err) {
-        return { success: false, error: err.message, status: 500 };
+      } catch (err: unknown) {
+        return { success: false, error: err instanceof Error ? err.message : String(err), status: 500 };
       }
     });
     return true;
@@ -1761,22 +1809,23 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
         'from codexlens.semantic.splade_encoder import check_splade_available; ok, err = check_splade_available(); print("OK" if ok else err)'
       ]);
 
-      const available = result.output.includes('OK');
+      const output = result.output ?? '';
+      const available = output.includes('OK');
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         available,
         installed: available,
         model: 'naver/splade-cocondenser-ensembledistil',
-        error: available ? null : result.output.trim()
+        error: available ? null : output.trim()
       }));
-    } catch (err) {
+    } catch (err: unknown) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         available: false,
         installed: false,
         model: 'naver/splade-cocondenser-ensembledistil',
-        error: err.message
+        error: err instanceof Error ? err.message : String(err)
       }));
     }
     return true;
@@ -1786,8 +1835,9 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
   if (pathname === '/api/codexlens/splade/install' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
       try {
-        const gpu = body?.gpu || false;
-        const packageName = gpu ? 'codex-lens[splade-gpu]' : 'codex-lens[splade]';
+        const { gpu } = body as { gpu?: unknown };
+        const useGpu = typeof gpu === 'boolean' ? gpu : false;
+        const packageName = useGpu ? 'codex-lens[splade-gpu]' : 'codex-lens[splade]';
 
         // Use pip to install the SPLADE extras
         const { spawn } = await import('child_process');
@@ -1800,14 +1850,16 @@ export async function handleCodexLensRoutes(ctx: RouteContext): Promise<boolean>
 
         return {
           success: true,
-          message: `SPLADE installed successfully (${gpu ? 'GPU' : 'CPU'} mode)`,
+          message: `SPLADE installed successfully (${useGpu ? 'GPU' : 'CPU'} mode)`,
           output: result.stdout
         };
-      } catch (err) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        const stderr = (err as { stderr?: unknown })?.stderr;
         return {
           success: false,
-          error: err.message,
-          stderr: err.stderr,
+          error: message,
+          stderr: typeof stderr === 'string' ? stderr : undefined,
           status: 500
         };
       }
@@ -1855,8 +1907,9 @@ except Exception as e:
 
       const result = await executeCodexLens(['python', '-c', pythonCode]);
 
-      if (result.output.startsWith('OK|')) {
-        const parts = result.output.trim().split('|');
+      const output = result.output ?? '';
+      if (output.startsWith('OK|')) {
+        const parts = output.trim().split('|');
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           exists: true,
@@ -1864,17 +1917,17 @@ except Exception as e:
           postings: parseInt(parts[2]),
           model: parts[3]
         }));
-      } else if (result.output.startsWith('ERROR|')) {
-        const errorMsg = result.output.substring(6).trim();
+      } else if (output.startsWith('ERROR|')) {
+        const errorMsg = output.substring(6).trim();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ exists: false, error: errorMsg }));
       } else {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ exists: false }));
       }
-    } catch (err) {
+    } catch (err: unknown) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ exists: false, error: err.message }));
+      res.end(JSON.stringify({ exists: false, error: err instanceof Error ? err.message : String(err) }));
     }
     return true;
   }
@@ -1882,16 +1935,17 @@ except Exception as e:
   // API: SPLADE Index Rebuild - Rebuild SPLADE index for a project
   if (pathname === '/api/codexlens/splade/rebuild' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { path: projectPath } = body;
+      const { path: projectPath } = body as { path?: unknown };
+      const resolvedProjectPath = typeof projectPath === 'string' && projectPath.trim().length > 0 ? projectPath : undefined;
 
-      if (!projectPath) {
+      if (!resolvedProjectPath) {
         return { success: false, error: 'Missing path parameter', status: 400 };
       }
 
       try {
         // Use 'index splade' instead of deprecated 'splade-index'
-        const result = await executeCodexLens(['index', 'splade', projectPath, '--rebuild'], {
-          cwd: projectPath,
+        const result = await executeCodexLens(['index', 'splade', resolvedProjectPath, '--rebuild'], {
+          cwd: resolvedProjectPath,
           timeout: 1800000 // 30 minutes for large codebases
         });
 
@@ -1909,8 +1963,8 @@ except Exception as e:
             status: 500
           };
         }
-      } catch (err) {
-        return { success: false, error: err.message, status: 500 };
+      } catch (err: unknown) {
+        return { success: false, error: err instanceof Error ? err.message : String(err), status: 500 };
       }
     });
     return true;
@@ -2059,9 +2113,9 @@ except Exception as e:
         raw: content,
         settings: settingsDefaults
       }));
-    } catch (err) {
+    } catch (err: unknown) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: err.message }));
+      res.end(JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }));
     }
     return true;
   }
@@ -2260,8 +2314,8 @@ except Exception as e:
           path: envPath,
           settingsPath
         };
-      } catch (err) {
-        return { success: false, error: err.message, status: 500 };
+      } catch (err: unknown) {
+        return { success: false, error: err instanceof Error ? err.message : String(err), status: 500 };
       }
     });
     return true;

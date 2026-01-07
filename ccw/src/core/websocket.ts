@@ -1,11 +1,17 @@
-// @ts-nocheck
 import { createHash } from 'crypto';
+import type { IncomingMessage } from 'http';
+import type { Duplex } from 'stream';
 
 // WebSocket clients for real-time notifications
-export const wsClients = new Set();
+export const wsClients = new Set<Duplex>();
 
-export function handleWebSocketUpgrade(req, socket, head) {
-  const key = req.headers['sec-websocket-key'];
+export function handleWebSocketUpgrade(req: IncomingMessage, socket: Duplex, _head: Buffer): void {
+  const header = req.headers['sec-websocket-key'];
+  const key = Array.isArray(header) ? header[0] : header;
+  if (!key) {
+    socket.end();
+    return;
+  }
   const acceptKey = createHash('sha1')
     .update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
     .digest('base64');
@@ -26,7 +32,7 @@ export function handleWebSocketUpgrade(req, socket, head) {
   console.log(`[WS] Client connected (${wsClients.size} total)`);
 
   // Handle incoming messages
-  socket.on('data', (buffer) => {
+  socket.on('data', (buffer: Buffer) => {
     try {
       const frame = parseWebSocketFrame(buffer);
       if (!frame) return;
@@ -74,7 +80,7 @@ export function handleWebSocketUpgrade(req, socket, head) {
  * Parse WebSocket frame (simplified)
  * Returns { opcode, payload } or null
  */
-export function parseWebSocketFrame(buffer) {
+export function parseWebSocketFrame(buffer: Buffer): { opcode: number; payload: string } | null {
   if (buffer.length < 2) return null;
 
   const firstByte = buffer[0];
@@ -97,7 +103,7 @@ export function parseWebSocketFrame(buffer) {
     offset = 10;
   }
 
-  let mask = null;
+  let mask: Buffer | null = null;
   if (isMasked) {
     mask = buffer.slice(offset, offset + 4);
     offset += 4;
@@ -117,7 +123,7 @@ export function parseWebSocketFrame(buffer) {
 /**
  * Create WebSocket frame
  */
-export function createWebSocketFrame(data) {
+export function createWebSocketFrame(data: unknown): Buffer {
   const payload = Buffer.from(JSON.stringify(data), 'utf8');
   const length = payload.length;
 
@@ -147,7 +153,7 @@ export function createWebSocketFrame(data) {
 /**
  * Broadcast message to all connected WebSocket clients
  */
-export function broadcastToClients(data) {
+export function broadcastToClients(data: unknown): void {
   const frame = createWebSocketFrame(data);
 
   for (const client of wsClients) {
@@ -158,13 +164,15 @@ export function broadcastToClients(data) {
     }
   }
 
-  console.log(`[WS] Broadcast to ${wsClients.size} clients:`, data.type);
+  const eventType =
+    typeof data === 'object' && data !== null && 'type' in data ? (data as { type?: unknown }).type : undefined;
+  console.log(`[WS] Broadcast to ${wsClients.size} clients:`, eventType);
 }
 
 /**
  * Extract session ID from file path
  */
-export function extractSessionIdFromPath(filePath) {
+export function extractSessionIdFromPath(filePath: string): string | null {
   // Normalize path
   const normalized = filePath.replace(/\\/g, '/');
 

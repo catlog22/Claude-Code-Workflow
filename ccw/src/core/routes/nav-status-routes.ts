@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Navigation Status Routes Module
  * Aggregated status endpoint for navigation bar badge updates
@@ -6,18 +5,10 @@
  * API Endpoints:
  * - GET /api/nav-status - Get aggregated navigation bar status (counts for all badges)
  */
-import type { IncomingMessage, ServerResponse } from 'http';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-
-export interface RouteContext {
-  pathname: string;
-  url: URL;
-  req: IncomingMessage;
-  res: ServerResponse;
-  initialPath: string;
-}
+import type { RouteContext } from './types.js';
 
 // ========== Count Helper Functions ==========
 

@@ -1,22 +1,51 @@
-// @ts-nocheck
 /**
  * Rules Routes Module
  * Handles all Rules-related API endpoints
  */
-import type { IncomingMessage, ServerResponse } from 'http';
 import { readFileSync, existsSync, readdirSync, unlinkSync, promises as fsPromises } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { executeCliTool } from '../../tools/cli-executor.js';
+import type { RouteContext } from './types.js';
 
-export interface RouteContext {
-  pathname: string;
-  url: URL;
-  req: IncomingMessage;
-  res: ServerResponse;
-  initialPath: string;
-  handlePostRequest: (req: IncomingMessage, res: ServerResponse, handler: (body: unknown) => Promise<any>) => void;
-  broadcastToClients: (data: unknown) => void;
+interface ParsedRuleFrontmatter {
+  paths: string[];
+  content: string;
+}
+
+interface RuleDetail {
+  name: string;
+  paths: string[];
+  content: string;
+  location: string;
+  path: string;
+  subdirectory: string | null;
+}
+
+interface RuleConfigResult {
+  projectRules: RuleDetail[];
+  userRules: RuleDetail[];
+}
+
+interface RuleCreateParams {
+  fileName: string;
+  content: string;
+  paths: string[];
+  location: string;
+  subdirectory: string;
+  projectPath: string;
+}
+
+interface RuleGenerateParams {
+  generationType: string;
+  description?: string;
+  templateType?: string;
+  extractScope?: string;
+  extractFocus?: string;
+  fileName: string;
+  location: string;
+  subdirectory: string;
+  projectPath: string;
 }
 
 /**
@@ -24,8 +53,8 @@ export interface RouteContext {
  * @param {string} content
  * @returns {Object}
  */
-function parseRuleFrontmatter(content) {
-  const result = {
+function parseRuleFrontmatter(content: string): ParsedRuleFrontmatter {
+  const result: ParsedRuleFrontmatter = {
     paths: [],
     content: content
   };
@@ -64,8 +93,8 @@ function parseRuleFrontmatter(content) {
  * @param {string} subdirectory
  * @returns {Object[]}
  */
-function scanRulesDirectory(dirPath, location, subdirectory) {
-  const rules = [];
+function scanRulesDirectory(dirPath: string, location: string, subdirectory: string): RuleDetail[] {
+  const rules: RuleDetail[] = [];
 
   try {
     const entries = readdirSync(dirPath, { withFileTypes: true });
@@ -102,8 +131,8 @@ function scanRulesDirectory(dirPath, location, subdirectory) {
  * @param {string} projectPath
  * @returns {Object}
  */
-function getRulesConfig(projectPath) {
-  const result = {
+function getRulesConfig(projectPath: string): RuleConfigResult {
+  const result: RuleConfigResult = {
     projectRules: [],
     userRules: []
   };
@@ -135,7 +164,7 @@ function getRulesConfig(projectPath) {
  * @param {string} ruleName
  * @returns {string|null}
  */
-function findRuleFile(baseDir, ruleName) {
+function findRuleFile(baseDir: string, ruleName: string): string | null {
   try {
     // Direct path
     const directPath = join(baseDir, ruleName);
@@ -164,7 +193,7 @@ function findRuleFile(baseDir, ruleName) {
  * @param {string} projectPath
  * @returns {Object}
  */
-function getRuleDetail(ruleName, location, projectPath) {
+function getRuleDetail(ruleName: string, location: string, projectPath: string): { rule?: RuleDetail; error?: string } {
   try {
     const baseDir = location === 'project'
       ? join(projectPath, '.claude', 'rules')
@@ -180,17 +209,26 @@ function getRuleDetail(ruleName, location, projectPath) {
     const content = readFileSync(rulePath, 'utf8');
     const parsed = parseRuleFrontmatter(content);
 
+    const normalizedBaseDir = baseDir.replace(/\\/g, '/').replace(/\/+$/, '');
+    const normalizedRulePath = rulePath.replace(/\\/g, '/');
+    const relativePath = normalizedRulePath.startsWith(`${normalizedBaseDir}/`)
+      ? normalizedRulePath.slice(normalizedBaseDir.length + 1)
+      : ruleName;
+    const relativeParts = relativePath.split('/');
+    const subdirectory = relativeParts.length > 1 ? relativeParts.slice(0, -1).join('/') : null;
+
     return {
       rule: {
         name: ruleName,
         paths: parsed.paths,
         content: parsed.content,
         location,
-        path: rulePath
+        path: rulePath,
+        subdirectory
       }
     };
   } catch (error) {
-    return { error: (error as Error).message };
+    return { error: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -201,7 +239,11 @@ function getRuleDetail(ruleName, location, projectPath) {
  * @param {string} projectPath
  * @returns {Object}
  */
-function deleteRule(ruleName, location, projectPath) {
+function deleteRule(
+  ruleName: string,
+  location: string,
+  projectPath: string
+): { success: true; ruleName: string; location: string } | { error: string; status?: number } {
   try {
     const baseDir = location === 'project'
       ? join(projectPath, '.claude', 'rules')
@@ -217,7 +259,7 @@ function deleteRule(ruleName, location, projectPath) {
 
     return { success: true, ruleName, location };
   } catch (error) {
-    return { error: (error as Error).message };
+    return { error: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -235,7 +277,7 @@ function deleteRule(ruleName, location, projectPath) {
  * @param {string} params.projectPath - Project root path
  * @returns {Object}
  */
-async function generateRuleViaCLI(params) {
+async function generateRuleViaCLI(params: RuleGenerateParams): Promise<Record<string, unknown>> {
   try {
     const {
       generationType,
@@ -335,8 +377,8 @@ FOCUS AREAS: ${extractFocus || 'naming conventions, error handling, code structu
       generatedContent,
       executionId: result.conversation?.id
     };
-  } catch (error) {
-    return { error: (error as Error).message };
+  } catch (error: unknown) {
+    return { error: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -351,7 +393,7 @@ FOCUS AREAS: ${extractFocus || 'naming conventions, error handling, code structu
  * @param {string} params.projectPath - Project root path
  * @returns {Object}
  */
-async function createRule(params) {
+async function createRule(params: RuleCreateParams): Promise<Record<string, unknown>> {
   try {
     const { fileName, content, paths, location, subdirectory, projectPath } = params;
 
@@ -402,8 +444,8 @@ paths: [${paths.join(', ')}]
       path: filePath,
       subdirectory: subdirectory || null
     };
-  } catch (error) {
-    return { error: (error as Error).message };
+  } catch (error: unknown) {
+    return { error: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -443,8 +485,11 @@ export async function handleRulesRoutes(ctx: RouteContext): Promise<boolean> {
   if (pathname.startsWith('/api/rules/') && req.method === 'DELETE') {
     const ruleName = decodeURIComponent(pathname.replace('/api/rules/', ''));
     handlePostRequest(req, res, async (body) => {
-      const { location, projectPath: projectPathParam } = body;
-      return deleteRule(ruleName, location, projectPathParam || initialPath);
+      const { location, projectPath: projectPathParam } = body as { location?: unknown; projectPath?: unknown };
+      const resolvedLocation = typeof location === 'string' && location.trim().length > 0 ? location : 'project';
+      const resolvedProjectPath =
+        typeof projectPathParam === 'string' && projectPathParam.trim().length > 0 ? projectPathParam : initialPath;
+      return deleteRule(ruleName, resolvedLocation, resolvedProjectPath);
     });
     return true;
   }
@@ -460,63 +505,89 @@ export async function handleRulesRoutes(ctx: RouteContext): Promise<boolean> {
         location,
         subdirectory,
         projectPath: projectPathParam,
-        // CLI generation parameters
         generationType,
         description,
         templateType,
         extractScope,
         extractFocus
-      } = body;
+      } = body as {
+        mode?: unknown;
+        fileName?: unknown;
+        content?: unknown;
+        paths?: unknown;
+        location?: unknown;
+        subdirectory?: unknown;
+        projectPath?: unknown;
+        generationType?: unknown;
+        description?: unknown;
+        templateType?: unknown;
+        extractScope?: unknown;
+        extractFocus?: unknown;
+      };
 
-      if (!fileName) {
+      const resolvedMode = typeof mode === 'string' ? mode : '';
+      const resolvedFileName = typeof fileName === 'string' ? fileName : '';
+      const resolvedContent = typeof content === 'string' ? content : '';
+      const resolvedLocation = typeof location === 'string' && location.trim().length > 0 ? location : '';
+      const resolvedSubdirectory = typeof subdirectory === 'string' ? subdirectory : '';
+      const resolvedProjectPath =
+        typeof projectPathParam === 'string' && projectPathParam.trim().length > 0 ? projectPathParam : initialPath;
+      const resolvedGenerationType = typeof generationType === 'string' ? generationType : '';
+      const resolvedDescription = typeof description === 'string' ? description : undefined;
+      const resolvedTemplateType = typeof templateType === 'string' ? templateType : undefined;
+      const resolvedExtractScope = typeof extractScope === 'string' ? extractScope : undefined;
+      const resolvedExtractFocus = typeof extractFocus === 'string' ? extractFocus : undefined;
+      const resolvedPaths = Array.isArray(paths) ? paths.filter((p): p is string => typeof p === 'string') : [];
+
+      if (!resolvedFileName) {
         return { error: 'File name is required' };
       }
 
-      if (!location) {
+      if (!resolvedLocation) {
         return { error: 'Location is required (project or user)' };
       }
 
-      const projectPath = projectPathParam || initialPath;
+      const projectPath = resolvedProjectPath;
 
       // CLI generation mode
-      if (mode === 'cli-generate') {
-        if (!generationType) {
+      if (resolvedMode === 'cli-generate') {
+        if (!resolvedGenerationType) {
           return { error: 'generationType is required for CLI generation mode' };
         }
 
         // Validate based on generation type
-        if (generationType === 'description' && !description) {
+        if (resolvedGenerationType === 'description' && !resolvedDescription) {
           return { error: 'description is required for description-based generation' };
         }
 
-        if (generationType === 'template' && !templateType) {
+        if (resolvedGenerationType === 'template' && !resolvedTemplateType) {
           return { error: 'templateType is required for template-based generation' };
         }
 
         return await generateRuleViaCLI({
-          generationType,
-          description,
-          templateType,
-          extractScope,
-          extractFocus,
-          fileName,
-          location,
-          subdirectory: subdirectory || '',
+          generationType: resolvedGenerationType,
+          description: resolvedDescription,
+          templateType: resolvedTemplateType,
+          extractScope: resolvedExtractScope,
+          extractFocus: resolvedExtractFocus,
+          fileName: resolvedFileName,
+          location: resolvedLocation,
+          subdirectory: resolvedSubdirectory || '',
           projectPath
         });
       }
 
       // Manual creation mode
-      if (!content) {
+      if (!resolvedContent) {
         return { error: 'Content is required for manual creation' };
       }
 
       return await createRule({
-        fileName,
-        content,
-        paths: paths || [],
-        location,
-        subdirectory: subdirectory || '',
+        fileName: resolvedFileName,
+        content: resolvedContent,
+        paths: resolvedPaths,
+        location: resolvedLocation,
+        subdirectory: resolvedSubdirectory || '',
         projectPath
       });
     });

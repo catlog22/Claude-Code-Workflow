@@ -1,13 +1,12 @@
-// @ts-nocheck
 /**
  * MCP Routes Module
  * Handles all MCP-related API endpoints
  */
-import type { IncomingMessage, ServerResponse } from 'http';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
 import * as McpTemplatesDb from './mcp-templates-db.js';
+import type { RouteContext } from './types.js';
 
 // Claude config file path
 const CLAUDE_CONFIG_PATH = join(homedir(), '.claude.json');
@@ -432,16 +431,6 @@ function toggleCodexMcpServer(serverName: string, enabled: boolean): { success?:
   }
 }
 
-export interface RouteContext {
-  pathname: string;
-  url: URL;
-  req: IncomingMessage;
-  res: ServerResponse;
-  initialPath: string;
-  handlePostRequest: (req: IncomingMessage, res: ServerResponse, handler: (body: unknown) => Promise<any>) => void;
-  broadcastToClients: (data: unknown) => void;
-}
-
 // ========================================
 // Helper Functions
 // ========================================
@@ -464,7 +453,7 @@ function getEnterpriseMcpPath(): string {
 /**
  * Safely read and parse JSON file
  */
-function safeReadJson(filePath) {
+function safeReadJson(filePath: string): any | null {
   try {
     if (!existsSync(filePath)) return null;
     const content = readFileSync(filePath, 'utf8');
@@ -479,8 +468,8 @@ function safeReadJson(filePath) {
  * @param {string} filePath
  * @returns {Object} mcpServers object or empty object
  */
-function getMcpServersFromFile(filePath) {
-  const config = safeReadJson(filePath);
+function getMcpServersFromFile(filePath: string): Record<string, unknown> {
+  const config = safeReadJson(filePath) as { mcpServers?: Record<string, unknown> } | null;
   if (!config) return {};
   return config.mcpServers || {};
 }
@@ -492,7 +481,7 @@ function getMcpServersFromFile(filePath) {
  * @param {Object} serverConfig - MCP server configuration
  * @returns {Object} Result with success/error
  */
-function addMcpServerToMcpJson(projectPath, serverName, serverConfig) {
+function addMcpServerToMcpJson(projectPath: string, serverName: string, serverConfig: unknown) {
   try {
     const normalizedPath = normalizePathForFileSystem(projectPath);
     const mcpJsonPath = join(normalizedPath, '.mcp.json');
@@ -530,7 +519,7 @@ function addMcpServerToMcpJson(projectPath, serverName, serverConfig) {
  * @param {string} serverName - MCP server name
  * @returns {Object} Result with success/error
  */
-function removeMcpServerFromMcpJson(projectPath, serverName) {
+function removeMcpServerFromMcpJson(projectPath: string, serverName: string) {
   try {
     const normalizedPath = normalizePathForFileSystem(projectPath);
     const mcpJsonPath = join(normalizedPath, '.mcp.json');
@@ -562,6 +551,26 @@ function removeMcpServerFromMcpJson(projectPath, serverName) {
   }
 }
 
+type McpServerConfig = Record<string, unknown>;
+type McpServers = Record<string, McpServerConfig>;
+type ProjectConfig = {
+  mcpServers?: McpServers;
+  mcpJsonPath?: string;
+  hasMcpJson?: boolean;
+  [key: string]: unknown;
+};
+type ProjectsConfig = Record<string, ProjectConfig>;
+type ConfigSource = { type: string; path: string; count: number };
+
+interface McpConfig {
+  projects: ProjectsConfig;
+  userServers: McpServers;
+  enterpriseServers: McpServers;
+  globalServers: McpServers;
+  configSources: ConfigSource[];
+  error?: string;
+}
+
 /**
  * Get MCP configuration from multiple sources (per official Claude Code docs):
  *
@@ -575,12 +584,13 @@ function removeMcpServerFromMcpJson(projectPath, serverName) {
  *
  * @returns {Object}
  */
-function getMcpConfig() {
+function getMcpConfig(): McpConfig {
   try {
-    const result = {
+    const result: McpConfig = {
       projects: {},
       userServers: {},        // User-level servers from ~/.claude.json mcpServers
       enterpriseServers: {},  // Enterprise managed servers (highest priority)
+      globalServers: {},      // Merged user + enterprise
       configSources: []       // Track where configs came from for debugging
     };
 
@@ -650,7 +660,14 @@ function getMcpConfig() {
     return result;
   } catch (error: unknown) {
     console.error('Error reading MCP config:', error);
-    return { projects: {}, globalServers: {}, userServers: {}, enterpriseServers: {}, configSources: [], error: (error as Error).message };
+    return {
+      projects: {},
+      globalServers: {},
+      userServers: {},
+      enterpriseServers: {},
+      configSources: [],
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -660,7 +677,7 @@ function getMcpConfig() {
  * @param {string} path
  * @returns {string}
  */
-function normalizePathForFileSystem(path) {
+function normalizePathForFileSystem(path: string): string {
   let normalized = path.replace(/\\/g, '/');
   
   // Handle /d/path format -> D:/path
@@ -678,7 +695,7 @@ function normalizePathForFileSystem(path) {
  * @param {Object} claudeConfig - Optional existing config to check format
  * @returns {string}
  */
-function normalizeProjectPathForConfig(path, claudeConfig = null) {
+function normalizeProjectPathForConfig(path: string, claudeConfig: unknown = null): string {
   // IMPORTANT: Always normalize to forward slashes to prevent duplicate entries
   // (e.g., prevents both "D:/Claude_dms3" and "D:\\Claude_dms3")
   let normalizedForward = path.replace(/\\/g, '/');
@@ -699,7 +716,7 @@ function normalizeProjectPathForConfig(path, claudeConfig = null) {
  * @param {boolean} enable
  * @returns {Object}
  */
-function toggleMcpServerEnabled(projectPath, serverName, enable) {
+function toggleMcpServerEnabled(projectPath: string, serverName: string, enable: boolean) {
   try {
     if (!existsSync(CLAUDE_CONFIG_PATH)) {
       return { error: '.claude.json not found' };
@@ -723,7 +740,7 @@ function toggleMcpServerEnabled(projectPath, serverName, enable) {
 
     if (enable) {
       // Remove from disabled list
-      projectConfig.disabledMcpServers = projectConfig.disabledMcpServers.filter(s => s !== serverName);
+      projectConfig.disabledMcpServers = projectConfig.disabledMcpServers.filter((s: string) => s !== serverName);
     } else {
       // Add to disabled list if not already there
       if (!projectConfig.disabledMcpServers.includes(serverName)) {
@@ -755,7 +772,7 @@ function toggleMcpServerEnabled(projectPath, serverName, enable) {
  * @param {boolean} useLegacyConfig - If true, use .claude.json instead of .mcp.json
  * @returns {Object}
  */
-function addMcpServerToProject(projectPath, serverName, serverConfig, useLegacyConfig = false) {
+function addMcpServerToProject(projectPath: string, serverName: string, serverConfig: unknown, useLegacyConfig: boolean = false) {
   try {
     // Default: Use .mcp.json for project-level MCP servers
     if (!useLegacyConfig) {
@@ -823,7 +840,7 @@ function addMcpServerToProject(projectPath, serverName, serverConfig, useLegacyC
  * @param {string} serverName
  * @returns {Object}
  */
-function removeMcpServerFromProject(projectPath, serverName) {
+function removeMcpServerFromProject(projectPath: string, serverName: string) {
   try {
     const normalizedPathForFile = normalizePathForFileSystem(projectPath);
     const mcpJsonPath = join(normalizedPathForFile, '.mcp.json');
@@ -859,7 +876,7 @@ function removeMcpServerFromProject(projectPath, serverName) {
 
           // Also remove from disabled list if present
           if (projectConfig.disabledMcpServers) {
-            projectConfig.disabledMcpServers = projectConfig.disabledMcpServers.filter(s => s !== serverName);
+            projectConfig.disabledMcpServers = projectConfig.disabledMcpServers.filter((s: string) => s !== serverName);
           }
 
           // Write back to file
@@ -894,7 +911,7 @@ function removeMcpServerFromProject(projectPath, serverName) {
  * @param {Object} serverConfig
  * @returns {Object}
  */
-function addGlobalMcpServer(serverName, serverConfig) {
+function addGlobalMcpServer(serverName: string, serverConfig: unknown) {
   try {
     if (!existsSync(CLAUDE_CONFIG_PATH)) {
       return { error: '.claude.json not found' };
@@ -931,7 +948,7 @@ function addGlobalMcpServer(serverName, serverConfig) {
  * @param {string} serverName
  * @returns {Object}
  */
-function removeGlobalMcpServer(serverName) {
+function removeGlobalMcpServer(serverName: string) {
   try {
     if (!existsSync(CLAUDE_CONFIG_PATH)) {
       return { error: '.claude.json not found' };
@@ -967,7 +984,7 @@ function removeGlobalMcpServer(serverName) {
  * @param {string} filePath
  * @returns {Object}
  */
-function readSettingsFile(filePath) {
+function readSettingsFile(filePath: string) {
   try {
     if (!existsSync(filePath)) {
       return {};
@@ -985,7 +1002,7 @@ function readSettingsFile(filePath) {
  * @param {string} filePath
  * @param {Object} settings
  */
-function writeSettingsFile(filePath, settings) {
+function writeSettingsFile(filePath: string, settings: any) {
   const dirPath = dirname(filePath);
   // Ensure directory exists
   if (!existsSync(dirPath)) {
@@ -999,7 +1016,7 @@ function writeSettingsFile(filePath, settings) {
  * @param {string} projectPath
  * @returns {string}
  */
-function getProjectSettingsPath(projectPath) {
+function getProjectSettingsPath(projectPath: string): string {
   // path.join automatically handles cross-platform path separators
   return join(projectPath, '.claude', 'settings.json');
 }
@@ -1007,6 +1024,10 @@ function getProjectSettingsPath(projectPath) {
 // ========================================
 // Route Handlers
 // ========================================
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
 
 /**
  * Handle MCP routes
@@ -1043,11 +1064,22 @@ export async function handleMcpRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Add Codex MCP server
   if (pathname === '/api/codex-mcp-add' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { serverName, serverConfig } = body;
-      if (!serverName || !serverConfig) {
-        return { error: 'serverName and serverConfig are required', status: 400 };
+      if (!isRecord(body)) {
+        return { error: 'Invalid request body', status: 400 };
       }
-      return addCodexMcpServer(serverName, serverConfig);
+
+      const serverName = body.serverName;
+      const serverConfig = body.serverConfig;
+
+      if (typeof serverName !== 'string' || !serverName.trim()) {
+        return { error: 'serverName is required', status: 400 };
+      }
+
+      if (!isRecord(serverConfig)) {
+        return { error: 'serverConfig is required', status: 400 };
+      }
+
+      return addCodexMcpServer(serverName, serverConfig as Record<string, any>);
     });
     return true;
   }
@@ -1055,8 +1087,12 @@ export async function handleMcpRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Remove Codex MCP server
   if (pathname === '/api/codex-mcp-remove' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { serverName } = body;
-      if (!serverName) {
+      if (!isRecord(body)) {
+        return { error: 'Invalid request body', status: 400 };
+      }
+
+      const serverName = body.serverName;
+      if (typeof serverName !== 'string' || !serverName.trim()) {
         return { error: 'serverName is required', status: 400 };
       }
       return removeCodexMcpServer(serverName);
@@ -1067,8 +1103,14 @@ export async function handleMcpRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Toggle Codex MCP server enabled state
   if (pathname === '/api/codex-mcp-toggle' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { serverName, enabled } = body;
-      if (!serverName || enabled === undefined) {
+      if (!isRecord(body)) {
+        return { error: 'Invalid request body', status: 400 };
+      }
+
+      const serverName = body.serverName;
+      const enabled = body.enabled;
+
+      if (typeof serverName !== 'string' || !serverName.trim() || typeof enabled !== 'boolean') {
         return { error: 'serverName and enabled are required', status: 400 };
       }
       return toggleCodexMcpServer(serverName, enabled);
@@ -1079,9 +1121,16 @@ export async function handleMcpRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Toggle MCP server enabled/disabled
   if (pathname === '/api/mcp-toggle' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { projectPath, serverName, enable } = body;
-      if (!projectPath || !serverName) {
-        return { error: 'projectPath and serverName are required', status: 400 };
+      if (!isRecord(body)) {
+        return { error: 'Invalid request body', status: 400 };
+      }
+
+      const projectPath = body.projectPath;
+      const serverName = body.serverName;
+      const enable = body.enable;
+
+      if (typeof projectPath !== 'string' || !projectPath.trim() || typeof serverName !== 'string' || !serverName.trim() || typeof enable !== 'boolean') {
+        return { error: 'projectPath, serverName, and enable are required', status: 400 };
       }
       return toggleMcpServerEnabled(projectPath, serverName, enable);
     });
@@ -1091,8 +1140,16 @@ export async function handleMcpRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Copy MCP server to project
   if (pathname === '/api/mcp-copy-server' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { projectPath, serverName, serverConfig, configType } = body;
-      if (!projectPath || !serverName || !serverConfig) {
+      if (!isRecord(body)) {
+        return { error: 'Invalid request body', status: 400 };
+      }
+
+      const projectPath = body.projectPath;
+      const serverName = body.serverName;
+      const serverConfig = body.serverConfig;
+      const configType = body.configType;
+
+      if (typeof projectPath !== 'string' || !projectPath.trim() || typeof serverName !== 'string' || !serverName.trim() || serverConfig === undefined || serverConfig === null) {
         return { error: 'projectPath, serverName, and serverConfig are required', status: 400 };
       }
       // configType: 'mcp' = use .mcp.json (default), 'claude' = use .claude.json
@@ -1105,8 +1162,12 @@ export async function handleMcpRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Install CCW MCP server to project
   if (pathname === '/api/mcp-install-ccw' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { projectPath } = body;
-      if (!projectPath) {
+      if (!isRecord(body)) {
+        return { error: 'Invalid request body', status: 400 };
+      }
+
+      const projectPath = body.projectPath;
+      if (typeof projectPath !== 'string' || !projectPath.trim()) {
         return { error: 'projectPath is required', status: 400 };
       }
 
@@ -1129,8 +1190,13 @@ export async function handleMcpRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Remove MCP server from project
   if (pathname === '/api/mcp-remove-server' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { projectPath, serverName } = body;
-      if (!projectPath || !serverName) {
+      if (!isRecord(body)) {
+        return { error: 'Invalid request body', status: 400 };
+      }
+
+      const projectPath = body.projectPath;
+      const serverName = body.serverName;
+      if (typeof projectPath !== 'string' || !projectPath.trim() || typeof serverName !== 'string' || !serverName.trim()) {
         return { error: 'projectPath and serverName are required', status: 400 };
       }
       return removeMcpServerFromProject(projectPath, serverName);
@@ -1141,8 +1207,13 @@ export async function handleMcpRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Add MCP server to global scope (top-level mcpServers in ~/.claude.json)
   if (pathname === '/api/mcp-add-global-server' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { serverName, serverConfig } = body;
-      if (!serverName || !serverConfig) {
+      if (!isRecord(body)) {
+        return { error: 'Invalid request body', status: 400 };
+      }
+
+      const serverName = body.serverName;
+      const serverConfig = body.serverConfig;
+      if (typeof serverName !== 'string' || !serverName.trim() || serverConfig === undefined || serverConfig === null) {
         return { error: 'serverName and serverConfig are required', status: 400 };
       }
       return addGlobalMcpServer(serverName, serverConfig);
@@ -1153,8 +1224,12 @@ export async function handleMcpRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Remove MCP server from global scope
   if (pathname === '/api/mcp-remove-global-server' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { serverName } = body;
-      if (!serverName) {
+      if (!isRecord(body)) {
+        return { error: 'Invalid request body', status: 400 };
+      }
+
+      const serverName = body.serverName;
+      if (typeof serverName !== 'string' || !serverName.trim()) {
         return { error: 'serverName is required', status: 400 };
       }
       return removeGlobalMcpServer(serverName);
@@ -1177,14 +1252,29 @@ export async function handleMcpRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Save MCP template
   if (pathname === '/api/mcp-templates' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { name, description, serverConfig, tags, category } = body;
-      if (!name || !serverConfig) {
-        return { error: 'name and serverConfig are required', status: 400 };
+      if (!isRecord(body)) {
+        return { error: 'Invalid request body', status: 400 };
       }
+
+      const name = body.name;
+      const serverConfig = body.serverConfig;
+
+      if (typeof name !== 'string' || !name.trim()) {
+        return { error: 'name is required', status: 400 };
+      }
+
+      if (!isRecord(serverConfig) || typeof serverConfig.command !== 'string') {
+        return { error: 'serverConfig with command is required', status: 400 };
+      }
+
+      const description = typeof body.description === 'string' ? body.description : undefined;
+      const tags = Array.isArray(body.tags) ? body.tags.filter((tag): tag is string => typeof tag === 'string') : undefined;
+      const category = typeof body.category === 'string' ? body.category : undefined;
+
       return McpTemplatesDb.saveTemplate({
         name,
         description,
-        serverConfig,
+        serverConfig: serverConfig as McpTemplatesDb.McpTemplate['serverConfig'],
         tags,
         category
       });
@@ -1244,8 +1334,15 @@ export async function handleMcpRoutes(ctx: RouteContext): Promise<boolean> {
   // API: Install template to project or global
   if (pathname === '/api/mcp-templates/install' && req.method === 'POST') {
     handlePostRequest(req, res, async (body) => {
-      const { templateName, projectPath, scope } = body;
-      if (!templateName) {
+      if (!isRecord(body)) {
+        return { error: 'Invalid request body', status: 400 };
+      }
+
+      const templateName = body.templateName;
+      const projectPath = body.projectPath;
+      const scope = body.scope;
+
+      if (typeof templateName !== 'string' || !templateName.trim()) {
         return { error: 'templateName is required', status: 400 };
       }
 
@@ -1258,7 +1355,7 @@ export async function handleMcpRoutes(ctx: RouteContext): Promise<boolean> {
       if (scope === 'global') {
         return addGlobalMcpServer(templateName, template.serverConfig);
       } else {
-        if (!projectPath) {
+        if (typeof projectPath !== 'string' || !projectPath.trim()) {
           return { error: 'projectPath is required for project scope', status: 400 };
         }
         return addMcpServerToProject(projectPath, templateName, template.serverConfig);

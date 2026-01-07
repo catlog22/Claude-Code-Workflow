@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Add after line 13 (after REVIEW_TEMPLATE constant)
 
 // Modular dashboard JS files (in dependency order)

@@ -1,22 +1,11 @@
-// @ts-nocheck
 /**
  * CLAUDE.md Routes Module
  * Handles all CLAUDE.md memory rules management endpoints
  */
-import type { IncomingMessage, ServerResponse } from 'http';
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync, unlinkSync, mkdirSync } from 'fs';
 import { join, relative } from 'path';
 import { homedir } from 'os';
-
-export interface RouteContext {
-  pathname: string;
-  url: URL;
-  req: IncomingMessage;
-  res: ServerResponse;
-  initialPath: string;
-  handlePostRequest: (req: IncomingMessage, res: ServerResponse, handler: (body: unknown) => Promise<any>) => void;
-  broadcastToClients: (data: unknown) => void;
-}
+import type { RouteContext } from './types.js';
 
 interface ClaudeFile {
   id: string;
@@ -616,7 +605,7 @@ export async function handleClaudeRoutes(ctx: RouteContext): Promise<boolean> {
         if (!result.success || !result.execution?.output) {
           return {
             error: 'CLI execution failed',
-            details: result.execution?.error || 'No output received',
+            details: result.stderr || result.execution?.output?.stderr || 'No output received',
             status: 500
           };
         }
