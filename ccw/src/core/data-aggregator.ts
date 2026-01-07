@@ -197,7 +197,7 @@ export async function aggregateData(sessions: ScanSessionsResult, workflowDir: s
   ];
 
   // Check cache first
-  const cachedData = cache.get(watchPaths);
+  const cachedData = await cache.get(watchPaths);
   if (cachedData !== null) {
     console.log('Using cached dashboard data');
     return cachedData;
@@ -269,7 +269,7 @@ export async function aggregateData(sessions: ScanSessionsResult, workflowDir: s
   }
 
   // Store in cache before returning
-  cache.set(data, watchPaths);
+  await cache.set(data, watchPaths);
 
   return data;
 }

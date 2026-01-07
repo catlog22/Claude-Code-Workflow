@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
+import { readFile, readdir, stat } from 'fs/promises';
 import { join } from 'path';
 
 interface TaskMeta {
@@ -85,10 +85,12 @@ export async function scanLiteTasks(workflowDir: string): Promise<LiteTasks> {
   const litePlanDir = join(workflowDir, '.lite-plan');
   const liteFixDir = join(workflowDir, '.lite-fix');
 
-  return {
-    litePlan: scanLiteDir(litePlanDir, 'lite-plan'),
-    liteFix: scanLiteDir(liteFixDir, 'lite-fix')
-  };
+  const [litePlan, liteFix] = await Promise.all([
+    scanLiteDir(litePlanDir, 'lite-plan'),
+    scanLiteDir(liteFixDir, 'lite-fix'),
+  ]);
+
+  return { litePlan, liteFix };
 }
 
 /**
@@ -97,39 +99,45 @@ export async function scanLiteTasks(workflowDir: string): Promise<LiteTasks> {
  * @param type - Task type ('lite-plan' or 'lite-fix')
  * @returns Array of lite task sessions
  */
-function scanLiteDir(dir: string, type: string): LiteSession[] {
-  if (!existsSync(dir)) return [];
-
+async function scanLiteDir(dir: string, type: string): Promise<LiteSession[]> {
   try {
-    const sessions = readdirSync(dir, { withFileTypes: true })
-      .filter(d => d.isDirectory())
-      .map(d => {
-        const sessionPath = join(dir, d.name);
-        const session: LiteSession = {
-          id: d.name,
-          type,
-          path: sessionPath,
-          createdAt: getCreatedTime(sessionPath),
-          plan: loadPlanJson(sessionPath),
-          tasks: loadTaskJsons(sessionPath),
-          progress: { total: 0, completed: 0, percentage: 0 }
-        };
+    const entries = await readdir(dir, { withFileTypes: true });
 
-        // For lite-fix sessions, also load diagnoses separately
-        if (type === 'lite-fix') {
-          session.diagnoses = loadDiagnoses(sessionPath);
-        }
+    const sessions = (await Promise.all(
+      entries
+        .filter((entry) => entry.isDirectory())
+        .map(async (entry) => {
+          const sessionPath = join(dir, entry.name);
 
-        // Calculate progress
-        session.progress = calculateProgress(session.tasks);
+          const [createdAt, plan, tasks, diagnoses] = await Promise.all([
+            getCreatedTime(sessionPath),
+            loadPlanJson(sessionPath),
+            loadTaskJsons(sessionPath),
+            type === 'lite-fix' ? loadDiagnoses(sessionPath) : Promise.resolve(undefined),
+          ]);
 
-        return session;
-      })
+          const session: LiteSession = {
+            id: entry.name,
+            type,
+            path: sessionPath,
+            createdAt,
+            plan,
+            tasks,
+            diagnoses,
+            progress: { total: 0, completed: 0, percentage: 0 },
+          };
+
+          session.progress = calculateProgress(session.tasks);
+          return session;
+        }),
+    ))
+      .filter((session): session is LiteSession => session !== null)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     return sessions;
-  } catch (err) {
-    console.error(`Error scanning ${dir}:`, (err as Error).message);
+  } catch (err: any) {
+    if (err?.code === 'ENOENT') return [];
+    console.error(`Error scanning ${dir}:`, err?.message || String(err));
     return [];
   }
 }
@@ -139,32 +147,26 @@ function scanLiteDir(dir: string, type: string): LiteSession[] {
  * @param sessionPath - Session directory path
  * @returns Plan data or null
  */
-function loadPlanJson(sessionPath: string): unknown | null {
+async function loadPlanJson(sessionPath: string): Promise<unknown | null> {
   // Try fix-plan.json first (for lite-fix), then plan.json (for lite-plan)
   const fixPlanPath = join(sessionPath, 'fix-plan.json');
   const planPath = join(sessionPath, 'plan.json');
 
   // Try fix-plan.json first
-  if (existsSync(fixPlanPath)) {
-    try {
-      const content = readFileSync(fixPlanPath, 'utf8');
-      return JSON.parse(content);
-    } catch {
-      // Continue to try plan.json
-    }
+  try {
+    const content = await readFile(fixPlanPath, 'utf8');
+    return JSON.parse(content);
+  } catch {
+    // Continue to try plan.json
   }
 
   // Fallback to plan.json
-  if (existsSync(planPath)) {
-    try {
-      const content = readFileSync(planPath, 'utf8');
-      return JSON.parse(content);
-    } catch {
-      return null;
-    }
+  try {
+    const content = await readFile(planPath, 'utf8');
+    return JSON.parse(content);
+  } catch {
+    return null;
   }
-
-  return null;
 }
 
 /**
@@ -176,54 +178,54 @@ function loadPlanJson(sessionPath: string): unknown | null {
  * @param sessionPath - Session directory path
  * @returns Array of task objects
  */
-function loadTaskJsons(sessionPath: string): NormalizedTask[] {
+async function loadTaskJsons(sessionPath: string): Promise<NormalizedTask[]> {
   let tasks: NormalizedTask[] = [];
 
   // Method 1: Check .task/IMPL-*.json files
   const taskDir = join(sessionPath, '.task');
-  if (existsSync(taskDir)) {
-    try {
-      const implTasks = readdirSync(taskDir)
-        .filter(f => f.endsWith('.json') && (
-          f.startsWith('IMPL-') ||
-          f.startsWith('TASK-') ||
-          f.startsWith('task-') ||
-          f.startsWith('diagnosis-') ||
-          /^T\d+\.json$/i.test(f)
-        ))
-        .map(f => {
-          const taskPath = join(taskDir, f);
-          try {
-            const content = readFileSync(taskPath, 'utf8');
-            return normalizeTask(JSON.parse(content));
-          } catch {
-            return null;
-          }
-        })
-        .filter((t): t is NormalizedTask => t !== null);
-      tasks = tasks.concat(implTasks);
-    } catch {
-      // Continue to other methods
-    }
+  try {
+    const implFiles = (await readdir(taskDir))
+      .filter((fileName) => fileName.endsWith('.json') && (
+        fileName.startsWith('IMPL-') ||
+        fileName.startsWith('TASK-') ||
+        fileName.startsWith('task-') ||
+        fileName.startsWith('diagnosis-') ||
+        /^T\d+\.json$/i.test(fileName)
+      ));
+
+    const implTasks = (await Promise.all(
+      implFiles.map(async (fileName) => {
+        const taskPath = join(taskDir, fileName);
+        try {
+          const content = await readFile(taskPath, 'utf8');
+          return normalizeTask(JSON.parse(content));
+        } catch {
+          return null;
+        }
+      }),
+    ))
+      .filter((task): task is NormalizedTask => task !== null);
+
+    tasks = tasks.concat(implTasks);
+  } catch {
+    // Continue to other methods
   }
 
   // Method 2: Check plan.json or fix-plan.json for embedded tasks array
   if (tasks.length === 0) {
-    // Try fix-plan.json first (for lite-fix), then plan.json (for lite-plan)
-    const fixPlanPath = join(sessionPath, 'fix-plan.json');
-    const planPath = join(sessionPath, 'plan.json');
+    const planFiles = [join(sessionPath, 'fix-plan.json'), join(sessionPath, 'plan.json')];
 
-    const planFile = existsSync(fixPlanPath) ? fixPlanPath :
-                     existsSync(planPath) ? planPath : null;
-
-    if (planFile) {
+    for (const planFile of planFiles) {
       try {
-        const plan = JSON.parse(readFileSync(planFile, 'utf8')) as { tasks?: unknown[] };
+        const plan = JSON.parse(await readFile(planFile, 'utf8')) as { tasks?: unknown[] };
         if (Array.isArray(plan.tasks)) {
-          tasks = plan.tasks.map(t => normalizeTask(t)).filter((t): t is NormalizedTask => t !== null);
+          tasks = plan.tasks
+            .map((task) => normalizeTask(task))
+            .filter((task): task is NormalizedTask => task !== null);
+          break;
         }
       } catch {
-        // Continue to other methods
+        // Continue to other plan files
       }
     }
   }
@@ -231,23 +233,27 @@ function loadTaskJsons(sessionPath: string): NormalizedTask[] {
   // Method 3: Check for task-*.json and diagnosis-*.json files in session root
   if (tasks.length === 0) {
     try {
-      const rootTasks = readdirSync(sessionPath)
-        .filter(f => f.endsWith('.json') && (
-          f.startsWith('task-') ||
-          f.startsWith('TASK-') ||
-          f.startsWith('diagnosis-') ||
-          /^T\d+\.json$/i.test(f)
-        ))
-        .map(f => {
-          const taskPath = join(sessionPath, f);
+      const rootFiles = (await readdir(sessionPath))
+        .filter((fileName) => fileName.endsWith('.json') && (
+          fileName.startsWith('task-') ||
+          fileName.startsWith('TASK-') ||
+          fileName.startsWith('diagnosis-') ||
+          /^T\d+\.json$/i.test(fileName)
+        ));
+
+      const rootTasks = (await Promise.all(
+        rootFiles.map(async (fileName) => {
+          const taskPath = join(sessionPath, fileName);
           try {
-            const content = readFileSync(taskPath, 'utf8');
+            const content = await readFile(taskPath, 'utf8');
             return normalizeTask(JSON.parse(content));
           } catch {
             return null;
           }
-        })
-        .filter((t): t is NormalizedTask => t !== null);
+        }),
+      ))
+        .filter((task): task is NormalizedTask => task !== null);
+
       tasks = tasks.concat(rootTasks);
     } catch {
       // No tasks found
@@ -333,10 +339,10 @@ function normalizeTask(task: unknown): NormalizedTask | null {
  * @param dirPath - Directory path
  * @returns ISO date string
  */
-function getCreatedTime(dirPath: string): string {
+async function getCreatedTime(dirPath: string): Promise<string> {
   try {
-    const stat = statSync(dirPath);
-    return stat.birthtime.toISOString();
+    const stats = await stat(dirPath);
+    return stats.birthtime.toISOString();
   } catch {
     return new Date().toISOString();
   }
@@ -366,27 +372,36 @@ function calculateProgress(tasks: NormalizedTask[]): Progress {
  * @param sessionId - Session ID
  * @returns Detailed task info
  */
-export function getLiteTaskDetail(workflowDir: string, type: string, sessionId: string): LiteTaskDetail | null {
+export async function getLiteTaskDetail(workflowDir: string, type: string, sessionId: string): Promise<LiteTaskDetail | null> {
   const dir = type === 'lite-plan'
     ? join(workflowDir, '.lite-plan', sessionId)
     : join(workflowDir, '.lite-fix', sessionId);
 
-  if (!existsSync(dir)) return null;
+  try {
+    const stats = await stat(dir);
+    if (!stats.isDirectory()) return null;
+  } catch {
+    return null;
+  }
+
+  const [plan, tasks, explorations, clarifications, diagnoses] = await Promise.all([
+    loadPlanJson(dir),
+    loadTaskJsons(dir),
+    loadExplorations(dir),
+    loadClarifications(dir),
+    type === 'lite-fix' ? loadDiagnoses(dir) : Promise.resolve(undefined),
+  ]);
 
   const detail: LiteTaskDetail = {
     id: sessionId,
     type,
     path: dir,
-    plan: loadPlanJson(dir),
-    tasks: loadTaskJsons(dir),
-    explorations: loadExplorations(dir),
-    clarifications: loadClarifications(dir)
+    plan,
+    tasks,
+    explorations,
+    clarifications,
+    diagnoses,
   };
-
-  // For lite-fix sessions, also load diagnoses
-  if (type === 'lite-fix') {
-    detail.diagnoses = loadDiagnoses(dir);
-  }
 
   return detail;
 }
@@ -396,12 +411,11 @@ export function getLiteTaskDetail(workflowDir: string, type: string, sessionId: 
  * @param sessionPath - Session directory path
  * @returns Exploration results
  */
-function loadExplorations(sessionPath: string): unknown[] {
+async function loadExplorations(sessionPath: string): Promise<unknown[]> {
   const explorePath = join(sessionPath, 'explorations.json');
-  if (!existsSync(explorePath)) return [];
 
   try {
-    const content = readFileSync(explorePath, 'utf8');
+    const content = await readFile(explorePath, 'utf8');
     return JSON.parse(content);
   } catch {
     return [];
@@ -413,12 +427,11 @@ function loadExplorations(sessionPath: string): unknown[] {
  * @param sessionPath - Session directory path
  * @returns Clarification data
  */
-function loadClarifications(sessionPath: string): unknown | null {
+async function loadClarifications(sessionPath: string): Promise<unknown | null> {
   const clarifyPath = join(sessionPath, 'clarifications.json');
-  if (!existsSync(clarifyPath)) return null;
 
   try {
-    const content = readFileSync(clarifyPath, 'utf8');
+    const content = await readFile(clarifyPath, 'utf8');
     return JSON.parse(content);
   } catch {
     return null;
@@ -431,7 +444,7 @@ function loadClarifications(sessionPath: string): unknown | null {
  * @param sessionPath - Session directory path
  * @returns Diagnoses data with manifest and items
  */
-function loadDiagnoses(sessionPath: string): Diagnoses {
+async function loadDiagnoses(sessionPath: string): Promise<Diagnoses> {
   const result: Diagnoses = {
     manifest: null,
     items: []
@@ -439,32 +452,35 @@ function loadDiagnoses(sessionPath: string): Diagnoses {
 
   // Try to load diagnoses-manifest.json first
   const manifestPath = join(sessionPath, 'diagnoses-manifest.json');
-  if (existsSync(manifestPath)) {
-    try {
-      result.manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-    } catch {
-      // Continue without manifest
-    }
+  try {
+    result.manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  } catch {
+    // Continue without manifest
   }
 
   // Load all diagnosis-*.json files from session root
   try {
-    const diagnosisFiles = readdirSync(sessionPath)
-      .filter(f => f.startsWith('diagnosis-') && f.endsWith('.json'));
+    const diagnosisFiles = (await readdir(sessionPath))
+      .filter((fileName) => fileName.startsWith('diagnosis-') && fileName.endsWith('.json'));
 
-    for (const file of diagnosisFiles) {
-      const filePath = join(sessionPath, file);
-      try {
-        const content = JSON.parse(readFileSync(filePath, 'utf8')) as Record<string, unknown>;
-        result.items.push({
-          id: file.replace('diagnosis-', '').replace('.json', ''),
-          filename: file,
-          ...content
-        });
-      } catch {
-        // Skip invalid files
-      }
-    }
+    const items = (await Promise.all(
+      diagnosisFiles.map(async (fileName) => {
+        const filePath = join(sessionPath, fileName);
+        try {
+          const content = JSON.parse(await readFile(filePath, 'utf8')) as Record<string, unknown>;
+          return {
+            id: fileName.replace('diagnosis-', '').replace('.json', ''),
+            filename: fileName,
+            ...content,
+          } satisfies DiagnosisItem;
+        } catch {
+          return null;
+        }
+      }),
+    ))
+      .filter((item): item is DiagnosisItem => item !== null);
+
+    result.items.push(...items);
   } catch {
     // Return empty items if directory read fails
   }

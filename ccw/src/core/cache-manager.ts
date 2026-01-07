@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync, unlinkSync, readdirSync } from 'fs';
-import { join, dirname } from 'path';
-import { StoragePaths, ensureStorageDir } from '../config/storage-paths.js';
+import { readFile, readdir, stat, unlink, writeFile, mkdir } from 'fs/promises';
+import { join } from 'path';
+import { StoragePaths } from '../config/storage-paths.js';
 
 interface CacheEntry<T> {
   data: T;
@@ -42,13 +42,17 @@ export class CacheManager<T> {
    * @param watchPaths - Array of file/directory paths to check for modifications
    * @returns Cached data or null if invalid/expired
    */
-  get(watchPaths: string[] = []): T | null {
-    if (!existsSync(this.cacheFile)) {
+  async get(watchPaths: string[] = []): Promise<T | null> {
+    let content: string;
+    try {
+      content = await readFile(this.cacheFile, 'utf8');
+    } catch (err: any) {
+      if (err?.code === 'ENOENT') return null;
+      console.warn(`Cache read error for ${this.cacheFile}:`, err?.message || String(err));
       return null;
     }
 
     try {
-      const content = readFileSync(this.cacheFile, 'utf8');
       const entry: CacheEntry<T> = JSON.parse(content, (key, value) => {
         // Revive Map objects from JSON
         if (key === 'fileHashes' && value && typeof value === 'object') {
@@ -67,16 +71,16 @@ export class CacheManager<T> {
 
       // Check if any watched files have changed
       if (watchPaths.length > 0) {
-        const currentHashes = this.computeFileHashes(watchPaths);
+        const currentHashes = await this.computeFileHashes(watchPaths);
         if (!this.hashesMatch(entry.fileHashes, currentHashes)) {
           return null;
         }
       }
 
       return entry.data;
-    } catch (err) {
+    } catch (err: any) {
       // If cache file is corrupted or unreadable, treat as invalid
-      console.warn(`Cache read error for ${this.cacheFile}:`, (err as Error).message);
+      console.warn(`Cache parse error for ${this.cacheFile}:`, err?.message || String(err));
       return null;
     }
   }
@@ -86,17 +90,15 @@ export class CacheManager<T> {
    * @param data - Data to cache
    * @param watchPaths - Array of file/directory paths to track
    */
-  set(data: T, watchPaths: string[] = []): void {
+  async set(data: T, watchPaths: string[] = []): Promise<void> {
     try {
       // Ensure cache directory exists
-      if (!existsSync(this.cacheDir)) {
-        mkdirSync(this.cacheDir, { recursive: true });
-      }
+      await mkdir(this.cacheDir, { recursive: true });
 
       const entry: CacheEntry<T> = {
         data,
         timestamp: Date.now(),
-        fileHashes: this.computeFileHashes(watchPaths),
+        fileHashes: await this.computeFileHashes(watchPaths),
         ttl: this.ttl
       };
 
@@ -106,7 +108,7 @@ export class CacheManager<T> {
         fileHashes: Object.fromEntries(entry.fileHashes)
       };
 
-      writeFileSync(this.cacheFile, JSON.stringify(serializable, null, 2), 'utf8');
+      await writeFile(this.cacheFile, JSON.stringify(serializable, null, 2), 'utf8');
     } catch (err) {
       console.warn(`Cache write error for ${this.cacheFile}:`, (err as Error).message);
     }
@@ -115,12 +117,11 @@ export class CacheManager<T> {
   /**
    * Invalidate (delete) the cache
    */
-  invalidate(): void {
+  async invalidate(): Promise<void> {
     try {
-      if (existsSync(this.cacheFile)) {
-        unlinkSync(this.cacheFile);
-      }
+      await unlink(this.cacheFile);
     } catch (err) {
+      if ((err as any)?.code === 'ENOENT') return;
       console.warn(`Cache invalidation error for ${this.cacheFile}:`, (err as Error).message);
     }
   }
@@ -130,8 +131,8 @@ export class CacheManager<T> {
    * @param watchPaths - Array of file/directory paths to check
    * @returns True if cache exists and is valid
    */
-  isValid(watchPaths: string[] = []): boolean {
-    return this.get(watchPaths) !== null;
+  async isValid(watchPaths: string[] = []): Promise<boolean> {
+    return (await this.get(watchPaths)) !== null;
   }
 
   /**
@@ -139,32 +140,29 @@ export class CacheManager<T> {
    * @param watchPaths - Array of file/directory paths
    * @returns Map of path to mtime
    */
-  private computeFileHashes(watchPaths: string[]): Map<string, number> {
+  private async computeFileHashes(watchPaths: string[]): Promise<Map<string, number>> {
     const hashes = new Map<string, number>();
 
-    for (const path of watchPaths) {
+    await Promise.all(watchPaths.map(async (watchPath) => {
       try {
-        if (!existsSync(path)) {
-          continue;
-        }
-
-        const stats = statSync(path);
+        const stats = await stat(watchPath);
 
         if (stats.isDirectory()) {
           // For directories, use directory mtime (detects file additions/deletions)
-          hashes.set(path, stats.mtimeMs);
+          hashes.set(watchPath, stats.mtimeMs);
 
           // Also recursively scan for workflow session files
-          this.scanDirectory(path, hashes);
+          await this.scanDirectory(watchPath, hashes);
         } else {
           // For files, use file mtime
-          hashes.set(path, stats.mtimeMs);
+          hashes.set(watchPath, stats.mtimeMs);
         }
-      } catch (err) {
+      } catch (err: any) {
+        if (err?.code === 'ENOENT') return;
         // Skip paths that can't be accessed
-        console.warn(`Cannot access path ${path}:`, (err as Error).message);
+        console.warn(`Cannot access path ${watchPath}:`, err?.message || String(err));
       }
-    }
+    }));
 
     return hashes;
   }
@@ -175,26 +173,34 @@ export class CacheManager<T> {
    * @param hashes - Map to store file hashes
    * @param depth - Current recursion depth (max 3)
    */
-  private scanDirectory(dirPath: string, hashes: Map<string, number>, depth: number = 0): void {
+  private async scanDirectory(dirPath: string, hashes: Map<string, number>, depth: number = 0): Promise<void> {
     if (depth > 3) return; // Limit recursion depth
 
     try {
-      const entries = readdirSync(dirPath, { withFileTypes: true });
+      const entries = await readdir(dirPath, { withFileTypes: true });
 
-      for (const entry of entries) {
+      await Promise.all(entries.map(async (entry) => {
         const fullPath = join(dirPath, entry.name);
 
         if (entry.isDirectory()) {
           // Track important directories
           if (entry.name === '.task' || entry.name === '.review' || entry.name === '.summaries') {
-            const stats = statSync(fullPath);
-            hashes.set(fullPath, stats.mtimeMs);
-            this.scanDirectory(fullPath, hashes, depth + 1);
+            try {
+              const stats = await stat(fullPath);
+              hashes.set(fullPath, stats.mtimeMs);
+              await this.scanDirectory(fullPath, hashes, depth + 1);
+            } catch {
+              // ignore
+            }
           } else if (entry.name.startsWith('WFS-')) {
             // Scan WFS session directories
-            const stats = statSync(fullPath);
-            hashes.set(fullPath, stats.mtimeMs);
-            this.scanDirectory(fullPath, hashes, depth + 1);
+            try {
+              const stats = await stat(fullPath);
+              hashes.set(fullPath, stats.mtimeMs);
+              await this.scanDirectory(fullPath, hashes, depth + 1);
+            } catch {
+              // ignore
+            }
           }
         } else if (entry.isFile()) {
           // Track important files
@@ -204,11 +210,15 @@ export class CacheManager<T> {
             entry.name === 'TODO_LIST.md' ||
             entry.name === 'workflow-session.json'
           ) {
-            const stats = statSync(fullPath);
-            hashes.set(fullPath, stats.mtimeMs);
+            try {
+              const stats = await stat(fullPath);
+              hashes.set(fullPath, stats.mtimeMs);
+            } catch {
+              // ignore
+            }
           }
         }
-      }
+      }));
     } catch (err) {
       // Skip directories that can't be read
       console.warn(`Cannot scan directory ${dirPath}:`, (err as Error).message);
@@ -245,21 +255,24 @@ export class CacheManager<T> {
    * Get cache statistics
    * @returns Cache info object
    */
-  getStats(): { exists: boolean; age?: number; fileCount?: number; size?: number } {
-    if (!existsSync(this.cacheFile)) {
+  async getStats(): Promise<{ exists: boolean; age?: number; fileCount?: number; size?: number }> {
+    let fileStats;
+    try {
+      fileStats = await stat(this.cacheFile);
+    } catch (err: any) {
+      if (err?.code === 'ENOENT') return { exists: false };
       return { exists: false };
     }
 
     try {
-      const stats = statSync(this.cacheFile);
-      const content = readFileSync(this.cacheFile, 'utf8');
+      const content = await readFile(this.cacheFile, 'utf8');
       const entry = JSON.parse(content);
 
       return {
         exists: true,
         age: Date.now() - entry.timestamp,
         fileCount: Object.keys(entry.fileHashes || {}).length,
-        size: stats.size
+        size: fileStats.size
       };
     } catch {
       return { exists: false };
@@ -287,6 +300,5 @@ export function createDashboardCache(workflowDir: string, ttl?: number): CacheMa
   // Use centralized storage path
   const projectPath = extractProjectPath(workflowDir);
   const cacheDir = StoragePaths.project(projectPath).cache;
-  ensureStorageDir(cacheDir);
   return new CacheManager('dashboard-data', { cacheDir, ttl });
 }
