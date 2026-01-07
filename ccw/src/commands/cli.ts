@@ -26,6 +26,7 @@ import {
   getStorageLocationInstructions
 } from '../tools/storage-manager.js';
 import { getHistoryStore } from '../tools/cli-history-store.js';
+import { createSpinner } from '../utils/ui.js';
 
 // Dashboard notification settings
 const DASHBOARD_PORT = process.env.CCW_PORT || 3456;
@@ -705,7 +706,6 @@ async function execAction(positionalPrompt: string | undefined, options: CliExec
   }
   const nativeMode = noNative ? ' (prompt-concat)' : '';
   const idInfo = id ? ` [${id}]` : '';
-  console.log(chalk.cyan(`\n  Executing ${tool} (${mode} mode${resumeInfo}${nativeMode})${idInfo}...\n`));
 
   // Show merge details
   if (isMerge) {
@@ -719,11 +719,31 @@ async function execAction(positionalPrompt: string | undefined, options: CliExec
   // Generate execution ID for streaming (use custom ID or timestamp-based)
   const executionId = id || `${Date.now()}-${tool}`;
   const startTime = Date.now();
+  const spinnerBaseText = `Executing ${tool} (${mode} mode${resumeInfo}${nativeMode})${idInfo}...`;
+  console.log();
+
+  const spinner = stream ? null : createSpinner(`  ${spinnerBaseText}`).start();
+  const elapsedInterval = spinner
+    ? setInterval(() => {
+      const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+      spinner.text = `  ${spinnerBaseText} (${elapsedSeconds}s elapsed)`;
+    }, 1000)
+    : null;
+  elapsedInterval?.unref?.();
+
+  if (!spinner) {
+    console.log(chalk.cyan(`  ${spinnerBaseText}\n`));
+  }
 
   // Handle process interruption (SIGINT/SIGTERM) to notify dashboard
   const handleInterrupt = (signal: string) => {
     const duration = Date.now() - startTime;
-    console.log(chalk.yellow(`\n  Interrupted by ${signal}`));
+    if (elapsedInterval) clearInterval(elapsedInterval);
+    if (spinner) {
+      spinner.warn(`Interrupted by ${signal} (${Math.floor(duration / 1000)}s elapsed)`);
+    } else {
+      console.log(chalk.yellow(`\n  Interrupted by ${signal}`));
+    }
 
     // Kill child process (gemini/codex/qwen CLI) if running
     killCurrentCliProcess();
@@ -790,6 +810,19 @@ async function execAction(positionalPrompt: string | undefined, options: CliExec
       stream: !!stream // stream=true → streaming enabled (no cache), stream=false → cache output (default)
     }, onOutput); // Always pass onOutput for real-time dashboard streaming
 
+    if (elapsedInterval) clearInterval(elapsedInterval);
+    if (spinner) {
+      const durationSeconds = (result.execution.duration_ms / 1000).toFixed(1);
+      const turnInfo = result.success && result.conversation.turn_count > 1
+        ? ` (turn ${result.conversation.turn_count})`
+        : '';
+      if (result.success) {
+        spinner.succeed(`Completed in ${durationSeconds}s${turnInfo}`);
+      } else {
+        spinner.fail(`Failed after ${durationSeconds}s`);
+      }
+    }
+
     // If not streaming (default), print output now
     if (!stream && result.stdout) {
       console.log(result.stdout);
@@ -798,10 +831,12 @@ async function execAction(positionalPrompt: string | undefined, options: CliExec
     // Print summary with execution ID and turn info
     console.log();
     if (result.success) {
-      const turnInfo = result.conversation.turn_count > 1
-        ? ` (turn ${result.conversation.turn_count})`
-        : '';
-      console.log(chalk.green(`  ✓ Completed in ${(result.execution.duration_ms / 1000).toFixed(1)}s${turnInfo}`));
+      if (!spinner) {
+        const turnInfo = result.conversation.turn_count > 1
+          ? ` (turn ${result.conversation.turn_count})`
+          : '';
+        console.log(chalk.green(`  ✓ Completed in ${(result.execution.duration_ms / 1000).toFixed(1)}s${turnInfo}`));
+      }
       console.log(chalk.gray(`  ID: ${result.execution.id}`));
       if (isMerge && !id) {
         // Merge without custom ID: updated all source conversations
@@ -840,7 +875,9 @@ async function execAction(positionalPrompt: string | undefined, options: CliExec
       // Delay to allow HTTP request to complete
       setTimeout(() => process.exit(0), 150);
     } else {
-      console.log(chalk.red(`  ✗ Failed (${result.execution.status})`));
+      if (!spinner) {
+        console.log(chalk.red(`  ✗ Failed (${result.execution.status})`));
+      }
       console.log(chalk.gray(`  ID: ${result.execution.id}`));
       console.log(chalk.gray(`  Duration: ${(result.execution.duration_ms / 1000).toFixed(1)}s`));
       console.log(chalk.gray(`  Exit Code: ${result.execution.exit_code}`));
@@ -897,6 +934,8 @@ async function execAction(positionalPrompt: string | undefined, options: CliExec
     }
   } catch (error) {
     const err = error as Error;
+    if (elapsedInterval) clearInterval(elapsedInterval);
+    if (spinner) spinner.fail('Execution error');
     console.error(chalk.red.bold(`\n  ✗ Execution Error\n`));
     console.error(chalk.red(`  ${err.message}`));
 

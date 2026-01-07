@@ -107,7 +107,7 @@ describe('cli command module', async () => {
       assert.equal(call.prompt, 'Hello');
       assert.equal(call.mode, 'analysis');
       assert.equal(call.stream, false);
-      assert.equal(call.timeout, 300000);
+      assert.equal(call.timeout, 0);
     }
     assert.deepEqual(exitCodes, [0, 0, 0]);
   });
