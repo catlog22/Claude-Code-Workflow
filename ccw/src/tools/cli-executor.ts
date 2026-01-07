@@ -14,24 +14,46 @@ import { escapeWindowsArg } from '../utils/shell-escape.js';
 
 // Track current running child process for cleanup on interruption
 let currentChildProcess: ChildProcess | null = null;
+let killTimeout: NodeJS.Timeout | null = null;
+let killTimeoutProcess: ChildProcess | null = null;
 
 /**
  * Kill the current running CLI child process
  * Called when parent process receives SIGINT/SIGTERM
  */
 export function killCurrentCliProcess(): boolean {
-  if (currentChildProcess && !currentChildProcess.killed) {
-    debugLog('KILL', 'Killing current child process', { pid: currentChildProcess.pid });
-    currentChildProcess.kill('SIGTERM');
-    // Force kill after 2 seconds if still running
-    setTimeout(() => {
-      if (currentChildProcess && !currentChildProcess.killed) {
-        currentChildProcess.kill('SIGKILL');
-      }
-    }, 2000);
-    return true;
+  const child = currentChildProcess;
+  if (!child || child.killed) return false;
+
+  debugLog('KILL', 'Killing current child process', { pid: child.pid });
+
+  try {
+    child.kill('SIGTERM');
+  } catch {
+    // Ignore kill errors (process may already be gone)
   }
-  return false;
+
+  if (killTimeout) {
+    clearTimeout(killTimeout);
+    killTimeout = null;
+    killTimeoutProcess = null;
+  }
+
+  // Force kill after 2 seconds if still running.
+  killTimeoutProcess = child;
+  killTimeout = setTimeout(() => {
+    const target = killTimeoutProcess;
+    if (!target || target !== currentChildProcess) return;
+    if (target.killed) return;
+
+    try {
+      target.kill('SIGKILL');
+    } catch {
+      // Ignore kill errors (process may already be gone)
+    }
+  }, 2000);
+
+  return true;
 }
 
 // Debug logging utility - check env at runtime for --debug flag support
@@ -988,6 +1010,12 @@ async function executeCliTool(
 
     // Handle completion
     child.on('close', async (code) => {
+      if (killTimeout && killTimeoutProcess === child) {
+        clearTimeout(killTimeout);
+        killTimeout = null;
+        killTimeoutProcess = null;
+      }
+
       // Clear current child process reference
       currentChildProcess = null;
 
