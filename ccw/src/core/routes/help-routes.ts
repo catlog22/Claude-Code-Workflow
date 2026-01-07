@@ -90,6 +90,7 @@ function initializeFileWatchers(): void {
     });
 
     watchersInitialized = true;
+    (watcher as any).unref?.();
     console.log(`File watchers initialized for: ${indexDir}`);
   } catch (error) {
     console.error('Failed to initialize file watchers:', error);

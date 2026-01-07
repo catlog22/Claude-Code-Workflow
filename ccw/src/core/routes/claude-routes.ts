@@ -3,7 +3,7 @@
  * Handles all CLAUDE.md memory rules management endpoints
  */
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync, unlinkSync, mkdirSync } from 'fs';
-import { join, relative } from 'path';
+import { dirname, join, relative } from 'path';
 import { homedir } from 'os';
 import type { RouteContext } from './types.js';
 
@@ -487,7 +487,7 @@ function createNewClaudeFile(level: 'user' | 'project' | 'module', template: str
     }
 
     // Ensure directory exists
-    const dir = filePath.substring(0, filePath.lastIndexOf('/') || filePath.lastIndexOf('\\'));
+    const dir = dirname(filePath);
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
