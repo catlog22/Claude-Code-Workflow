@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import inquirer from 'inquirer';
 
 const issueCommandUrl = new URL('../dist/commands/issue.js', import.meta.url).href;
 
@@ -875,6 +876,94 @@ describe('issue command module', async () => {
       assert.equal(node2.ready, false);
       assert.deepEqual(node2.blocked_by, ['S-1']);
       assert.deepEqual(payload.parallel_batches, [['S-1']]);
+    });
+
+    it('prompts for confirmation before deleting a queue (and cancels safely)', async () => {
+      issueModule ??= await import(issueCommandUrl);
+      assert.ok(env);
+
+      const logs: string[] = [];
+      mock.method(console, 'log', (...args: any[]) => {
+        logs.push(args.map(String).join(' '));
+      });
+      mock.method(console, 'error', (...args: any[]) => {
+        logs.push(args.map(String).join(' '));
+      });
+
+      const queueId = 'QUE-DELETE-CANCEL';
+      issueModule.writeQueue({
+        id: queueId,
+        status: 'completed',
+        issue_ids: [],
+        tasks: [],
+        solutions: [],
+        conflicts: [],
+      });
+
+      const promptCalls: any[] = [];
+      mock.method(inquirer, 'prompt', async (questions: any) => {
+        promptCalls.push(questions);
+        return { proceed: false };
+      });
+
+      await issueModule.issueCommand('queue', ['delete', queueId], {});
+
+      assert.equal(promptCalls.length, 1);
+      assert.equal(promptCalls[0][0].type, 'confirm');
+      assert.equal(promptCalls[0][0].default, false);
+      assert.ok(promptCalls[0][0].message.includes(queueId));
+      assert.ok(logs.some((l) => l.includes('Queue deletion cancelled')));
+      assert.ok(existsSync(join(env.queuesDir, `${queueId}.json`)));
+    });
+
+    it('deletes a queue after interactive confirmation', async () => {
+      issueModule ??= await import(issueCommandUrl);
+      assert.ok(env);
+
+      mock.method(console, 'log', () => {});
+      mock.method(console, 'error', () => {});
+
+      const queueId = 'QUE-DELETE-CONFIRM';
+      issueModule.writeQueue({
+        id: queueId,
+        status: 'completed',
+        issue_ids: [],
+        tasks: [],
+        solutions: [],
+        conflicts: [],
+      });
+
+      mock.method(inquirer, 'prompt', async () => ({ proceed: true }));
+
+      await issueModule.issueCommand('queue', ['delete', queueId], {});
+
+      assert.equal(existsSync(join(env.queuesDir, `${queueId}.json`)), false);
+    });
+
+    it('bypasses confirmation prompt when --force is set for queue delete', async () => {
+      issueModule ??= await import(issueCommandUrl);
+      assert.ok(env);
+
+      mock.method(console, 'log', () => {});
+      mock.method(console, 'error', () => {});
+
+      const queueId = 'QUE-DELETE-FORCE';
+      issueModule.writeQueue({
+        id: queueId,
+        status: 'completed',
+        issue_ids: [],
+        tasks: [],
+        solutions: [],
+        conflicts: [],
+      });
+
+      mock.method(inquirer, 'prompt', async () => {
+        throw new Error('inquirer.prompt should not be called when --force is set');
+      });
+
+      await issueModule.issueCommand('queue', ['delete', queueId], { force: true });
+
+      assert.equal(existsSync(join(env.queuesDir, `${queueId}.json`)), false);
     });
   });
 

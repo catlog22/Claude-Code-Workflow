@@ -6,6 +6,7 @@
 
 import chalk from 'chalk';
 import { execSync } from 'child_process';
+import inquirer from 'inquirer';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, statSync } from 'fs';
 import { join, resolve } from 'path';
 import { EXEC_TIMEOUTS } from '../utils/exec-constants.js';
@@ -1788,6 +1789,20 @@ async function queueAction(subAction: string | undefined, issueId: string | unde
     if (!existsSync(queuePath)) {
       console.error(chalk.red(`Queue "${queueId}" not found`));
       process.exit(1);
+    }
+
+    if (!options.force) {
+      const { proceed } = await inquirer.prompt([{
+        type: 'confirm',
+        name: 'proceed',
+        message: `Delete queue ${queueId}? This action cannot be undone.`,
+        default: false
+      }]);
+
+      if (!proceed) {
+        console.log(chalk.yellow('Queue deletion cancelled'));
+        return;
+      }
     }
 
     // Remove from index

@@ -5,6 +5,7 @@
 
 import chalk from 'chalk';
 import http from 'http';
+import inquirer from 'inquirer';
 import {
   cliExecutorTool,
   getCliToolsStatus,
@@ -281,12 +282,17 @@ async function cleanStorage(options: StorageOptions): Promise<void> {
     }
 
     if (!force) {
-      console.log(chalk.bold.yellow('\n  Warning: This will delete ALL CCW storage:'));
-      console.log(`    Location:  ${stats.rootPath}`);
-      console.log(`    Projects:  ${stats.projectCount}`);
-      console.log(`    Size:      ${formatBytes(stats.totalSize)}`);
-      console.log(chalk.gray('\n  Use --force to confirm deletion.\n'));
-      return;
+      const { proceed } = await inquirer.prompt([{
+        type: 'confirm',
+        name: 'proceed',
+        message: `Delete ALL CCW storage? This will remove ${stats.projectCount} projects (${formatBytes(stats.totalSize)}). This action cannot be undone.`,
+        default: false
+      }]);
+
+      if (!proceed) {
+        console.log(chalk.yellow('\n  Storage clean cancelled.\n'));
+        return;
+      }
     }
 
     console.log(chalk.bold.cyan('\n  Cleaning all storage...\n'));

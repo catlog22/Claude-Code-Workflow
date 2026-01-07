@@ -10,9 +10,10 @@
 import { after, afterEach, before, describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import inquirer from 'inquirer';
 
 const TEST_CCW_HOME = mkdtempSync(join(tmpdir(), 'ccw-cli-command-'));
 process.env.CCW_DATA_DIR = TEST_CCW_HOME;
@@ -20,6 +21,7 @@ process.env.CCW_DATA_DIR = TEST_CCW_HOME;
 const cliCommandPath = new URL('../dist/commands/cli.js', import.meta.url).href;
 const cliExecutorPath = new URL('../dist/tools/cli-executor.js', import.meta.url).href;
 const historyStorePath = new URL('../dist/tools/cli-history-store.js', import.meta.url).href;
+const storageManagerPath = new URL('../dist/tools/storage-manager.js', import.meta.url).href;
 
 function stubHttpRequest(): void {
   mock.method(http, 'request', () => {
@@ -50,11 +52,14 @@ describe('cli command module', async () => {
   let cliExecutorModule: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let historyStoreModule: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let storageManagerModule: any;
 
   before(async () => {
     cliModule = await import(cliCommandPath);
     cliExecutorModule = await import(cliExecutorPath);
     historyStoreModule = await import(historyStorePath);
+    storageManagerModule = await import(storageManagerPath);
   });
 
   afterEach(() => {
@@ -220,6 +225,68 @@ describe('cli command module', async () => {
     );
 
     assert.equal(executed, false);
+  });
+
+  it('prompts for confirmation before cleaning all storage (and cancels safely)', async () => {
+    const projectRoot = join(TEST_CCW_HOME, 'projects', 'test-project-cancel');
+    const markerDir = join(projectRoot, 'cli-history');
+    mkdirSync(markerDir, { recursive: true });
+    writeFileSync(join(markerDir, 'dummy.txt'), '1234');
+
+    const stats = storageManagerModule.getStorageStats();
+    const expectedSize = storageManagerModule.formatBytes(stats.totalSize);
+
+    const promptCalls: any[] = [];
+    mock.method(inquirer, 'prompt', async (questions: any) => {
+      promptCalls.push(questions);
+      return { proceed: false };
+    });
+
+    const logs: string[] = [];
+    mock.method(console, 'log', (...args: any[]) => {
+      logs.push(args.map(String).join(' '));
+    });
+    mock.method(console, 'error', (...args: any[]) => {
+      logs.push(args.map(String).join(' '));
+    });
+
+    await cliModule.cliCommand('storage', ['clean'], { force: false });
+
+    assert.equal(promptCalls.length, 1);
+    assert.equal(promptCalls[0][0].type, 'confirm');
+    assert.equal(promptCalls[0][0].default, false);
+    assert.ok(promptCalls[0][0].message.includes(`${stats.projectCount} projects`));
+    assert.ok(promptCalls[0][0].message.includes(`(${expectedSize})`));
+
+    assert.ok(logs.some((l) => l.includes('Storage clean cancelled')));
+    assert.equal(existsSync(projectRoot), true);
+    rmSync(projectRoot, { recursive: true, force: true });
+  });
+
+  it('bypasses confirmation prompt when --force is set for storage clean', async () => {
+    const projectRoot = join(TEST_CCW_HOME, 'projects', 'test-project-force');
+    const markerDir = join(projectRoot, 'cli-history');
+    mkdirSync(markerDir, { recursive: true });
+    writeFileSync(join(markerDir, 'dummy.txt'), '1234');
+
+    mock.method(inquirer, 'prompt', async () => {
+      throw new Error('inquirer.prompt should not be called when --force is set');
+    });
+
+    await cliModule.cliCommand('storage', ['clean'], { force: true });
+    assert.equal(existsSync(projectRoot), false);
+  });
+
+  it('deletes all storage after interactive confirmation', async () => {
+    const projectRoot = join(TEST_CCW_HOME, 'projects', 'test-project-confirm');
+    const markerDir = join(projectRoot, 'cli-history');
+    mkdirSync(markerDir, { recursive: true });
+    writeFileSync(join(markerDir, 'dummy.txt'), '1234');
+
+    mock.method(inquirer, 'prompt', async () => ({ proceed: true }));
+
+    await cliModule.cliCommand('storage', ['clean'], { force: false });
+    assert.equal(existsSync(projectRoot), false);
   });
 
   it('prints history and retrieves conversation detail from SQLite store', async () => {
