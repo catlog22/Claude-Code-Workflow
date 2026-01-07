@@ -630,6 +630,14 @@ interface MergeResult {
   totalDuration: number;
 }
 
+type NonEmptyArray<T> = [T, ...T[]];
+
+function assertNonEmptyArray<T>(items: T[], message: string): asserts items is NonEmptyArray<T> {
+  if (items.length === 0) {
+    throw new Error(message);
+  }
+}
+
 function mergeConversations(conversations: ConversationRecord[]): MergeResult {
   const mergedTurns: MergedTurn[] = [];
 
@@ -803,11 +811,17 @@ async function executeCliTool(
       .map(id => loadConversation(workingDir, id))
       .filter((c): c is ConversationRecord => c !== null);
 
-    if (sourceConversations.length === 0) {
-      throw new Error('No valid conversations found for merge');
-    }
+    // Guard against empty merge sources before accessing sourceConversations[0].
+    assertNonEmptyArray(
+      sourceConversations,
+      `No valid conversations found for merge: ${resumeIds.join(', ')}`
+    );
 
     mergeResult = mergeConversations(sourceConversations);
+    debugLog('MERGE', 'Merged conversations', {
+      sourceConversationCount: sourceConversations.length,
+      resumeIds
+    });
 
     if (customId) {
       // Create new merged conversation with custom ID
