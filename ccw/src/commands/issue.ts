@@ -333,7 +333,7 @@ function ensureIssuesDir(): void {
 
 // ============ Issues JSONL ============
 
-function readIssues(): Issue[] {
+export function readIssues(): Issue[] {
   const path = join(getIssuesDir(), 'issues.jsonl');
   if (!existsSync(path)) return [];
   try {
@@ -346,7 +346,7 @@ function readIssues(): Issue[] {
   }
 }
 
-function writeIssues(issues: Issue[]): void {
+export function writeIssues(issues: Issue[]): void {
   ensureIssuesDir();
   const path = join(getIssuesDir(), 'issues.jsonl');
   // Always add trailing newline for proper JSONL format
@@ -481,7 +481,7 @@ function getSolutionsPath(issueId: string): string {
   return join(getIssuesDir(), 'solutions', `${issueId}.jsonl`);
 }
 
-function readSolutions(issueId: string): Solution[] {
+export function readSolutions(issueId: string): Solution[] {
   const path = getSolutionsPath(issueId);
   if (!existsSync(path)) return [];
   try {
@@ -494,7 +494,7 @@ function readSolutions(issueId: string): Solution[] {
   }
 }
 
-function writeSolutions(issueId: string, solutions: Solution[]): void {
+export function writeSolutions(issueId: string, solutions: Solution[]): void {
   const dir = join(getIssuesDir(), 'solutions');
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   // Always add trailing newline for proper JSONL format
@@ -595,7 +595,7 @@ function generateQueueFileId(): string {
   return `QUE-${ts}`;
 }
 
-function readQueue(queueId?: string): Queue | null {
+export function readQueue(queueId?: string): Queue | null {
   const index = readQueueIndex();
   const targetId = queueId || index.active_queue_id;
 
@@ -747,7 +747,7 @@ function parseFailureReason(reason: string): FailureDetail {
   };
 }
 
-function writeQueue(queue: Queue): void {
+export function writeQueue(queue: Queue): void {
   ensureQueuesDir();
 
   // Support both old (tasks) and new (solutions) queue format
