@@ -894,6 +894,8 @@ async function execAction(positionalPrompt: string | undefined, options: CliExec
         }
         if (stderrLines.length > 30) {
           console.log(chalk.yellow(`  ... ${stderrLines.length - 30} more lines`));
+          console.log(chalk.cyan(`  💡 View full output: ccw cli output ${result.execution.id}`));
+          console.log();
         }
         console.log(chalk.gray('  ' + '─'.repeat(60)));
       }
@@ -903,7 +905,6 @@ async function execAction(positionalPrompt: string | undefined, options: CliExec
       console.log(chalk.yellow.bold('  Troubleshooting:'));
       console.log(chalk.gray(`    • Check if ${tool} is properly installed: ccw cli status`));
       console.log(chalk.gray(`    • Enable debug mode: DEBUG=true ccw cli -p "..."  or  set DEBUG=true && ccw cli -p "..."`));
-      console.log(chalk.gray(`    • View full output: ccw cli output ${result.execution.id}`));
       if (result.stderr?.includes('API key') || result.stderr?.includes('Authentication')) {
         console.log(chalk.gray(`    • Check API key configuration for ${tool}`));
       }

@@ -112,6 +112,47 @@ describe('cli command module', async () => {
     assert.deepEqual(exitCodes, [0, 0, 0]);
   });
 
+  it('prints full output hint immediately after stderr truncation (no troubleshooting duplicate)', async () => {
+    stubHttpRequest();
+
+    const logs: string[] = [];
+    mock.method(console, 'log', (...args: any[]) => {
+      logs.push(args.map(String).join(' '));
+    });
+    mock.method(console, 'error', (...args: any[]) => {
+      logs.push(args.map(String).join(' '));
+    });
+
+    mock.method(cliExecutorModule.cliExecutorTool, 'execute', async () => {
+      const stderr = Array.from({ length: 31 }, (_, i) => `stderr-line-${i}`).join('\n');
+      return {
+        success: false,
+        stdout: '',
+        stderr,
+        execution: { id: 'EXEC-ERR', duration_ms: 12, status: 'error', exit_code: 1 },
+        conversation: { turn_count: 1, total_duration_ms: 12 },
+      };
+    });
+
+    const exitCodes: Array<number | undefined> = [];
+    mock.method(process as any, 'exit', (code?: number) => {
+      exitCodes.push(code);
+    });
+
+    await cliModule.cliCommand('exec', [], { prompt: 'Hello', tool: 'gemini', stream: true });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    const truncationIndex = logs.findIndex((l) => l.includes('... 1 more lines'));
+    const hintIndex = logs.findIndex((l) => l.includes('💡 View full output: ccw cli output EXEC-ERR'));
+    assert.ok(truncationIndex >= 0);
+    assert.ok(hintIndex >= 0);
+    assert.equal(hintIndex, truncationIndex + 1);
+
+    assert.equal(logs.filter((l) => l.includes('View full output: ccw cli output EXEC-ERR')).length, 1);
+    assert.equal(logs.filter((l) => l.includes('• View full output')).length, 0);
+    assert.deepEqual(exitCodes, [1]);
+  });
+
   it('supports resume with conversation ID and latest (no prompt required)', async () => {
     stubHttpRequest();
     mock.method(console, 'log', () => {});
