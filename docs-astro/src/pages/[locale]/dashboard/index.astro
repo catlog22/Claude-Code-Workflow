@@ -1,0 +1,58 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import SessionOverview from '../../../components/dashboard/SessionOverview';
+import CodexLens from '../../../components/dashboard/CodexLens';
+import GraphExplorer from '../../../components/dashboard/GraphExplorer';
+import DashboardFallback from '../../../components/dashboard/DashboardFallback';
+
+export function getStaticPaths() {
+  return [{ params: { locale: 'en' } }, { params: { locale: 'zh' } }];
+}
+
+const { locale } = Astro.params as { locale: 'en' | 'zh' };
+
+const titles = {
+  en: 'Dashboard',
+  zh: '仪表盘',
+} as const;
+
+const subtitles = {
+  en: 'Monitor workflow sessions, CodexLens status, and explore session graphs.',
+  zh: '监控工作流会话、CodexLens 状态和探索会话图。',
+} as const;
+
+const title = titles[locale] ?? titles.en;
+const subtitle = subtitles[locale] ?? subtitles.en;
+---
+
+<BaseLayout title={title} locale={locale} currentPath={Astro.url.pathname}>
+  <div class="max-w-6xl mx-auto">
+    <div class="mb-8">
+      <h1 class="text-3xl font-bold text-foreground">{title}</h1>
+      <p class="text-muted-foreground mt-2">{subtitle}</p>
+    </div>
+
+    <!-- Fallback: shows when CCW server is not running -->
+    <div class="mb-6">
+      <DashboardFallback client:load locale={locale} />
+    </div>
+
+    <!-- Dashboard widgets grid: 1 col mobile, 2 col tablet, 3 col desktop -->
+    <div class="grid gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+      <!-- SessionOverview: critical widget, hydrate immediately -->
+      <div class="md:col-span-2 xl:col-span-1">
+        <SessionOverview client:load maxItems={6} />
+      </div>
+
+      <!-- CodexLens: load when scrolled into view -->
+      <div>
+        <CodexLens client:visible />
+      </div>
+
+      <!-- GraphExplorer: load when browser is idle -->
+      <div class="md:col-span-2 xl:col-span-1">
+        <GraphExplorer client:idle />
+      </div>
+    </div>
+  </div>
+</BaseLayout>

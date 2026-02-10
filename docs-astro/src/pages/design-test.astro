@@ -1,0 +1,85 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Design System Test" locale="en">
+  <div class="space-y-8">
+    <section>
+      <h1 class="text-4xl font-bold mb-4">Design System Test Page</h1>
+      <p class="text-base text-muted-foreground">
+        Testing typography scales, color tokens, and spacing system.
+      </p>
+    </section>
+
+    <section class="space-y-4">
+      <h2 class="text-3xl font-semibold">Typography Scales</h2>
+      <div class="space-y-2">
+        <p class="text-xs">Extra Small (xs): 0.75rem / 12px</p>
+        <p class="text-sm">Small (sm): 0.875rem / 14px</p>
+        <p class="text-base">Base (base): 1rem / 16px</p>
+        <p class="text-lg">Large (lg): 1.125rem / 18px</p>
+        <p class="text-xl">Extra Large (xl): 1.25rem / 20px</p>
+      </div>
+    </section>
+
+    <section class="space-y-4">
+      <h2 class="text-3xl font-semibold">Color Tokens</h2>
+      <div class="grid grid-cols-2 gap-4">
+        <div class="p-4 bg-primary text-primary-foreground rounded">Primary</div>
+        <div class="p-4 bg-secondary text-secondary-foreground rounded">Secondary</div>
+        <div class="p-4 bg-accent text-accent-foreground rounded">Accent</div>
+        <div class="p-4 bg-muted text-muted-foreground rounded">Muted</div>
+        <div class="p-4 border-2 border-border rounded">Border</div>
+        <div class="p-4 bg-background text-foreground border border-border rounded">Background</div>
+      </div>
+    </section>
+
+    <section class="space-y-4">
+      <h2 class="text-3xl font-semibold">Spacing System (8px grid)</h2>
+      <div class="space-y-2">
+        <div class="flex items-center gap-2">
+          <div class="w-1 h-4 bg-primary"></div>
+          <span>space-1: 0.25rem (4px)</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="w-2 h-4 bg-primary"></div>
+          <span>space-2: 0.5rem (8px)</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 bg-primary"></div>
+          <span>space-4: 1rem (16px)</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-4 bg-primary"></div>
+          <span>space-8: 2rem (32px)</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="w-16 h-4 bg-primary"></div>
+          <span>space-16: 4rem (64px)</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="space-y-4">
+      <h2 class="text-3xl font-semibold">Font Families</h2>
+      <div class="space-y-2">
+        <p class="font-sans">Sans-serif: Inter + Noto Sans SC (default)</p>
+        <p class="font-mono">Monospace: JetBrains Mono</p>
+        <code class="block p-4 bg-muted rounded">
+          // Inline code example with JetBrains Mono
+          const example = "Hello World";
+        </code>
+      </div>
+    </section>
+
+    <section class="space-y-4">
+      <h2 class="text-3xl font-semibold">Chinese Text Test</h2>
+      <p class="text-base">
+        这是一段中文测试文本,用于验证 Noto Sans SC 字体加载是否成功。中文字体应该清晰可读,具有良好的行高和字间距。
+      </p>
+      <p class="font-mono text-sm">
+        中文等宽字体测试: const message = "你好世界";
+      </p>
+    </section>
+  </div>
+</BaseLayout>

@@ -1,0 +1,229 @@
+---
+title: "/memory:update-full"
+description: Update CLAUDE.md for all project modules using batched agent execution
+category: cli-commands
+order: 1
+locale: en
+---
+
+# /memory:update-full
+
+Orchestrates comprehensive CLAUDE.md updates for all project modules using batched agent execution with automatic tool fallback.
+
+## Overview
+
+The `/memory:update-full` command updates CLAUDE.md documentation for all project modules with intelligent batching and automatic tool fallback (gemini→qwen→codex).
+
+**Parameters**:
+- `--tool &lt;gemini|qwen|codex&gt;`: Primary tool (default: gemini)
+- `--path &lt;directory&gt;`: Target directory (default: project root)
+
+**Execution Flow**:
+1. Module Detection → 2. Plan Presentation → 3. Batched Execution → 4. Safety Verification
+
+## Features
+
+- **Full Project Coverage** - Updates all modules in the project
+- **Intelligent Batching** - Groups modules by depth (4 modules/batch)
+- **Automatic Fallback** - gemini→qwen→codex on failure
+- **Depth Sequential** - Process depths N→0, parallel batches within depth
+- **Smart Filtering** - Auto-detects and skips tests/build/config/docs
+
+## Usage
+
+```bash
+# Full project update (auto-strategy selection)
+/memory:update-full
+
+# Target specific directory
+/memory:update-full --path .claude
+/memory:update-full --path src/features/auth
+
+# Use specific tool
+/memory:update-full --tool qwen
+/memory:update-full --path .claude --tool qwen
+```
+
+## Tool Fallback Hierarchy
+
+```javascript
+--tool gemini  →  [gemini, qwen, codex]  // default
+--tool qwen    →  [qwen, gemini, codex]
+--tool codex   →  [codex, gemini, qwen]
+```
+
+**Trigger**: Non-zero exit code from update script
+
+## Execution Modes
+
+### Small Projects (&lt;15 modules)
+- **Direct parallel execution**
+- Max 4 concurrent per depth
+- No agent overhead
+- Faster execution
+
+### Large Projects (&gt;=15 modules)
+- **Agent batch processing**
+- 4 modules/agent
+- 73% overhead reduction
+- Better resource utilization
+
+## Execution Flow
+
+### Phase 1: Module Detection & Analysis
+
+```javascript
+// Get module structure
+Bash({command: "ccw tool exec get_modules_by_depth '{\"format\":\"list\"}'", run_in_background: false});
+
+// OR with --path
+Bash({command: "cd &lt;target-path&gt; && ccw tool exec get_modules_by_depth '{\"format\":\"list\"}'", run_in_background: false});
+```
+
+**Parse output** `depth:N|path:&lt;PATH&gt;|...` to extract module paths and count.
+
+**Smart filter**: Auto-detect and skip tests/build/config/docs based on project tech stack.
+
+### Phase 2: Plan Presentation
+
+- Parse `--tool` (default: gemini)
+- Get module structure from workspace
+- **Smart filter modules** (auto-detect tech stack, skip tests/build/config/docs)
+- Construct tool fallback order
+- **Present filtered plan** with skip reasons
+- **Wait for y/n confirmation**
+
+### Phase 3A: Direct Execution (&lt;15 modules)
+
+```javascript
+for (let depth of sorted_depths.reverse()) {  // N → 0
+  let modules = modules_by_depth[depth];
+  let batches = batch_modules(modules, 4);
+
+  for (let batch of batches) {
+    let parallel_tasks = batch.map(module => {
+      return async () => {
+        let strategy = module.depth >= 3 ? "multi-layer" : "single-layer";
+        for (let tool of tool_order) {
+          Bash({
+            command: `cd ${module.path} && ccw tool exec update_module_claude '{"strategy":"${strategy}","path":".","tool":"${tool}"}'`,
+            run_in_background: false
+          });
+          if (bash_result.exit_code === 0) {
+            report(`✅ ${module.path} updated with ${tool}`);
+            return true;
+          }
+        }
+        report(`❌ FAILED: ${module.path} failed all tools`);
+        return false;
+      };
+    });
+    await Promise.all(parallel_tasks.map(task => task()));
+  }
+}
+```
+
+### Phase 3B: Agent Execution (&gt;=15 modules)
+
+```javascript
+let modules_by_depth = group_by_depth(all_modules);
+let tool_order = construct_tool_order(primary_tool);
+
+for (let depth of sorted_depths.reverse()) {  // N → 0
+  let batches = batch_modules(modules_by_depth[depth], 4);
+  let worker_tasks = [];
+
+  for (let batch of batches) {
+    worker_tasks.push(
+      Task(
+        subagent_type="memory-bridge",
+        description=`Update ${batch.length} modules at depth ${depth}`,
+        prompt=generate_batch_worker_prompt(batch, tool_order, "full")
+      )
+    );
+  }
+
+  await parallel_execute(worker_tasks);  // Batches run in parallel
+}
+```
+
+### Phase 4: Safety Verification
+
+- Verify only CLAUDE.md files were modified
+- Display git diff statistics
+- Show summary of updates
+
+## Strategy Selection
+
+| Module Depth | Strategy | Description |
+|--------------|----------|-------------|
+| Depth &lt; 3 | single-layer | Updates only current module's CLAUDE.md |
+| Depth &gt;= 3 | multi-layer | Updates current module + all parent CLAUDE.md files |
+
+## Comparison with Related Update
+
+| Aspect | Full Update | Related Update |
+|--------|-------------|----------------|
+| **Scope** | All project modules | Changed modules only |
+| **Speed** | Slower (10-30 min) | Fast (minutes) |
+| **Use case** | Major refactoring | Daily development |
+| **Mode** | `"full"` | `"related"` |
+| **Trigger** | After major changes | After commits |
+| **Batching** | 4 modules/agent | 4 modules/agent |
+| **Fallback** | gemini→qwen→codex | gemini→qwen→codex |
+| **Complexity threshold** | &lt;=20 modules | &lt;=15 modules |
+
+## Examples
+
+### Basic Usage
+
+```bash
+# Full project update
+/memory:update-full
+
+# Output:
+# Analyzing workspace...
+# Found 45 modules across 8 depth levels
+# Filtered: 12 test/build/config modules skipped
+# Plan: Update 33 modules with gemini→qwen→codex fallback
+# Confirm? (y/n): y
+#
+# Depth 7: [4/4] ✅
+# Depth 6: [8/8] ✅
+# ...
+# Summary: 33/33 modules updated
+# Safety check: Only CLAUDE.md modified ✅
+```
+
+### Directory-Specific Update
+
+```bash
+# Update specific feature directory
+/memory:update-full --path src/features/auth
+
+# Only updates modules within src/features/auth
+```
+
+### Tool Selection
+
+```bash
+# Use Qwen for faster updates
+/memory:update-full --tool qwen
+
+# Tries qwen → gemini → codex
+```
+
+## Related Commands
+
+- **/memory:update-related** - Update only changed modules
+- **/memory:load** - Load project context into memory
+- **/memory:compact** - Compact session memory
+
+## Notes
+
+- **Direct execution** for &lt;15 modules (faster, no agent overhead)
+- **Agent execution** for &gt;=15 modules (better resource utilization)
+- **Smart filtering** automatically skips test/build/config directories
+- **Safety check** ensures only CLAUDE.md files are modified
+- **Git diff statistics** provide summary of changes
+- **Automatic backup** of existing files before update

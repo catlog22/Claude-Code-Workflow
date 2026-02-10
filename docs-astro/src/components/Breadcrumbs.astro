@@ -1,0 +1,63 @@
+---
+import { getCollection } from 'astro:content';
+import { ChevronRight, Home } from 'lucide-react';
+import { buildBreadcrumbs, buildNavigationTree, normalizePath } from '../utils/navigation';
+
+interface Props {
+  locale: 'en' | 'zh';
+  currentPath: string;
+}
+
+const { locale, currentPath } = Astro.props;
+const normalizedPath = normalizePath(currentPath);
+
+const [docs, guides, apiReference] = await Promise.all([
+  getCollection('docs'),
+  getCollection('guides'),
+  getCollection('api-reference'),
+]);
+
+const entries = [...docs, ...guides, ...apiReference].filter((e) => e.data.locale === locale);
+const tree = buildNavigationTree({
+  entries,
+  locale,
+  basePath: `/${locale}/docs`,
+});
+
+const crumbs = buildBreadcrumbs({ tree, currentPath: normalizedPath });
+const homeHref = `/${locale}/`;
+---
+
+<nav class="breadcrumbs mb-4" aria-label="Breadcrumb">
+  <ol class="flex items-center flex-wrap gap-1 text-sm text-muted-foreground">
+    <li class="flex items-center">
+      <a
+        href={homeHref}
+        class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 hover:bg-muted hover:text-foreground transition-colors"
+        aria-label={locale === 'zh' ? '返回首页' : 'Home'}
+      >
+        <Home className="w-4 h-4" />
+        <span class="sr-only">{locale === 'zh' ? '首页' : 'Home'}</span>
+      </a>
+    </li>
+
+    {crumbs.map((crumb) => (
+      <li class="flex items-center">
+        <ChevronRight className="w-4 h-4 mx-1 text-muted-foreground/70" aria-hidden="true" />
+        {crumb.href ? (
+          <a
+            href={crumb.href}
+            class="rounded-md px-2 py-1 hover:bg-muted hover:text-foreground transition-colors"
+          >
+            {crumb.title}
+          </a>
+        ) : (
+          <span class="px-2 py-1 text-foreground font-medium" aria-current="page">
+            {crumb.title}
+          </span>
+        )}
+      </li>
+    ))}
+  </ol>
+</nav>
+

@@ -1,0 +1,436 @@
+---
+title: Level 5 - Intelligent Workflows
+description: Automated command orchestration with intelligent analysis and recommendation
+category: workflows
+order: 6
+locale: en
+---
+
+# Level 5: Intelligent Workflows
+
+**Complexity**: All levels | **Artifacts**: Full state persistence | **Automation**: Complete
+
+Level 5 workflows provide the most intelligent automation - automated command chain orchestration with sequential execution and state persistence. They auto-analyze requirements, recommend optimal command chains, and execute end-to-end.
+
+## Overview
+
+```mermaid
+flowchart TD
+    Start([User Input]) --> Analyze[Phase 1: Analyze<br/>Requirements]
+    Analyze --> Recommend[Phase 2: Discover Commands<br/>& Recommend Chain]
+    Recommend --> Confirm[User Confirmation<br/>Optional]
+    Confirm --> Execute[Phase 3: Execute Sequential<br/>Command Chain]
+
+    Execute --> State[State Persistence<br/>state.json]
+    State --> Check{Complete?}
+    Check -->|No| Execute
+    Check -->|Yes| Complete([Complete])
+
+    classDef startend fill:#c8e6c9,stroke:#388e3c
+    classDef phase fill:#e3f2fd,stroke:#1976d2
+    classDef decision fill:#fff9c4,stroke:#f57c00
+    classDef state fill:#ffecb3,stroke:#ffa000
+
+    class Start,Complete startend,Confirm,Check decision,Analyze,Recommend,Execute phase,State state
+```
+
+## Included Workflow: ccw-coordinator
+
+**Auto-analyze & recommend command chains with sequential execution**
+
+### Command
+
+```bash
+/ccw-coordinator "Implement user authentication with OAuth2"
+# Or simply
+/ccw "Add user authentication"
+```
+
+### Core Concept: Minimum Execution Units
+
+**Definition**: A set of commands that must execute together as an atomic group to achieve a meaningful workflow milestone.
+
+**Why This Matters**:
+- **Prevents Incomplete States**: Avoid stopping after task generation without execution
+- **User Experience**: User gets complete results, not intermediate artifacts requiring manual follow-up
+- **Workflow Integrity**: Maintains logical coherence of multi-step operations
+
+### Minimum Execution Units
+
+#### Planning + Execution Units
+
+| Unit Name | Commands | Purpose | Output |
+|-----------|----------|---------|--------|
+| **Quick Implementation** | lite-plan -> lite-execute | Lightweight plan and immediate execution | Working code |
+| **Multi-CLI Planning** | multi-cli-plan -> lite-execute | Multi-perspective analysis and execution | Working code |
+| **Bug Fix** | lite-fix -> lite-execute | Quick bug diagnosis and fix execution | Fixed code |
+| **Full Planning + Execution** | plan -> execute | Detailed planning and execution | Working code |
+| **Verified Planning + Execution** | plan -> plan-verify -> execute | Planning with verification and execution | Working code |
+| **Replanning + Execution** | replan -> execute | Update plan and execute changes | Working code |
+| **TDD Planning + Execution** | tdd-plan -> execute | Test-driven development planning and execution | Working code |
+| **Test Generation + Execution** | test-gen -> execute | Generate test suite and execute | Generated tests |
+
+#### Testing Units
+
+| Unit Name | Commands | Purpose | Output |
+|-----------|----------|---------|--------|
+| **Test Validation** | test-fix-gen -> test-cycle-execute | Generate test tasks and execute test-fix cycle | Tests passed |
+
+#### Review Units
+
+| Unit Name | Commands | Purpose | Output |
+|-----------|----------|---------|--------|
+| **Code Review (Session)** | review-session-cycle -> review-fix | Complete review cycle and apply fixes | Fixed code |
+| **Code Review (Module)** | review-module-cycle -> review-fix | Module review cycle and apply fixes | Fixed code |
+
+### 3-Phase Workflow
+
+```mermaid
+flowchart TD
+    A([Start]) --> B[Phase 1: Analyze Requirements]
+
+    B --> C[Parse task description]
+    C --> D[Extract: goal, scope, constraints,<br/>complexity, task type]
+
+    D --> E[Phase 2: Discover Commands<br/>& Recommend Chain]
+
+    E --> F[Dynamic command chain<br/>assembly]
+    F --> G[Port-based matching]
+
+    G --> H{User Confirmation}
+    H -->|Confirm| I[Phase 3: Execute Sequential<br/>Command Chain]
+    H -->|Adjust| J[Modify chain]
+    H -->|Cancel| K([Abort])
+    J --> H
+
+    I --> L[Initialize state]
+    L --> M[For each command]
+    M --> N[Assemble prompt]
+    N --> O[Launch CLI in background]
+    O --> P[Save checkpoint]
+    P --> Q{Complete?}
+    Q -->|No| M
+    Q -->|Yes| R([Complete])
+
+    classDef startend fill:#c8e6c9,stroke:#388e3c
+    classDef phase fill:#e3f2fd,stroke:#1976d2
+    classDef decision fill:#fff9c4,stroke:#f57c00
+    classDef execute fill:#c5e1a5,stroke:#388e3c
+
+    class A,K,R startend,H,Q decision,B,E,I phase,C,D,F,G,J,L,M,N,O,P execute
+```
+
+#### Phase 1: Analyze Requirements
+
+Parse task description to extract: goal, scope, constraints, complexity, and task type.
+
+```javascript
+function analyzeRequirements(taskDescription) {
+  return {
+    goal: extractMainGoal(taskDescription),           // e.g., "Implement user registration"
+    scope: extractScope(taskDescription),             // e.g., ["auth", "user_management"]
+    constraints: extractConstraints(taskDescription), // e.g., ["no breaking changes"]
+    complexity: determineComplexity(taskDescription), // 'simple' | 'medium' | 'complex'
+    task_type: detectTaskType(taskDescription)        // See task type patterns below
+  };
+}
+
+// Task Type Detection Patterns
+function detectTaskType(text) {
+  // Priority order (first match wins)
+  if (/fix|bug|error|crash|fail|debug|diagnose/.test(text)) return 'bugfix';
+  if (/tdd|test-driven|test first/.test(text)) return 'tdd';
+  if (/test fail|fix test|failing test/.test(text)) return 'test-fix';
+  if (/generate test|add test/.test(text)) return 'test-gen';
+  if (/review/.test(text)) return 'review';
+  if (/explore|brainstorm/.test(text)) return 'brainstorm';
+  if (/multi-perspective|comparison/.test(text)) return 'multi-cli';
+  return 'feature';  // Default
+}
+
+// Complexity Assessment
+function determineComplexity(text) {
+  let score = 0;
+  if (/refactor|migrate|architect|system/.test(text)) score += 2;
+  if (/multiple|across|all|entire/.test(text)) score += 2;
+  if (/integrate|api|database/.test(text)) score += 1;
+  if (/security|performance|scale/.test(text)) score += 1;
+  return score >= 4 ? 'complex' : score >= 2 ? 'medium' : 'simple';
+}
+```
+
+#### Phase 2: Discover Commands & Recommend Chain
+
+Dynamic command chain assembly using port-based matching.
+
+**Display to user**:
+```
+Recommended Command Chain:
+
+Pipeline (visual):
+Requirement -> lite-plan -> Plan -> lite-execute -> Code -> test-cycle-execute -> Tests Passed
+
+Commands:
+1. /workflow:lite-plan
+2. /workflow:lite-execute
+3. /workflow:test-cycle-execute
+
+Proceed? [Confirm / Show Details / Adjust / Cancel]
+```
+
+#### Phase 3: Execute Sequential Command Chain
+
+```javascript
+async function executeCommandChain(chain, analysis) {
+  const sessionId = `ccw-coord-${Date.now()}`;
+  const stateDir = `.workflow/.ccw-coordinator/${sessionId}`;
+
+  // Initialize state
+  const state = {
+    session_id: sessionId,
+    status: 'running',
+    created_at: new Date().toISOString(),
+    analysis: analysis,
+    command_chain: chain.map((cmd, idx) => ({ ...cmd, index: idx, status: 'pending' })),
+    execution_results: [],
+    prompts_used: []
+  };
+
+  // Save initial state
+  Write(`${stateDir}/state.json`, JSON.stringify(state, null, 2));
+
+  for (let i = 0; i < chain.length; i++) {
+    const cmd = chain[i];
+
+    // Assemble prompt
+    let prompt = formatCommand(cmd, state.execution_results, analysis);
+    prompt += `\n\nTask: ${analysis.goal}`;
+    if (state.execution_results.length > 0) {
+      prompt += '\n\nPrevious results:\n';
+      state.execution_results.forEach(r => {
+        if (r.session_id) {
+          prompt += `- ${r.command}: ${r.session_id}\n`;
+        }
+      });
+    }
+
+    // Launch CLI in background
+    const taskId = Bash(
+      `ccw cli -p "${escapePrompt(prompt)}" --tool claude --mode write`,
+      { run_in_background: true }
+    ).task_id;
+
+    // Save checkpoint
+    state.execution_results.push({
+      index: i,
+      command: cmd.command,
+      status: 'in-progress',
+      task_id: taskId,
+      session_id: null,
+      artifacts: [],
+      timestamp: new Date().toISOString()
+    });
+
+    // Stop here - wait for hook callback
+    Write(`${stateDir}/state.json`, JSON.stringify(state, null, 2));
+    break;
+  }
+
+  state.status = 'waiting';
+  Write(`${stateDir}/state.json`, JSON.stringify(state, null, 2));
+  return state;
+}
+```
+
+### State File Structure
+
+**Location**: `.workflow/.ccw-coordinator/{session_id}/state.json`
+
+```json
+{
+  "session_id": "ccw-coord-20250203-143025",
+  "status": "running|waiting|completed|failed",
+  "created_at": "2025-02-03T14:30:25Z",
+  "updated_at": "2025-02-03T14:35:45Z",
+  "analysis": {
+    "goal": "Implement user registration",
+    "scope": ["authentication", "user_management"],
+    "constraints": ["no breaking changes"],
+    "complexity": "medium",
+    "task_type": "feature"
+  },
+  "command_chain": [
+    {
+      "index": 0,
+      "command": "/workflow:plan",
+      "name": "plan",
+      "status": "completed"
+    },
+    {
+      "index": 1,
+      "command": "/workflow:execute",
+      "name": "execute",
+      "status": "running"
+    }
+  ],
+  "execution_results": [
+    {
+      "index": 0,
+      "command": "/workflow:plan",
+      "status": "completed",
+      "task_id": "task-001",
+      "session_id": "WFS-plan-20250203",
+      "artifacts": ["IMPL_PLAN.md"],
+      "timestamp": "2025-02-03T14:30:25Z",
+      "completed_at": "2025-02-03T14:30:45Z"
+    }
+  ]
+}
+```
+
+### Complete Lifecycle Decision Flowchart
+
+```mermaid
+flowchart TD
+    Start([Start New Task]) --> Q0{Is this a bug fix?}
+
+    Q0 -->|Yes| BugFix["Bug Fix Process"]
+    Q0 -->|No| Q1{Do you know what to do?}
+
+    BugFix --> BugSeverity{Understand root cause?}
+    BugSeverity -->|Clear| LiteFix["/workflow:lite-fix<br/>Standard fix"]
+    BugSeverity -->|Production incident| HotFix["/workflow:lite-fix --hotfix<br/>Emergency hotfix"]
+    BugSeverity -->|Unclear| BugDiag["/workflow:lite-fix<br/>Auto-diagnose root cause"]
+
+    BugDiag --> LiteFix
+    LiteFix --> BugComplete["Bug fixed"]
+    HotFix --> FollowUp["Auto-generate follow-up tasks<br/>Complete fix + post-mortem"]
+    FollowUp --> BugComplete
+    BugComplete --> End(["Task Complete"])
+
+    Q1 -->|No| Ideation["Exploration Phase<br/>Clarify requirements"]
+    Q1 -->|Yes| Q2{Do you know how to do it?}
+
+    Ideation --> BrainIdea["/workflow:brainstorm:auto-parallel<br/>Explore product direction"]
+    BrainIdea --> Q2
+
+    Q2 -->|No| Design["Design Exploration<br/>Explore architecture"]
+    Q2 -->|Yes| Q3{Need planning?}
+
+    Design --> BrainDesign["/workflow:brainstorm:auto-parallel<br/>Explore technical solutions"]
+    BrainDesign --> Q3
+
+    Q3 -->|Quick and simple| LitePlan["Lightweight Planning<br/>/workflow:lite-plan"]
+    Q3 -->|Complex and complete| FullPlan["Standard Planning<br/>/workflow:plan"]
+
+    LitePlan --> Q4{Need code exploration?}
+    Q4 -->|Yes| LitePlanE["/workflow:lite-plan -e"]
+    Q4 -->|No| LitePlanNormal["/workflow:lite-plan"]
+
+    LitePlanE --> LiteConfirm["Three-dimensional confirmation:<br/>1. Task approval<br/>2. Execution method<br/>3. Code review"]
+    LitePlanNormal --> LiteConfirm
+
+    LiteConfirm --> Q5{Select execution method}
+    Q5 -->|Agent| LiteAgent["/workflow:lite-execute<br/>Use @code-developer"]
+    Q5 -->|CLI tool| LiteCLI["CLI Execution<br/>Gemini/Qwen/Codex"]
+    Q5 -->|Plan only| UserImpl["User manual implementation"]
+
+    FullPlan --> PlanVerify{Verify plan quality?}
+    PlanVerify -->|Yes| Verify["/workflow:plan-verify"]
+    PlanVerify -->|No| Execute
+    Verify --> Q6{Verification passed?}
+    Q6 -->|No| FixPlan["Fix plan issues"]
+    Q6 -->|Yes| Execute
+    FixPlan --> Execute
+
+    Execute["Execution Phase<br/>/workflow:execute"]
+    LiteAgent --> TestDecision
+    LiteCLI --> TestDecision
+    UserImpl --> TestDecision
+    Execute --> TestDecision
+
+    TestDecision{Need tests?}
+    TestDecision -->|TDD mode| TDD["/workflow:tdd-plan<br/>Test-driven development"]
+    TestDecision -->|Post-test| TestGen["/workflow:test-gen<br/>Generate tests"]
+    TestDecision -->|Tests exist| TestCycle["/workflow:test-cycle-execute<br/>Test-fix cycle"]
+    TestDecision -->|Not needed| Review
+
+    TDD --> TDDExecute["/workflow:execute<br/>Red-Green-Refactor"]
+    TDDExecute --> TDDVerify["/workflow:tdd-verify<br/>Verify TDD compliance"]
+    TDDVerify --> Review
+
+    TestGen --> TestExecute["/workflow:execute<br/>Execute test tasks"]
+    TestExecute --> TestResult{Tests passed?}
+    TestResult -->|No| TestCycle
+    TestResult -->|Yes| Review
+
+    TestCycle --> TestPass{Pass rate >= 95%?}
+    TestPass -->|No, continue fixing| TestCycle
+    TestPass -->|Yes| Review
+
+    Review["Review Phase"]
+    Review --> Q7{Need specialized review?}
+    Q7 -->|Security| SecurityReview["/workflow:review<br/>--type security"]
+    Q7 -->|Architecture| ArchReview["/workflow:review<br/>--type architecture"]
+    Q7 -->|Quality| QualityReview["/workflow:review<br/>--type quality"]
+    Q7 -->|General| GeneralReview["/workflow:review<br/>General review"]
+    Q7 -->|Not needed| Complete
+
+    SecurityReview --> Complete
+    ArchReview --> Complete
+    QualityReview --> Complete
+    GeneralReview --> Complete
+
+    Complete["Completion Phase<br/>/workflow:session:complete"]
+    Complete --> End
+
+    classDef startend fill:#c8e6c9,stroke:#388e3c
+    classDef bugfix fill:#ffccbc,stroke:#bf360c
+    classDef ideation fill:#fff9c4,stroke:#ffa000
+    classDef planning fill:#e3f2fd,stroke:#1976d2
+    classDef execute fill:#c5e1a5,stroke:#388e3c
+    classDef review fill:#d1c4e9,stroke:#512da8
+
+    class Start,End startend,BugFix,LiteFix,HotFix,BugDiag,BugComplete bugfix,Ideation,BrainIdea,BrainDesign ideation,LitePlan,LitePlanE,LitePlanNormal,LiteConfirm,FullPlan,PlanVerify,Verify,FixPlan planning,Execute,LiteAgent,LiteCLI,UserImpl,TDD,TDDExecute,TDDVerify,TestGen,TestExecute,TestCycle execute,Review,SecurityReview,ArchReview,QualityReview,GeneralReview,Complete review
+```
+
+### Use Cases
+
+### When to Use
+
+- Complex multi-step workflows
+- Uncertain which commands to use
+- Desire end-to-end automation
+- Need full state tracking and resumability
+- Team collaboration with unified execution flow
+
+### When NOT to Use
+
+- Simple single-command tasks (use Level 1-4 directly)
+- Already know exact commands needed (use Level 1-4 directly)
+
+### Relationship with Other Levels
+
+| Level | Manual Degree | CCW Coordinator Role |
+|-------|---------------|-----------------------|
+| Level 1-4 | Manual command selection | Auto-combine these commands |
+| Level 5 | Auto command selection | Intelligent orchestrator |
+
+**CCW Coordinator uses Level 1-4 internally**:
+- Analyzes task -> Auto-selects appropriate Level
+- Assembles command chain -> Includes Level 1-4 commands
+- Executes sequentially -> Follows Minimum Execution Units
+
+## Related Workflows
+
+- [Level 1: Ultra-Lightweight](./level-1-ultra-lightweight.mdx) - Rapid execution
+- [Level 2: Rapid](./level-2-rapid.mdx) - Lightweight planning
+- [Level 3: Standard](./level-3-standard.mdx) - Complete planning
+- [Level 4: Brainstorm](./level-4-brainstorm.mdx) - Multi-role exploration
+- [FAQ](./faq.mdx) - Common questions
+
+## Command Reference
+
+See [Commands Documentation](../commands/general/ccw.mdx) for:
+- `/ccw-coordinator` - Intelligent workflow orchestrator
+- `/ccw` - Main workflow orchestrator

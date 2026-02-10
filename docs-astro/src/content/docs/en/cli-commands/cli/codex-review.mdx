@@ -1,0 +1,209 @@
+---
+title: "/cli:codex-review"
+description: Interactive code review using Codex CLI with configurable review targets
+category: cli-commands
+order: 2
+locale: en
+---
+
+# /cli:codex-review
+
+Interactive code review command that invokes `codex review` via CCW CLI endpoint with guided parameter selection.
+
+## Overview
+
+The `/cli:codex-review` command provides an interface to Codex's powerful code review capabilities, supporting multiple review targets and customizable review parameters.
+
+## Review Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `[PROMPT]` | Custom review instructions (positional) |
+| `-c model=&lt;model&gt;` | Override model via config |
+| `--uncommitted` | Review staged, unstaged, and untracked changes |
+| `--base &lt;BRANCH&gt;` | Review changes against base branch |
+| `--commit &lt;SHA&gt;` | Review changes introduced by a commit |
+| `--title &lt;TITLE&gt;` | Optional commit title for review summary |
+
+## Usage
+
+### Direct Execution (No Interaction)
+
+```bash
+# Review uncommitted changes
+/cli:codex-review --uncommitted
+
+# Review against main branch
+/cli:codex-review --base main
+
+# Review specific commit
+/cli:codex-review --commit abc123
+
+# Review with custom model
+/cli:codex-review --uncommitted --model o3
+
+# Review with security focus
+/cli:codex-review --uncommitted security
+
+# Full options
+/cli:codex-review --base main --model o3 --title "Auth Feature" security
+```
+
+### Interactive Mode
+
+```bash
+# Start interactive selection (guided flow)
+/cli:codex-review
+```
+
+## Review Targets
+
+| Target | Description | Use Case |
+|--------|-------------|----------|
+| **Uncommitted** | Reviews staged, unstaged, and untracked changes | Quick pre-commit review |
+| **Base Branch** | Reviews changes against specified branch | PR review, branch comparison |
+| **Commit** | Reviews changes introduced by specific commit | Historical commit review |
+
+## Focus Areas
+
+| Focus | Description | Key Checks |
+|-------|-------------|------------|
+| **General** | Comprehensive review | Correctness, style, bugs, documentation |
+| **Security** | Security-first review | Injection vulnerabilities, auth issues, validation, data exposure |
+| **Performance** | Optimization review | Complexity analysis, memory usage, query optimization, caching |
+| **Code Quality** | Maintainability review | SOLID principles, code duplication, naming conventions, test coverage |
+
+## Execution Flow
+
+### Interactive Mode
+
+1. **Select Review Target** - Choose uncommitted, base branch, or commit
+2. **Select Focus Area** - Choose general, security, performance, or code quality
+3. **Configure Options** - Set model, title, and custom instructions
+4. **Execute Review** - Runs Codex review with selected parameters
+5. **Display Results** - Shows structured review findings
+
+### Command Construction
+
+```bash
+# Base structure
+ccw cli -p "<PROMPT>" --tool codex --mode review [OPTIONS]
+
+# Example with custom prompt
+ccw cli -p "
+PURPOSE: Comprehensive code review to identify issues and improve quality
+TASK: • Review correctness and logic • Check standards compliance • Identify bugs
+MODE: review
+CONTEXT: Reviewing uncommitted changes
+CONSTRAINTS: Actionable feedback
+" --tool codex --mode review --rule analysis-review-code-quality
+
+# Example with target flag only
+ccw cli --tool codex --mode review --uncommitted
+```
+
+## Prompt Template
+
+Follow the standard CCW CLI prompt template:
+
+```bash
+PURPOSE: [what] + [why] + [success criteria]
+TASK: • [step 1] • [step 2] • [step 3]
+MODE: review
+CONTEXT: [target description] | Memory: [project context]
+EXPECTED: [deliverable format] + [quality criteria]
+CONSTRAINTS: [domain constraints]
+```
+
+## Validation Constraints
+
+**IMPORTANT**: Target flags (`--uncommitted`, `--base`, `--commit`) and custom prompt are **mutually exclusive**.
+
+### Valid Combinations
+
+| Command | Result |
+|---------|--------|
+| `codex review "Focus on security"` | ✓ Custom prompt, reviews uncommitted (default) |
+| `codex review --uncommitted` | ✓ No prompt, uses default review |
+| `codex review --base main` | ✓ No prompt, uses default review |
+| `codex review --commit abc123` | ✓ No prompt, uses default review |
+
+### Invalid Combinations
+
+| Command | Result |
+|---------|--------|
+| `codex review --uncommitted "prompt"` | ✗ Mutually exclusive |
+| `codex review --base main "prompt"` | ✗ Mutually exclusive |
+| `codex review --commit abc123 "prompt"` | ✗ Mutually exclusive |
+
+## Error Handling
+
+### No Changes to Review
+
+```
+No changes found for review target. Suggestions:
+- For --uncommitted: Make some code changes first
+- For --base: Ensure branch exists and has diverged
+- For --commit: Verify commit SHA exists
+```
+
+### Invalid Branch
+
+```bash
+# Show available branches
+git branch -a --list | head -20
+```
+
+### Invalid Commit
+
+```bash
+# Show recent commits
+git log --oneline -10
+```
+
+## Examples
+
+### Pre-Commit Review
+
+```bash
+# Quick review before committing
+/cli:codex-review --uncommitted
+
+# Output:
+# Reviewing 3 files with 45 changes
+# - src/auth/login.ts: 2 issues found
+# - src/user/profile.ts: 1 issue found
+# - tests/auth.test.ts: No issues
+```
+
+### Branch Comparison
+
+```bash
+# Review feature branch against main
+/cli:codex-review --base feature-auth
+
+# Shows all differences between branches
+```
+
+### Security-Focused Review
+
+```bash
+# Security review of uncommitted changes
+/cli:codex-review --uncommitted "Focus on security vulnerabilities, injection risks, authentication issues"
+
+# Prioritizes security-related findings
+```
+
+## Related Commands
+
+- **/cli:cli-init** - Initialize CLI configuration
+- **/workflow:review-session-cycle** - Session-based code review
+- **/workflow:review-module-cycle** - Module-specific code review
+
+## Integration Notes
+
+- Uses `ccw cli --tool codex --mode review` endpoint
+- Model passed via prompt (codex uses `-c model=` internally)
+- Target flags passed through to codex
+- Prompt follows standard CCW CLI template format
+- Results include severity levels, file:line references, and remediation suggestions

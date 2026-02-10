@@ -1,0 +1,30 @@
+# Pagefind configuration for CCW documentation
+# Optimized for bilingual (EN/ZH) full-text search
+
+# Site configuration
+site: "dist"
+output_path: "dist/pagefind"
+
+# Indexing configuration
+root_selector: "article, main"
+exclude_selectors:
+  - "nav"
+  - "aside"
+  - "footer"
+  - ".no-index"
+  - "pre"
+  - "code"
+  - ".sidebar"
+  - ".mobile-menu"
+  - ".header"
+
+# Language configuration
+languages:
+  - code: "en"
+    language: "English"
+  - code: "zh"
+    language: "Chinese"
+
+# Performance optimization
+bundle_directory: "pagefind"
+verbose: false

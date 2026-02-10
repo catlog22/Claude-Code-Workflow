@@ -1,0 +1,332 @@
+---
+title: Level 4 - Brainstorm Workflows
+description: Multi-role brainstorming workflows for complex feature design and architecture exploration
+category: workflows
+order: 5
+locale: en
+---
+
+# Level 4: Brainstorm Workflows
+
+**Complexity**: High | **Artifacts**: Multi-role analysis docs | **Roles**: 3-9 | **Execution**: Phase 1/3 sequential, Phase 2 parallel
+
+Level 4 workflows provide multi-role brainstorming with complete planning and execution. They're designed for exploratory requirements, uncertain implementation approaches, and multi-dimensional trade-offs.
+
+## Overview
+
+```mermaid
+flowchart TD
+    Start([User Input]) --> BS[brainstorm:auto-parallel]
+    BS --> P1[Phase 1: Interactive<br/>Framework Generation]
+    P1 --> P2[Phase 2: Parallel<br/>Role Analysis]
+    P2 --> P3[Phase 3: Synthesis<br/>Integration]
+
+    P3 --> Plan{Need detailed<br/>planning?}
+    Plan -->|Yes| Verify[plan-verify]
+    Plan -->|No| Execute[execute]
+    Verify --> Execute
+
+    Execute --> Review{Review?}
+    Review -->|Yes| Rev[review-session-cycle]
+    Review -->|No| Test{Tests?}
+    Rev --> RevFix[review-cycle-fix]
+    RevFix --> Test
+
+    Test -->|Yes| TFG[test-fix-gen]
+    Test -->|No| Complete([session:complete])
+
+    TFG --> TCE[test-cycle-execute]
+    TCE --> Complete
+
+    classDef startend fill:#c8e6c9,stroke:#388e3c
+    classDef workflow fill:#e3f2fd,stroke:#1976d2
+    classDef decision fill:#fff9c4,stroke:#f57c00
+    classDef execute fill:#c5e1a5,stroke:#388e3c
+
+    class Start,Complete startend,Plan,Review,Test decision,BS,Verify,Rev,RevFix,TFG,TCE workflow,P1,P2,P3,Execute execute
+```
+
+## Included Workflow: brainstorm:auto-parallel
+
+**Multi-role brainstorming + Complete planning + Execution**
+
+### Command
+
+```bash
+/workflow:brainstorm:auto-parallel "Real-time notification system architecture" [--count N] [--style-skill package]
+/workflow:plan --session {sessionId}
+/workflow:plan-verify
+/workflow:execute
+```
+
+### Flow Diagram
+
+```mermaid
+flowchart TD
+    A([Start]) --> B[Phase 1: Interactive<br/>Framework Generation]
+    B --> C[/workflow:brainstorm:artifacts/]
+
+    C --> D[Topic analysis<br/>Generate questions]
+    D --> E[Role selection<br/>User confirmation]
+    E --> F[Role question collection]
+    F --> G[Conflict detection<br/>and resolution]
+    G --> H[Generate guidance-<br/>specification.md]
+
+    H --> I[Phase 2: Parallel Role Analysis]
+
+    I --> J1[N x Task<br/>conceptual-planning-<br/>agent]
+    J1 --> K1{Role 1}
+    J1 --> K2{Role 2}
+    J1 --> K3{Role 3}
+    J1 --> K4{Role N}
+
+    K1 --> L1[Analyze independently]
+    K2 --> L2[Analyze independently]
+    K3 --> L3[Analyze independently]
+    K4 --> L4[Analyze independently]
+
+    L1 --> M[Parallel generate<br/>{role}/analysis.md]
+    L2 --> M
+    L3 --> M
+    L4 --> M
+
+    M --> N[Phase 3: Synthesis Integration]
+    N --> O[/workflow:brainstorm:<br/>synthesis/]
+    O --> P[Integrate all role<br/>analyses]
+    P --> Q[Synthesize into<br/>synthesis-specification.md]
+
+    Q --> R([Brainstorm Complete])
+
+    classDef startend fill:#c8e6c9,stroke:#388e3c
+    classDef action fill:#e3f2fd,stroke:#1976d2
+    classDef phase fill:#fff9c4,stroke:#f57c00
+    classDef parallel fill:#ffecb3,stroke:#ffa000
+
+    class A,R startend,B,C,H,N,O,P,Q action,D,E,F,G,J1,K1,K2,K3,K4,L1,L2,L3,L4,M phase
+```
+
+### Characteristics
+
+| Property | Value |
+|----------|-------|
+| **Complexity** | High |
+| **Artifacts** | Multi-role analysis docs + `IMPL_PLAN.md` |
+| **Role Count** | 3-9 (default 3) |
+| **Execution Mode** | Phase 1/3 sequential, Phase 2 parallel |
+
+### Process Phases
+
+#### Phase 1: Interactive Framework Generation
+
+```bash
+/workflow:brainstorm:artifacts "Real-time notification system architecture"
+```
+
+**Steps**:
+1. **Topic Analysis** - Analyze the topic, generate key questions
+2. **Role Selection** - User confirms role selection
+3. **Role Question Collection** - Assign questions to roles
+4. **Conflict Detection** - Detect and resolve role conflicts
+5. **Generate Framework** - Create `guidance-specification.md`
+
+#### Phase 2: Parallel Role Analysis
+
+```bash
+# Executes N conceptual-planning-agent tasks in parallel
+Task(subagent_type: "conceptual-planning-agent", prompt: "Role: {role}, Topic: {topic}, Questions: {questions}")
+```
+
+**Each role**:
+- Receives role-specific guidance
+- Analyzes topic independently
+- Generates `{role}/analysis.md`
+- Optional: Sub-documents (max 5)
+
+#### Phase 3: Synthesis Integration
+
+```bash
+/workflow:brainstorm:synthesis --session {sessionId}
+```
+
+**Steps**:
+1. **Collect** all role analyses
+2. **Integrate** perspectives into synthesis
+3. **Generate** `synthesis-specification.md`
+4. **Identify** key decisions and trade-offs
+
+### Available Roles
+
+| Role | Description |
+|------|-------------|
+| `system-architect` | System Architect - Overall system design |
+| `ui-designer` | UI Designer - User interface design |
+| `ux-expert` | UX Expert - User experience optimization |
+| `product-manager` | Product Manager - Product requirements |
+| `product-owner` | Product Owner - Business value |
+| `data-architect` | Data Architect - Data structure design |
+| `scrum-master` | Scrum Master - Process and team |
+| `subject-matter-expert` | Domain Expert - Subject matter expertise |
+| `test-strategist` | Test Strategist - Testing strategy |
+
+### Artifact Structure
+
+```
+.workflow/active/WFS-realtime-notifications/
+├── workflow-session.json
+└── .brainstorming/
+    ├── guidance-specification.md      # Framework (Phase 1)
+    ├── system-architect/
+    │   ├── analysis.md                # Main document
+    │   └── analysis-scale-{}.md       # Sub-documents (optional, max 5)
+    ├── ux-expert/
+    │   ├── analysis.md
+    │   └── analysis-accessibility.md
+    ├── data-architect/
+    │   ├── analysis.md
+    │   └── analysis-storage.md
+    └── synthesis-specification.md     # Integration (Phase 3)
+```
+
+### Use Cases
+
+### When to Use
+
+- New feature design
+- System architecture refactoring
+- Exploratory requirements
+- Uncertain implementation approach
+- Multi-dimensional trade-offs needed
+
+### When NOT to Use
+
+- Clear requirements (use Level 2-3)
+- Time-sensitive tasks (use Level 2)
+- Single-perspective sufficient (use Level 2-3)
+
+### Examples
+
+#### Example 1: Architecture Design
+
+```bash
+/workflow:brainstorm:auto-parallel "Microservices architecture for e-commerce platform" --count 5
+```
+
+**Roles**: system-architect, data-architect, ux-expert, product-manager, test-strategist
+
+**Output**:
+- Multiple architectural perspectives
+- Data flow considerations
+- User experience implications
+- Business requirements alignment
+- Testing strategy recommendations
+
+#### Example 2: Feature Exploration
+
+```bash
+/workflow:brainstorm:auto-parallel "AI-powered recommendations" --count 3
+```
+
+**Roles**: system-architect, product-manager, subject-matter-expert
+
+**Output**:
+- Technical feasibility analysis
+- Business value assessment
+- Domain-specific considerations
+
+## With-File Workflows
+
+**With-File workflows** provide documented exploration with multi-CLI collaboration. They are self-contained and generate comprehensive session artifacts.
+
+| Workflow | Purpose | Level | Key Features |
+|----------|---------|-------|--------------|
+| **brainstorm-with-file** | Multi-perspective ideation | 4 | Gemini/Codex/Claude perspectives, diverge-converge cycles |
+| **debug-with-file** | Hypothesis-driven debugging | 3 | Gemini validation, understanding evolution, NDJSON logging |
+| **analyze-with-file** | Collaborative analysis | 3 | Multi-round Q&A, CLI exploration, documented discussions |
+
+### brainstorm-with-file
+
+**Multi-perspective ideation with documented exploration**
+
+```bash
+/workflow:brainstorm-with-file "Notification system redesign"
+```
+
+**Output Folder**: `.workflow/.brainstorm/`
+
+**Characteristics**:
+- Diverge-converge cycles
+- Multiple CLI perspectives (Gemini, Codex, Claude)
+- Built-in post-completion options (create plan, issue, deep analysis)
+
+### debug-with-file
+
+**Hypothesis-driven debugging with documented investigation**
+
+```bash
+/workflow:debug-with-file "System randomly crashes under load"
+```
+
+**Output Folder**: `.workflow/.debug/`
+
+**Characteristics**:
+- Hypothesis-driven iteration
+- Gemini validation for hypotheses
+- Understanding evolution tracking
+- NDJSON logging for reproducibility
+
+### analyze-with-file
+
+**Collaborative analysis with documented discussions**
+
+```bash
+/workflow:analyze-with-file "Understand authentication architecture design decisions"
+```
+
+**Output Folder**: `.workflow/.analysis/`
+
+**Characteristics**:
+- Multi-round Q&A
+- CLI exploration integration
+- Documented discussion threads
+
+## Detection Keywords
+
+| Workflow | Keywords |
+|----------|----------|
+| **brainstorm** | 头脑风暴, 创意, 发散思维, multi-perspective, compare perspectives, 探索可能 |
+| **debug-file** | 深度调试, 假设验证, systematic debug, hypothesis debug, 调试记录 |
+| **analyze-file** | 协作分析, 深度理解, collaborative analysis, explore concept, 理解架构 |
+
+## Comparison: With-File vs Standard Workflows
+
+| Aspect | With-File Workflows | Standard Workflows |
+|--------|---------------------|-------------------|
+| **Documentation** | E evolving documents | Session artifacts |
+| **Multi-CLI** | Built-in (Gemini/Codex/Claude) | Optional |
+| **Iteration** | Self-contained loop | Manual continuation |
+| **Post-Completion** | Built-in options | Manual next steps |
+| **Best For** | Documented exploration | Structured execution |
+
+## Level 4 Summary
+
+| Aspect | Value |
+|--------|-------|
+| **Complexity** | High |
+| **Artifacts** | Multi-role analysis + Session |
+| **Planning** | Multi-perspective convergence |
+| **Execution** | Standard Level 3 execution |
+| **Best For** | Complex, exploratory tasks |
+
+## Related Workflows
+
+- [Level 3: Standard](./level-3-standard.mdx) - Standard planning workflows
+- [Level 5: Intelligent](./level-5-intelligent.mdx) - Automated orchestration
+- [FAQ](./faq.mdx) - Common questions
+
+## Command Reference
+
+See [Commands Documentation](../commands/general/ccw.mdx) for:
+- `/workflow:brainstorm:auto-parallel` - Multi-role brainstorming
+- `/workflow:brainstorm-with-file` - Documented ideation
+- `/workflow:debug-with-file` - Hypothesis-driven debugging
+- `/workflow:analyze-with-file` - Collaborative analysis

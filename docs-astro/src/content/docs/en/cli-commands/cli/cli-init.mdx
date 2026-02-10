@@ -1,0 +1,147 @@
+---
+title: "/cli:cli-init"
+description: Initialize CLI configuration for workspace with automatic technology detection
+category: cli-commands
+order: 1
+locale: en
+---
+
+# /cli:cli-init
+
+Initialize CLI tool configurations for the workspace by analyzing project structure and generating optimized configuration files.
+
+## Overview
+
+The `/cli:cli-init` command analyzes your workspace to detect technology stacks and automatically generates CLI tool configurations for Gemini and Qwen with optimized ignore patterns.
+
+**Supported Tools**: gemini, qwen, all (default)
+
+## Features
+
+- **Automatic Technology Detection** - Analyzes project structure to identify tech stacks
+- **Smart Ignore Rules** - Generates filtering patterns optimized for detected technologies
+- **Configuration Generation** - Creates tool-specific settings files
+- **Multi-Tool Support** - Configure Gemini, Qwen, or both simultaneously
+
+## Usage
+
+```bash
+# Initialize all CLI tools (Gemini + Qwen)
+/cli:cli-init
+
+# Initialize only Gemini
+/cli:cli-init --tool gemini
+
+# Initialize only Qwen
+/cli:cli-init --tool qwen
+
+# Preview what would be generated
+/cli:cli-init --preview
+
+# Generate in subdirectory
+/cli:cli-init --output=.config/
+```
+
+## Generated Files
+
+### Configuration Directories
+
+**For Gemini** (`.gemini/`):
+- `.gemini/settings.json` - Context file configuration
+
+**For Qwen** (`.qwen/`):
+- `.qwen/settings.json` - Context file configuration
+
+### Ignore Files
+
+- `.geminiignore` - File filtering patterns for Gemini CLI
+- `.qwenignore` - File filtering patterns for Qwen CLI
+
+Both ignore files use gitignore syntax and include technology-specific rules.
+
+## Supported Technology Stacks
+
+### Frontend Technologies
+- **React/Next.js** - Ignores build artifacts, .next/, node_modules
+- **Vue/Nuxt** - Ignores .nuxt/, dist/, .cache/
+- **Angular** - Ignores dist/, .angular/, node_modules
+- **Webpack/Vite** - Ignores build outputs, cache directories
+
+### Backend Technologies
+- **Node.js** - Ignores node_modules/, npm-debug.log*, package-lock.json
+- **Python** - Ignores __pycache__/, *.py[cod], .venv/, venv/
+- **Java** - Ignores target/, .gradle/, *.class, *.jar
+- **Go** - Ignores vendor/, *.exe, *.test
+- **Rust** - Ignores target/, Cargo.lock
+
+### Configuration Files
+
+Both `.gemini/settings.json` and `.qwen/settings.json` are configured with:
+```json
+{
+  "contextfilename": ["CLAUDE.md"]
+}
+```
+
+## Command Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--tool &lt;name&gt;` | Tool to configure (gemini, qwen, all) | all |
+| `--output &lt;path&gt;` | Custom output directory | Current directory |
+| `--preview` | Show what would be generated without creating files | false |
+
+## Execution Flow
+
+1. **Workspace Analysis** - Runs `get_modules_by_depth` to analyze project structure
+2. **Technology Detection** - Identifies tech stacks based on files and directories
+3. **Configuration Generation** - Creates tool-specific configuration directories
+4. **Ignore Rules Generation** - Creates organized ignore files with detected patterns
+5. **File Creation** - Writes all configuration files to disk
+
+## Examples
+
+### Basic Project Setup
+
+```bash
+# Initialize all CLI tools
+/cli:cli-init
+
+# Output:
+# Creating .gemini/ directory
+# Creating .qwen/ directory
+# Generating .geminiignore with 45 rules
+# Generating .qwenignore with 45 rules
+# Technology detected: Node.js, TypeScript, React
+```
+
+### Technology Migration
+
+```bash
+# After adding Docker to project
+/cli:cli-init
+
+# Regenerates all config and ignore files with new Docker rules
+```
+
+### Tool-Specific Setup
+
+```bash
+# Gemini-only workflow
+/cli:cli-init --tool gemini
+
+# Creates only .gemini/ and .geminiignore
+```
+
+## Related Commands
+
+- **/cli:codex-review** - Code review using Codex CLI
+- **/memory:update-full** - Full project memory update
+- **/workflow:lite-execute** - Quick execution workflow
+
+## Notes
+
+- Backs up existing configuration files before overwriting
+- Auto-detects technology stacks from common indicators
+- Generated ignore patterns optimize CLI tool performance
+- Safe to run multiple times - preserves existing configurations

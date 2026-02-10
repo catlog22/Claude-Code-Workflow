@@ -1,0 +1,59 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import WorkflowSelector from '../../components/WorkflowSelector';
+
+const websiteSchema = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'Claude Code Workflow',
+  url: 'https://ccw-docs.example.com',
+  description: 'JSON 驱动的多智能体开发框架，支持智能 CLI 编排。',
+  inLanguage: 'zh',
+});
+---
+
+<BaseLayout title="Claude Code Workflow 文档" description="JSON 驱动的多智能体开发框架，支持智能 CLI 编排。" locale="zh">
+  <script type="application/ld+json" set:html={websiteSchema} slot="head" />
+  <div class="max-w-4xl mx-auto">
+    <h1 class="text-4xl font-bold mb-6 text-accent">
+      欢迎使用 Claude Code Workflow
+    </h1>
+    <p class="text-xl text-muted-foreground mb-8">
+      JSON 驱动的多智能体开发框架，支持智能 CLI 编排。
+    </p>
+
+    <div class="grid gap-6 md:grid-cols-2">
+      <div class="p-6 border border-border rounded-lg hover:shadow-md transition-shadow">
+        <h2 class="text-2xl font-semibold mb-3">快速入门</h2>
+        <p class="text-muted-foreground">
+          学习基础知识，几分钟内配置您的第一个工作流。
+        </p>
+      </div>
+
+      <div class="p-6 border border-border rounded-lg hover:shadow-md transition-shadow">
+        <h2 class="text-2xl font-semibold mb-3">4 级工作流系统</h2>
+        <p class="text-muted-foreground">
+          探索从轻量到头脑风暴模式的智能工作流系统。
+        </p>
+      </div>
+
+      <div class="p-6 border border-border rounded-lg hover:shadow-md transition-shadow">
+        <h2 class="text-2xl font-semibold mb-3">CLI 编排</h2>
+        <p class="text-muted-foreground">
+          利用 Gemini、Codex 和 Qwen 进行协同开发。
+        </p>
+      </div>
+
+      <div class="p-6 border border-border rounded-lg hover:shadow-md transition-shadow">
+        <h2 class="text-2xl font-semibold mb-3">仪表盘</h2>
+        <p class="text-muted-foreground">
+          通过交互式仪表盘可视化和管理您的工作流。
+        </p>
+      </div>
+    </div>
+
+    <div class="mt-12">
+      <WorkflowSelector client:visible locale="zh" />
+    </div>
+  </div>
+</BaseLayout>

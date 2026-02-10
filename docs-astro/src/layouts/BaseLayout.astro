@@ -1,0 +1,390 @@
+---
+import '@fontsource/inter/400.css';
+import '@fontsource/inter/500.css';
+import '@fontsource/inter/600.css';
+import '@fontsource/inter/700.css';
+import '@fontsource/jetbrains-mono/400.css';
+import '@fontsource/jetbrains-mono/500.css';
+import '@fontsource/jetbrains-mono/600.css';
+import '@fontsource/noto-sans-sc/400.css';
+import '@fontsource/noto-sans-sc/500.css';
+import '@fontsource/noto-sans-sc/700.css';
+import '../styles/global.css';
+import '../styles/pagefind.css';
+import '@pagefind/default-ui/css/ui.css';
+
+import Header from '../components/layout/Header.astro';
+import Sidebar from '../components/layout/Sidebar.astro';
+import Footer from '../components/layout/Footer.astro';
+import MobileMenu from '../components/layout/MobileMenu';
+import CookieConsent from '../components/CookieConsent';
+
+interface Props {
+  title: string;
+  description?: string;
+  locale: 'en' | 'zh';
+  currentPath?: string;
+}
+
+const { title, description, locale, currentPath } = Astro.props;
+
+const SITE_URL = 'https://ccw-docs.example.com';
+const metaDescription = description || 'Claude Code Workflow Documentation';
+
+// Build canonical URL
+const canonicalPath = currentPath || Astro.url.pathname;
+const canonicalURL = new URL(canonicalPath, SITE_URL).href;
+
+// Build hreflang alternate URLs
+const pathWithoutLocale = canonicalPath.replace(/^\/(en|zh)/, '') || '/';
+const enURL = new URL(`/en${pathWithoutLocale}`, SITE_URL).href;
+const zhURL = new URL(`/zh${pathWithoutLocale}`, SITE_URL).href;
+---
+
+<!DOCTYPE html>
+<html lang={locale}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="description" content={metaDescription} />
+    <meta name="viewport" content="width=device-width" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="generator" content={Astro.generator} />
+
+    <!-- Resource hints -->
+    <link rel="dns-prefetch" href="https://plausible.io" />
+
+    <!-- Canonical URL -->
+    <link rel="canonical" href={canonicalURL} />
+
+    <!-- Hreflang alternate links -->
+    <link rel="alternate" hreflang="en" href={enURL} />
+    <link rel="alternate" hreflang="zh" href={zhURL} />
+    <link rel="alternate" hreflang="x-default" href={enURL} />
+
+    <!-- Open Graph -->
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={metaDescription} />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content={locale === 'zh' ? 'zh_CN' : 'en_US'} />
+    <meta property="og:url" content={canonicalURL} />
+    <meta property="og:site_name" content="Claude Code Workflow" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={metaDescription} />
+
+    <!-- Structured data slot (JSON-LD injected by child layouts) -->
+    <slot name="head" />
+    <!--
+      Theme initialization (runs before first paint):
+      - 3-mode preference: light | dark | system
+      - localStorage persistence
+      - sets both `data-theme="dark"` and `.dark` for Tailwind + CSS vars
+      - exposes small helpers used by React islands (ThemeToggle)
+    -->
+    <script is:inline>
+      (() => {
+        const STORAGE_KEY = 'theme';
+        const root = document.documentElement;
+        const mql = window.matchMedia?.('(prefers-color-scheme: dark)') ?? null;
+
+        const isMode = (value) => value === 'light' || value === 'dark' || value === 'system';
+
+        const safeGetStoredMode = () => {
+          try {
+            const value = localStorage.getItem(STORAGE_KEY);
+            return isMode(value) ? value : null;
+          } catch {
+            return null;
+          }
+        };
+
+        const safeSetStoredMode = (mode) => {
+          try {
+            localStorage.setItem(STORAGE_KEY, mode);
+          } catch {
+            // Ignore persistence failures.
+          }
+        };
+
+        const getEffectiveTheme = (mode) => {
+          if (mode === 'system') return mql?.matches ? 'dark' : 'light';
+          return mode;
+        };
+
+        const applyEffectiveTheme = (effective) => {
+          if (effective === 'dark') {
+            root.setAttribute('data-theme', 'dark');
+            root.classList.add('dark');
+            root.style.colorScheme = 'dark';
+          } else {
+            root.removeAttribute('data-theme');
+            root.classList.remove('dark');
+            root.style.colorScheme = 'light';
+          }
+        };
+
+        const withThemeTransition = (fn) => {
+          root.classList.add('theme-transition');
+          try {
+            fn();
+          } finally {
+            window.setTimeout(() => root.classList.remove('theme-transition'), 220);
+          }
+        };
+
+        let currentMode = safeGetStoredMode() ?? 'system';
+        let currentEffective = getEffectiveTheme(currentMode);
+
+        // Initial apply: no transition (prevents "flash" and avoids animating on load).
+        applyEffectiveTheme(currentEffective);
+
+        const dispatchThemeChange = () => {
+          window.dispatchEvent(
+            new CustomEvent('theme-change', {
+              detail: { mode: currentMode, effective: currentEffective },
+            })
+          );
+        };
+
+        const setMode = (nextMode, opts = { persist: true, animate: true }) => {
+          if (!isMode(nextMode)) return;
+
+          currentMode = nextMode;
+          if (opts.persist) safeSetStoredMode(currentMode);
+
+          const nextEffective = getEffectiveTheme(currentMode);
+          if (nextEffective !== currentEffective) {
+            currentEffective = nextEffective;
+            if (opts.animate) {
+              withThemeTransition(() => applyEffectiveTheme(currentEffective));
+            } else {
+              applyEffectiveTheme(currentEffective);
+            }
+          }
+
+          dispatchThemeChange();
+        };
+
+        window.__getThemeMode = () => currentMode;
+        window.__setThemeMode = (nextMode) => setMode(nextMode, { persist: true, animate: true });
+
+        if (mql) {
+          const handleChange = () => {
+            if (currentMode !== 'system') return;
+            setMode('system', { persist: false, animate: true });
+          };
+
+          // Safari < 14 uses addListener/removeListener.
+          if (typeof mql.addEventListener === 'function') {
+            mql.addEventListener('change', handleChange);
+          } else if (typeof mql.addListener === 'function') {
+            mql.addListener(handleChange);
+          }
+        }
+      })();
+    </script>
+    <!--
+      Plausible Analytics (loaded only after user consent):
+      - Cookie-less, privacy-friendly analytics
+      - Consent is stored in localStorage by CookieConsent React island
+      - Custom events are triggered via `data-plausible-event="<event-name>"`
+    -->
+    <script is:inline>
+      (() => {
+        const STORAGE_KEY = 'analytics-consent';
+        const CONSENT_ACCEPTED = 'accepted';
+        const CONSENT_DECLINED = 'declined';
+
+        const PLAUSIBLE_DOMAIN = 'ccw-docs.example.com';
+        const PLAUSIBLE_SRC = 'https://plausible.io/js/script.js';
+        const PLAUSIBLE_SCRIPT_ID = 'plausible-script';
+
+        const isConsentValue = (value) =>
+          value === CONSENT_ACCEPTED || value === CONSENT_DECLINED;
+
+        const safeGetStoredConsent = () => {
+          try {
+            const value = localStorage.getItem(STORAGE_KEY);
+            return isConsentValue(value) ? value : null;
+          } catch {
+            return null;
+          }
+        };
+
+        const safeSetStoredConsent = (value) => {
+          try {
+            localStorage.setItem(STORAGE_KEY, value);
+          } catch {
+            // Ignore persistence failures.
+          }
+        };
+
+        // Official Plausible queueing snippet (safe to call before script loads).
+        window.plausible =
+          window.plausible ||
+          function () {
+            (window.plausible.q = window.plausible.q || []).push(arguments);
+          };
+
+        let consent = safeGetStoredConsent(); // accepted | declined | null
+
+        const hasConsent = () => consent === CONSENT_ACCEPTED;
+
+        const ensurePlausibleLoaded = () => {
+          if (!hasConsent()) return;
+          if (document.getElementById(PLAUSIBLE_SCRIPT_ID)) return;
+
+          // Requested script tag:
+          // <script defer data-domain="ccw-docs.example.com" src="https://plausible.io/js/script.js">
+          const script = document.createElement('script');
+          script.id = PLAUSIBLE_SCRIPT_ID;
+          script.defer = true;
+          script.setAttribute('data-domain', PLAUSIBLE_DOMAIN);
+          script.src = PLAUSIBLE_SRC;
+          document.head.appendChild(script);
+        };
+
+        const setConsent = (nextConsent) => {
+          if (!isConsentValue(nextConsent)) return;
+          consent = nextConsent;
+          safeSetStoredConsent(consent);
+
+          if (hasConsent()) {
+            ensurePlausibleLoaded();
+          }
+
+          window.dispatchEvent(
+            new CustomEvent('analytics-consent-change', {
+              detail: { consent },
+            })
+          );
+        };
+
+        const track = (eventName) => {
+          if (!hasConsent()) return;
+          if (typeof eventName !== 'string' || !eventName) return;
+
+          try {
+            // `window.plausible` exists (queue stub + real impl after script loads).
+            window.plausible(eventName);
+          } catch {
+            // Never let analytics break UI.
+          }
+        };
+
+        // Global helpers used by React islands (CookieConsent) and any client scripts.
+        window.__getAnalyticsConsent = () => consent;
+        window.__setAnalyticsConsent = (nextConsent) => setConsent(nextConsent);
+        window.__trackAnalyticsEvent = (eventName) => track(eventName);
+        window.__ensurePlausibleLoaded = () => ensurePlausibleLoaded();
+
+        // Event delegation based on `data-plausible-event`.
+        const lastInputEventAt = new WeakMap();
+
+        const findEventElement = (target) => {
+          if (!(target instanceof Element)) return null;
+          return target.closest?.('[data-plausible-event]') ?? null;
+        };
+
+        const getEventName = (element) => {
+          const value = element?.getAttribute?.('data-plausible-event');
+          return typeof value === 'string' && value ? value : null;
+        };
+
+        document.addEventListener(
+          'click',
+          (e) => {
+            const el = findEventElement(e.target);
+            if (!el) return;
+            const name = getEventName(el);
+            if (!name) return;
+            track(name);
+          },
+          true
+        );
+
+        // For inputs (e.g. search): debounced by element to avoid event storms.
+        document.addEventListener(
+          'input',
+          (e) => {
+            const el = findEventElement(e.target);
+            if (!el) return;
+            const name = getEventName(el);
+            if (!name) return;
+
+            const now = Date.now();
+            const last = lastInputEventAt.get(el) ?? 0;
+            if (now - last < 800) return;
+            lastInputEventAt.set(el, now);
+
+            track(name);
+          },
+          true
+        );
+
+        // Auto-load on future visits if previously accepted.
+        if (hasConsent()) {
+          ensurePlausibleLoaded();
+        }
+      })();
+    </script>
+    <title>{title}</title>
+  </head>
+  <body class="bg-background text-foreground">
+    <!-- Skip navigation link for keyboard users -->
+    <a href="#main-content" class="skip-link">Skip to content</a>
+
+    <!-- Layout structure: Header (top) + Sidebar (left) + Main (center) + Footer (bottom) -->
+
+    <!-- Header: Fixed at top -->
+    <Header locale={locale} currentPath={currentPath} />
+
+    <!-- Sidebar: Fixed on left, collapsible on mobile -->
+    <Sidebar locale={locale} currentPath={currentPath} />
+
+    <!-- Mobile menu state manager (React Island) -->
+    <MobileMenu client:idle />
+
+    <!-- Main content area -->
+    <div class="main-wrapper pt-16 lg:pl-70 min-h-screen flex flex-col">
+      <main id="main-content" role="main" class="flex-1 max-w-4xl mx-auto px-6 py-8 w-full">
+        <slot />
+      </main>
+
+      <!-- Footer: At bottom of content -->
+      <Footer locale={locale} />
+    </div>
+
+    <!-- Cookie consent banner (React Island) -->
+    <CookieConsent client:idle locale={locale} />
+  </body>
+</html>
+
+<style>
+  /* Skip navigation link: hidden until focused */
+  .skip-link {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: oklch(var(--primary));
+    color: oklch(var(--primary-foreground));
+    padding: 0.5rem 1rem;
+    z-index: 100;
+    transition: top 0.2s;
+  }
+  .skip-link:focus {
+    top: 0;
+  }
+
+  /* Ensure smooth scrolling for anchor links */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Offset for fixed header when scrolling to anchors */
+  :target {
+    scroll-margin-top: 5rem;
+  }
+</style>

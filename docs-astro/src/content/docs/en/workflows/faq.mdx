@@ -1,0 +1,373 @@
+---
+title: Workflow FAQ
+description: Frequently asked questions about CCW workflows
+category: workflows
+order: 7
+locale: en
+---
+
+# Workflow FAQ
+
+Common questions and answers about CCW workflows.
+
+## General Questions
+
+### What is the difference between Main Workflow and Issue Workflow?
+
+**Main Workflow** is for primary development (Levels 1-5), while **Issue Workflow** is for post-development maintenance.
+
+| Aspect | Main Workflow | Issue Workflow |
+|--------|---------------|----------------|
+| **Purpose** | Feature development | Post-development fixes |
+| **Timing** | Development phase | After main workflow completes |
+| **Parallelism** | Dependency analysis | Worktree isolation (optional) |
+
+### How do I choose the right workflow level?
+
+```mermaid
+flowchart TD
+    Start([Start]) --> Q1{Post-development?}
+    Q1 -->|Yes| Issue["Issue Workflow"]
+    Q1 -->|No| Q2{Uncertain commands?}
+    Q2 -->|Yes| L5["Level 5: ccw-coordinator"]
+    Q2 -->|No| Q3{Requirements clear?}
+    Q3 -->|No| L4["Level 4: brainstorm"]
+    Q3 -->|Yes| Q4{Need persistent session?}
+    Q4 -->|Yes| Q5{Development type?}
+    Q4 -->|No| Q6{Multi-perspective?}
+    Q5 -->|Standard| L3Std["Level 3: plan"]
+    Q5 -->|TDD| L3TDD["Level 3: tdd-plan"]
+    Q5 -->|Test Fix| L3Test["Level 3: test-fix-gen"]
+    Q6 -->|Yes| L2Multi["Level 2: multi-cli-plan"]
+    Q6 -->|No| Q7{Bug fix?}
+    Q7 -->|Yes| L2Fix["Level 2: lite-fix"]
+    Q7 -->|No| Q8{Need planning?}
+    Q8 -->|Yes| L2Plan["Level 2: lite-plan"]
+    Q8 -->|No| L1["Level 1: lite-lite-lite"]
+
+    classDef startend fill:#c8e6c9,stroke:#388e3c
+    classDef decision fill:#fff9c4,stroke:#f57c00
+    classDef level fill:#e3f2fd,stroke:#1976d2
+
+    class Start startend,Q1,Q2,Q3,Q4,Q6,Q7,Q8 decision,Issue,L1,L2Plan,L2Fix,L2Multi,L3Std,L3TDD,L3Test,L4,L5 level
+```
+
+### What are Minimum Execution Units?
+
+**Minimum Execution Units** are sets of commands that must execute together as atomic groups. Splitting these commands breaks logical flow and creates incomplete states.
+
+**Example**: The unit `lite-plan -> lite-execute` must complete together. Stopping after `lite-plan` leaves you with a plan but no implementation.
+
+## Level 1 Questions
+
+### When should I use Level 1?
+
+Use Level 1 (`lite-lite-lite`) when:
+- Quick fixes (typos, minor adjustments)
+- Simple features (single function, small utility)
+- Config changes (environment variables, timeout values)
+- Documentation updates (readme, comments)
+
+**Don't use** when:
+- Multi-module changes
+- Need persistent records
+- Complex refactoring
+- Test-driven development
+
+## Level 2 Questions
+
+### What's the difference between lite-plan, lite-fix, and multi-cli-plan?
+
+| Workflow | Purpose | When to Use |
+|----------|---------|-------------|
+| `lite-plan` | Clear requirements | Single-module features |
+| `lite-fix` | Bug diagnosis | Bug fixes, production issues |
+| `multi-cli-plan` | Multi-perspective analysis | Technology selection, solution comparison |
+
+### What is hotfix mode?
+
+```bash
+/workflow:lite-fix --hotfix "Production database connection failing"
+```
+
+**Hotfix mode**:
+- Skips most diagnosis phases
+- Minimal planning (direct execution)
+- Auto-generates follow-up tasks for complete fix + post-mortem
+- Use for **production emergencies only**
+
+### When should I use multi-cli-plan vs lite-plan?
+
+Use `multi-cli-plan` when:
+- Need multiple perspectives (Gemini, Codex, Claude)
+- Technology selection decisions
+- Solution comparison
+- Architecture trade-offs
+
+Use `lite-plan` when:
+- Requirements are clear
+- Single-perspective sufficient
+- Faster iteration needed
+
+## Level 3 Questions
+
+### What is the difference between plan, tdd-plan, and test-fix-gen?
+
+| Workflow | Purpose | Key Feature |
+|----------|---------|-------------|
+| `plan` | Standard development | 5-phase planning with verification |
+| `tdd-plan` | Test-driven development | Red-Green-Refactor cycles |
+| `test-fix-gen` | Test fixes | Progressive test layers (L0-L3) |
+
+### What is TDD (Test-Driven Development)?
+
+**TDD** follows the Red-Green-Refactor cycle:
+
+1. **Red**: Write a failing test
+2. **Green**: Write minimal code to pass the test
+3. **Refactor**: Improve code while keeping tests green
+
+**The Iron Law**:
+```
+NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
+```
+
+### Why does TDD require tests to be written first?
+
+| Aspect | Test-First | Test-After |
+|--------|-----------|------------|
+| **Proof** | Tests fail before implementation | Tests pass immediately (proves nothing) |
+| **Discovery** | Edge cases found before coding | Edge cases found after coding |
+| **Verification** | Verifies requirements | Verifies implementation |
+
+### What are the test layers in test-fix-gen?
+
+| Layer | Type | Description |
+|-------|------|-------------|
+| **L0** | Static | Type checking, linting |
+| **L1** | Unit | Function-level tests |
+| **L2** | Integration | Component interaction |
+| **L3** | E2E | Full system tests |
+
+## Level 4 Questions
+
+### When should I use brainstorm:auto-parallel?
+
+Use Level 4 (`brainstorm:auto-parallel`) when:
+- New feature design
+- System architecture refactoring
+- Exploratory requirements
+- Uncertain implementation approach
+- Multi-dimensional trade-offs needed
+
+### What roles are available in brainstorm?
+
+| Role | Description |
+|------|-------------|
+| `system-architect` | System design |
+| `ui-designer` | UI design |
+| `ux-expert` | User experience |
+| `product-manager` | Product requirements |
+| `product-owner` | Business value |
+| `data-architect` | Data structure |
+| `scrum-master` | Process and team |
+| `subject-matter-expert` | Domain expertise |
+| `test-strategist` | Testing strategy |
+
+### What are With-File workflows?
+
+**With-File workflows** provide documented exploration with multi-CLI collaboration:
+
+| Workflow | Purpose | Level |
+|----------|---------|-------|
+| `brainstorm-with-file` | Multi-perspective ideation | 4 |
+| `debug-with-file` | Hypothesis-driven debugging | 3 |
+| `analyze-with-file` | Collaborative analysis | 3 |
+
+## Level 5 Questions
+
+### When should I use ccw-coordinator?
+
+Use Level 5 (`ccw-coordinator`) when:
+- Complex multi-step workflows
+- Uncertain which commands to use
+- Desire end-to-end automation
+- Need full state tracking and resumability
+- Team collaboration with unified execution flow
+
+### How does ccw-coordinator differ from other levels?
+
+| Aspect | Level 1-4 | Level 5 |
+|--------|----------|--------|
+| **Command Selection** | Manual | Auto |
+| **Orchestration** | Manual | Intelligent |
+| **State Tracking** | Varies | Full persistence |
+
+## Execution Questions
+
+### What is lite-execute?
+
+`lite-execute` is the unified execution command for Level 2 workflows:
+
+```bash
+/workflow:lite-execute --in-memory
+```
+
+**Features**:
+- Parallel execution for independent tasks
+- Sequential phases for dependent tasks
+- Progress tracking via TodoWrite
+- Optional code review
+
+### What is execute?
+
+`execute` is the unified execution command for Level 3 workflows:
+
+```bash
+/workflow:execute --session WFS-{session-id}
+```
+
+**Features**:
+- Dependency analysis
+- Parallel/sequential task execution
+- Session-based progress tracking
+- Task completion summaries
+
+## Session Questions
+
+### How do I resume a paused session?
+
+```bash
+/workflow:session:resume  # Resume most recent session
+/workflow:session:resume WFS-{session-id}  # Resume specific session
+```
+
+### How do I complete a session?
+
+```bash
+/workflow:session:complete --session WFS-{session-id}
+```
+
+This archives the session with lessons learned and updates the manifest.
+
+### How do I list all sessions?
+
+```bash
+/workflow:session:list
+```
+
+## Artifact Questions
+
+### Where are workflow artifacts stored?
+
+| Level | Artifact Location |
+|-------|-------------------|
+| Level 1 | None (stateless) |
+| Level 2 | `memory://plan` or `.workflow/.lite-fix/`, `.workflow/.multi-cli-plan/` |
+| Level 3 | `.workflow/active/WFS-{session}/` |
+| Level 4 | `.workflow/active/WFS-{session}/.brainstorming/` |
+| Level 5 | `.workflow/.ccw-coordinator/{session}/` |
+
+### What files are in a session?
+
+```
+.workflow/active/WFS-{session}/
+├── workflow-session.json          # Session metadata
+├── IMPL_PLAN.md                   # Implementation plan
+├── TODO_LIST.md                   # Progress tracking
+├── .task/
+│   ├── IMPL-001.json              # Task definitions
+│   ├── IMPL-002.json
+│   └── ...
+└── .process/
+    ├── context-package.json       # Project context
+    └── planning-notes.md
+```
+
+## Testing Questions
+
+### How do I add tests to existing code?
+
+```bash
+# Session Mode (from existing session)
+/workflow:test-fix-gen WFS-user-auth-v2
+
+# Prompt Mode (direct description)
+/workflow:test-fix-gen "Add unit tests for the auth API"
+```
+
+### How do I fix failing tests?
+
+```bash
+/workflow:test-fix-gen "Tests failing for user registration"
+/workflow:test-cycle-execute
+```
+
+The workflow will:
+1. Analyze test failures
+2. Identify root causes
+3. Fix issues iteratively
+4. Verify >= 95% pass rate
+
+## Troubleshooting
+
+### My workflow failed. What should I do?
+
+1. **Check the error message** - Identify the root cause
+2. **Review state.json** - Check `.workflow/.ccw-coordinator/{session}/state.json`
+3. **Resume the session** - Use `/workflow:session:resume` to continue
+4. **Adjust and retry** - Modify approach based on error
+
+### How do I skip a failing task?
+
+Edit the task JSON to set status to "completed":
+
+```bash
+jq '.status = "completed"' .workflow/active/WFS-{session}/.task/IMPL-001.json
+```
+
+### How do I clean up old sessions?
+
+```bash
+# List sessions
+/workflow:session:list
+
+# Remove specific session
+rm -rf .workflow/active/WFS-{session-id}
+
+# Clean all completed sessions
+/workflow:clean
+```
+
+## Best Practices
+
+### What are the workflow best practices?
+
+1. **Start simple** - Use the lowest level that meets your needs
+2. **Plan before executing** - Use verification steps when available
+3. **Test continuously** - Integrate testing into your workflow
+4. **Review code** - Use built-in review workflows
+5. **Document decisions** - Use brainstorm workflows for complex decisions
+
+### When should I use worktree isolation?
+
+**Worktree isolation** is primarily for **Issue Workflow**:
+- After main development is complete
+- Merged to `main` branch
+- Issues discovered requiring fixes
+- Need to fix without affecting current development
+
+**Main Workflow** doesn't need worktree because:
+- Dependency analysis solves parallelism
+- Agents execute independent tasks in parallel
+- No filesystem isolation needed
+
+## Related Documentation
+
+- [Introduction](./introduction.mdx) - Workflow overview
+- [Level 1](./level-1-ultra-lightweight.mdx) - Ultra-lightweight workflows
+- [Level 2](./level-2-rapid.mdx) - Rapid workflows
+- [Level 3](./level-3-standard.mdx) - Standard workflows
+- [Level 4](./level-4-brainstorm.mdx) - Brainstorm workflows
+- [Level 5](./level-5-intelligent.mdx) - Intelligent workflows
+- [Commands](../commands/general/ccw.mdx) - Command reference

@@ -1,0 +1,101 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import type { CollectionEntry } from 'astro:content';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import TableOfContents from '../components/TableOfContents.astro';
+
+interface Props {
+  entry: CollectionEntry<'docs'> | CollectionEntry<'guides'> | CollectionEntry<'api-reference'>;
+  headings?: { depth: number; slug: string; text: string }[];
+}
+
+const { entry, headings = [] } = Astro.props;
+const { Content } = await entry.render();
+const { title, description, category, locale } = entry.data;
+const currentPath = Astro.url.pathname;
+
+const tocHeadings = headings.filter((h) => h.depth >= 2 && h.depth <= 4);
+
+const SITE_URL = 'https://ccw-docs.example.com';
+const articleURL = new URL(currentPath, SITE_URL).href;
+const techArticleSchema = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'TechArticle',
+  headline: title,
+  description: description || '',
+  url: articleURL,
+  inLanguage: locale,
+  publisher: {
+    '@type': 'Organization',
+    name: 'Claude Code Workflow',
+    url: SITE_URL,
+  },
+  mainEntityOfPage: {
+    '@type': 'WebPage',
+    '@id': articleURL,
+  },
+});
+---
+
+<BaseLayout title={title} description={description} locale={locale} currentPath={currentPath}>
+  <script type="application/ld+json" set:html={techArticleSchema} slot="head" />
+  <div class="doc-layout flex gap-8 max-w-7xl mx-auto px-4 py-8">
+    <!-- Main Content -->
+    <div class="flex-1 min-w-0">
+      <article class="prose prose-lg dark:prose-invert max-w-none" data-pagefind-body>
+        <!-- Header -->
+        <header class="mb-8 pb-6 border-b border-gray-200 dark:border-gray-700">
+          <Breadcrumbs locale={locale} currentPath={currentPath} />
+          <div class="mb-2">
+            <span
+              class="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-900 px-3 py-1 text-sm font-medium text-blue-800 dark:text-blue-200"
+            >
+              {category}
+            </span>
+          </div>
+          <h1 class="mb-3 text-4xl font-bold text-gray-900 dark:text-gray-100">
+            {title}
+          </h1>
+          {description && (
+            <p class="text-xl text-gray-600 dark:text-gray-400">
+              {description}
+            </p>
+          )}
+        </header>
+
+        <!-- Content -->
+        <div class="doc-content">
+          <Content />
+        </div>
+      </article>
+    </div>
+
+    <!-- Table of Contents Sidebar -->
+    {tocHeadings.length > 0 && (
+      <aside class="hidden xl:block w-64 flex-shrink-0" data-pagefind-ignore>
+        <TableOfContents headings={tocHeadings} locale={locale} offsetPx={80} contentSelector=".doc-content" />
+      </aside>
+    )}
+  </div>
+</BaseLayout>
+
+<style>
+  /* Anchor links */
+  :global(.anchor-link) {
+    @apply text-gray-400 hover:text-gray-600 dark:text-gray-600 dark:hover:text-gray-400 no-underline;
+  }
+
+  /* Code blocks in prose */
+  :global(.doc-content pre) {
+    @apply rounded-lg border border-gray-200 dark:border-gray-700;
+  }
+
+  /* Tables in prose */
+  :global(.doc-content table) {
+    @apply w-full;
+  }
+
+  :global(.doc-content th) {
+    @apply bg-gray-50 dark:bg-gray-800;
+  }
+</style>

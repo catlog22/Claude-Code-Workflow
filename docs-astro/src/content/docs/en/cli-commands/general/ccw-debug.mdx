@@ -1,0 +1,271 @@
+---
+title: /ccw-debug
+description: Debug coordinator for intelligent debugging workflows
+category: cli-commands
+order: 5
+locale: en
+---
+
+# /ccw-debug
+
+Debug coordinator - analyzes issues, selects debug strategy, and executes debug workflow in the main process.
+
+## Overview
+
+The `/ccw-debug` command orchestrates debugging workflows by analyzing issue descriptions, selecting appropriate debug strategies, and executing targeted command chains.
+
+**Parameters**:
+- `--mode &lt;mode&gt;`: Debug mode (cli, debug, test, bidirectional)
+- `--yes|-y`: Skip confirmation prompts
+- `"bug description"`: Issue to debug (required)
+
+**Core Concept**: Debug Units - commands grouped into logical units for different root cause strategies.
+
+## Features
+
+- **Issue Analysis** - Extracts symptoms, occurrence patterns, affected components
+- **Strategy Selection** - Auto-selects based on keywords and complexity
+- **Debug Units** - 4 debug modes for different scenarios
+- **Parallel Execution** - Bidirectional mode for complex issues
+- **State Tracking** - TODO and status file tracking
+
+## Usage
+
+```bash
+# Auto-select mode (keyword-based detection)
+/ccw-debug "Login timeout error"
+
+# Explicit mode selection
+/ccw-debug --mode cli "Quick API question"
+/ccw-debug --mode debug "User authentication fails"
+/ccw-debug --mode test "Unit tests failing"
+/ccw-debug --mode bidirectional "Complex multi-module issue"
+
+# Skip confirmation
+/ccw-debug --yes "Fix typo in config"
+```
+
+## Debug Modes
+
+### CLI Mode
+**Use for**: Quick analysis, simple questions, early diagnosis
+
+**Command Chain**:
+```
+ccw cli --mode analysis --rule analysis-diagnose-bug-root-ause
+```
+
+**Characteristics**:
+- Analysis only
+- No code changes
+- Returns findings and recommendations
+
+### Debug Mode
+**Use for**: Standard bug diagnosis and fix
+
+**Command Chain**:
+```
+/workflow:debug-with-file
+/workflow:test-fix-gen
+/workflow:test-cycle-execute
+```
+
+**Characteristics**:
+- Hypothesis-driven debugging
+- Test generation
+- Iterative fixing
+
+### Test Mode
+**Use for**: Test failures, test validation
+
+**Command Chain**:
+```
+/workflow:test-fix-gen
+/workflow:test-cycle-execute
+```
+
+**Characteristics**:
+- Test-focused
+- Fix in testing
+- Iterative until pass
+
+### Bidirectional Mode
+**Use for**: Complex issues requiring multiple perspectives
+
+**Command Chain** (Parallel):
+```
+/workflow:debug-with-file  ∥  /workflow:test-fix-gen  ∥  /workflow:test-cycle-execute
+                            ↓
+                      Merge findings
+```
+
+**Characteristics**:
+- Parallel execution
+- Multiple perspectives
+- Merged findings
+
+## Debug Units
+
+| Unit Name | Commands | Purpose |
+|-----------|----------|---------|
+| **Quick Analysis** | ccw cli (analysis) | Quick diagnosis |
+| **Standard Debug** | debug-with-file → test-fix-gen → test-cycle-execute | Full debug cycle |
+| **Test Fix** | test-fix-gen → test-cycle-execute | Test-focused fix |
+| **Comprehensive** | (debug ∥ test ∥ test-cycle) → merge | Multi-perspective |
+
+## Execution Flow
+
+```
+User Input: "bug description"
+    ↓
+Phase 1: Analyze Issue
+    ├─ Extract: description, error_type, clarity, complexity, scope
+    └─ If clarity < 2 → Phase 1.5: Clarify Issue
+    ↓
+Phase 2: Select Debug Strategy & Build Chain
+    ├─ Detect mode: cli | debug | test | bidirectional
+    ├─ Build command chain based on mode
+    └─ Parallel execution for bidirectional
+    ↓
+Phase 3: User Confirmation (optional)
+    ├─ Show debug strategy
+    └─ Allow mode change
+    ↓
+Phase 4: Setup TODO Tracking & Status File
+    ├─ Create todos with CCWD prefix
+    └─ Initialize .workflow/.ccw-debug/{session_id}/status.json
+    ↓
+Phase 5: Execute Debug Chain
+    ├─ Sequential: execute commands in order
+    ├─ Bidirectional: execute debug + test in parallel
+    ├─ CLI: present findings, ask for escalation
+    └─ Merge findings (bidirectional)
+    ↓
+Update status and TODO
+```
+
+## Mode Detection
+
+| Keywords | Detected Mode |
+|----------|---------------|
+| quick, simple, question, what, how | cli |
+| bug, error, fail, crash, timeout | debug |
+| test, unit test, coverage, assertion | test |
+| complex, multiple, module, integration | bidirectional |
+
+## Debug Pipeline Examples
+
+| Issue | Mode | Pipeline |
+|-------|------|----------|
+| "Login timeout error (quick)" | cli | ccw cli → analysis → (escalate or done) |
+| "User login fails intermittently" | debug | debug-with-file → test-gen → test-cycle |
+| "Authentication tests failing" | test | test-fix-gen → test-cycle-execute |
+| "Multi-module auth + db sync issue" | bidirectional | (debug ∥ test) → merge findings |
+
+**Legend**: `∥` = parallel execution
+
+## State Management
+
+### Dual Tracking System
+
+**1. TodoWrite-Based Tracking** (UI Display):
+```bash
+CCWD:debug: [1/3] /workflow:debug-with-file    [in_progress]
+CCWD:debug: [2/3] /workflow:test-fix-gen        [pending]
+CCWD:debug: [3/3] /workflow:test-cycle-execute  [pending]
+```
+
+**2. Status File** (Internal State):
+```json
+{
+  "session_id": "CCWD-...",
+  "mode": "debug|cli|test|bidirectional",
+  "status": "running",
+  "parallel_execution": false|true,
+  "issue": {
+    "description": "...",
+    "error_type": "...",
+    "clarity": 1-5,
+    "complexity": "low|medium|high"
+  },
+  "command_chain": [...],
+  "findings": {
+    "debug": {...},
+    "test": {...},
+    "merged": {...}
+  }
+}
+```
+
+## Examples
+
+### CLI Mode
+
+```bash
+# Quick analysis
+/ccw-debug --mode cli "Why is the API returning 500?"
+
+# Output:
+# Executing CLI analysis...
+# Analysis complete:
+# - Root cause: Database connection timeout
+# - Recommendation: Increase connection pool size
+# Escalate to debug mode? (y/n): y
+```
+
+### Debug Mode
+
+```bash
+# Standard debugging
+/ccw-debug "User login fails intermittently"
+
+# Output:
+# Analyzing issue...
+# Mode detected: debug
+# Command chain:
+#   1. /workflow:debug-with-file
+#   2. /workflow:test-fix-gen
+#   3. /workflow:test-cycle-execute
+# Confirm? (y/n): y
+#
+# CCWD:debug: [1/3] /workflow:debug-with-file [in_progress]
+# ...
+```
+
+### Bidirectional Mode
+
+```bash
+# Complex issue
+/ccw-debug --mode bidirectional "Multi-module auth + database sync issue"
+
+# Output:
+# Analyzing issue...
+# Mode: bidirectional (parallel execution)
+# Command chain:
+#   Branch A: /workflow:debug-with-file
+#   Branch B: /workflow:test-fix-gen
+#   Branch C: /workflow:test-cycle-execute
+# → Merge findings
+# Confirm? (y/n): y
+#
+# Executing branches in parallel...
+# Merging findings...
+# Final recommendations: ...
+```
+
+## Related Commands
+
+- **/workflow:debug-with-file** - Hypothesis-driven debugging
+- **/workflow:test-fix-gen** - Test fix generation
+- **/workflow:test-cycle-execute** - Test cycle execution
+- **/ccw** - Main workflow coordinator
+
+## Notes
+
+- **Auto mode detection** based on keywords
+- **Debug units** ensure complete debugging milestones
+- **TODO tracking** with CCWD prefix
+- **Status file** in `.workflow/.ccw-debug/{session}/`
+- **Parallel execution** for bidirectional mode
+- **Merge findings** combines multiple perspectives
+- **Escalation support** from CLI to other modes

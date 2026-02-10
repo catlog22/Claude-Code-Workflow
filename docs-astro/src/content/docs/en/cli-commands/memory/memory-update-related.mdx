@@ -1,0 +1,231 @@
+---
+title: "/memory:update-related"
+description: Update CLAUDE.md for git-changed modules using batched execution
+category: cli-commands
+order: 2
+locale: en
+---
+
+# /memory:update-related
+
+Orchestrates context-aware CLAUDE.md updates for changed modules using batched agent execution with automatic tool fallback.
+
+## Overview
+
+The `/memory:update-related` command updates CLAUDE.md documentation only for modules affected by git changes, providing faster updates for daily development.
+
+**Parameters**:
+- `--tool &lt;gemini|qwen|codex&gt;`: Primary tool (default: gemini)
+
+**Execution Flow**:
+1. Change Detection → 2. Plan Presentation → 3. Batched Execution → 4. Safety Verification
+
+## Features
+
+- **Changed Module Detection** - Uses git diff to identify affected modules
+- **Intelligent Batching** - Groups modules by depth (4 modules/agent)
+- **Automatic Fallback** - gemini→qwen→codex on failure
+- **Depth Sequential** - Process depths N→0, parallel batches within depth
+- **Related Mode** - Update only changed modules and their parent contexts
+- **Smart Filtering** - Auto-detects and skips tests/build/config/docs
+
+## Usage
+
+```bash
+# Update git-changed modules
+/memory:update-related
+
+# Use specific tool
+/memory:update-related --tool qwen
+
+# Fallback to recent modules if no changes detected
+/memory:update-related
+```
+
+## Tool Fallback Hierarchy
+
+```javascript
+--tool gemini  →  [gemini, qwen, codex]  // default
+--tool qwen    →  [qwen, gemini, codex]
+--tool codex   →  [codex, gemini, qwen]
+```
+
+**Trigger**: Non-zero exit code from update script
+
+## Execution Modes
+
+### Small Changes (&lt;15 modules)
+- **Direct parallel execution**
+- Max 4 concurrent per depth
+- No agent overhead
+
+### Large Changes (&gt;=15 modules)
+- **Agent batch processing**
+- 4 modules/agent
+- Better resource utilization
+
+## Execution Flow
+
+### Phase 1: Change Detection & Analysis
+
+```javascript
+// Detect changed modules
+Bash({command: "ccw tool exec detect_changed_modules '{\"format\":\"list\"}'", run_in_background: false});
+
+// Cache git changes
+Bash({command: "git add -A 2>/dev/null || true", run_in_background: false});
+```
+
+**Parse output** `depth:N|path:&lt;PATH&gt;|change:&lt;TYPE&gt;` to extract affected modules.
+
+**Smart filter**: Auto-detect and skip tests/build/config/docs based on project tech stack.
+
+**Fallback**: If no changes detected, use recent modules (first 10 by depth).
+
+### Phase 2: Plan Presentation
+
+- Parse `--tool` (default: gemini)
+- Refresh code index for accurate change detection
+- Detect changed modules via detect_changed_modules
+- **Smart filter modules** (auto-detect tech stack, skip tests/build/config/docs)
+- Cache git changes
+- Apply fallback if no changes (recent 10 modules)
+- Construct tool fallback order
+- **Present filtered plan** with skip reasons and change types
+- **Wait for y/n confirmation**
+
+### Phase 3A: Direct Execution (&lt;15 modules)
+
+```javascript
+for (let depth of sorted_depths.reverse()) {  // N → 0
+  let batches = batch_modules(modules_by_depth[depth], 4);
+
+  for (let batch of batches) {
+    let parallel_tasks = batch.map(module => {
+      return async () => {
+        for (let tool of tool_order) {
+          Bash({
+            command: `cd ${module.path} && ccw tool exec update_module_claude '{"strategy":"single-layer","path":".","tool":"${tool}"}'`,
+            run_in_background: false
+          });
+          if (bash_result.exit_code === 0) {
+            report(`✅ ${module.path} updated with ${tool}`);
+            return true;
+          }
+        }
+        report(`❌ FAILED: ${module.path} failed all tools`);
+        return false;
+      };
+    });
+    await Promise.all(parallel_tasks.map(task => task()));
+  }
+}
+```
+
+### Phase 3B: Agent Execution (&gt;=15 modules)
+
+```javascript
+let modules_by_depth = group_by_depth(changed_modules);
+let tool_order = construct_tool_order(primary_tool);
+
+for (let depth of sorted_depths.reverse()) {  // N → 0
+  let batches = batch_modules(modules_by_depth[depth], 4);
+  let worker_tasks = [];
+
+  for (let batch of batches) {
+    worker_tasks.push(
+      Task(
+        subagent_type="memory-bridge",
+        description=`Update ${batch.length} modules at depth ${depth}`,
+        prompt=generate_batch_worker_prompt(batch, tool_order, "related")
+      )
+    );
+  }
+
+  await parallel_execute(worker_tasks);  // Batches run in parallel
+}
+```
+
+### Phase 4: Safety Verification
+
+- Verify only CLAUDE.md files were modified
+- Display git diff statistics
+- Show summary of updates
+
+## Strategy Selection
+
+**Related Mode** uses `single-layer` strategy:
+- Updates only the changed module's CLAUDE.md
+- Faster than full update's multi-layer approach
+- Suitable for iterative development
+
+## Comparison with Full Update
+
+| Aspect | Related Update | Full Update |
+|--------|----------------|-------------|
+| **Scope** | Changed modules only | All project modules |
+| **Speed** | Fast (minutes) | Slower (10-30 min) |
+| **Use case** | Daily development | Major refactoring |
+| **Mode** | `"related"` | `"full"` |
+| **Trigger** | After commits | After major changes |
+| **Batching** | 4 modules/agent | 4 modules/agent |
+| **Fallback** | gemini→qwen→codex | gemini→qwen→codex |
+| **Complexity threshold** | &lt;=15 modules | &lt;=20 modules |
+| **Strategy** | single-layer only | multi-layer for depth&gt;=3 |
+
+## Examples
+
+### Basic Usage
+
+```bash
+# Update changed modules after commits
+/memory:update-related
+
+# Output:
+# Detecting git changes...
+# Found 8 changed modules
+# Filtered: 3 test modules skipped
+# Plan: Update 5 modules with gemini→qwen→codex fallback
+# Confirm? (y/n): y
+#
+# Depth 3: [4/4] ✅
+# Depth 2: [1/1] ✅
+# Summary: 5/5 modules updated
+# Safety check: Only CLAUDE.md modified ✅
+```
+
+### Tool Selection
+
+```bash
+# Use Qwen for faster updates
+/memory:update-related --tool qwen
+
+# Tries qwen → gemini → codex
+```
+
+### No Changes Detected
+
+```bash
+# When no git changes found
+/memory:update-related
+
+# Output:
+# No git changes detected, using recent 10 modules
+# Plan: Update recent modules
+```
+
+## Related Commands
+
+- **/memory:update-full** - Update all project modules
+- **/memory:load** - Load project context into memory
+- **/memory:compact** - Compact session memory
+
+## Notes
+
+- **Direct execution** for &lt;15 modules (faster, no agent overhead)
+- **Agent execution** for &gt;=15 modules (better resource utilization)
+- **Smart filtering** automatically skips test/build/config directories
+- **Change detection** uses git diff to find affected modules
+- **Fallback** to recent modules when no changes detected
+- **Safety check** ensures only CLAUDE.md files are modified
+- **Git diff statistics** provide summary of changes

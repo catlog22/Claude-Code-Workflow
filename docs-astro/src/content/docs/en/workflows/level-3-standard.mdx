@@ -1,0 +1,499 @@
+---
+title: Level 3 - Standard Workflows
+description: Complete planning with persistent session management for multi-module changes
+category: workflows
+order: 4
+locale: en
+---
+
+# Level 3: Standard Workflows
+
+**Complexity**: Medium-High | **Artifacts**: Persistent session files | **State**: Full session management
+
+Level 3 workflows provide complete planning with persistent session management. They're designed for multi-module changes that require traceability, verification, and structured execution.
+
+## Overview
+
+```mermaid
+flowchart TD
+    Start([User Input]) --> Select{Select Workflow}
+
+    Select -->|Standard<br/>development| Plan[plan]
+    Select -->|Test-driven| TDD[tdd-plan]
+    Select -->|Test fix| TestFix[test-fix-gen]
+
+    Plan --> Verify[plan-verify<br/>Optional]
+    TDD --> Verify
+    Verify --> Execute[execute]
+
+    TestFix --> TestCycle[test-cycle-execute]
+
+    Execute --> Review{Review?}
+    TestCycle --> Review
+
+    Review -->|Yes| RevCycle[review-session-cycle]
+    Review -->|No| TestQ{Tests?}
+    RevCycle --> RevFix[review-cycle-fix]
+    RevFix --> TestQ
+
+    TestQ -->|Yes| TFG[test-fix-gen]
+    TestQ -->|No| Complete([session:complete])
+
+    TFG --> TCE[test-cycle-execute]
+    TCE --> Complete
+
+    classDef startend fill:#c8e6c9,stroke:#388e3c
+    classDef workflow fill:#e3f2fd,stroke:#1976d2
+    classDef decision fill:#fff9c4,stroke:#f57c00
+    classDef execute fill:#c5e1a5,stroke:#388e3c
+
+    class Start,Complete startend,Select,Review,TestQ decision,Plan,TDD,TestFix workflow,Verify,Execute,TestCycle,RevCycle,RevFix,TFG,TCE execute
+```
+
+## Included Workflows
+
+| Workflow | Purpose | Phases | Artifact Location |
+|----------|---------|--------|-------------------|
+| `plan` | Complex feature development | 5 phases | `.workflow/active/{session}/` |
+| `tdd-plan` | Test-driven development | 6 phases | `.workflow/active/{session}/` |
+| `test-fix-gen` | Test fix generation | 5 phases | `.workflow/active/WFS-test-{session}/` |
+
+### Common Characteristics
+
+| Property | Value |
+|----------|-------|
+| **Complexity** | Medium-High |
+| **Artifacts** | Persistent files (`.workflow/active/{session}/`) |
+| **State** | Full session management |
+| **Verification** | Built-in verification steps |
+| **Execution** | `/workflow:execute` |
+| **Use Case** | Multi-module, traceable tasks |
+
+---
+
+## Workflow 1: plan -> verify -> execute
+
+**5-phase complete planning workflow**
+
+### Command
+
+```bash
+/workflow:plan "Implement OAuth2 authentication system"
+/workflow:plan-verify  # Verify plan (recommended)
+/workflow:execute
+/workflow:review  # (optional) Review
+```
+
+### Flow Diagram
+
+```mermaid
+flowchart TD
+    A([Start]) --> B[Phase 1: Session Discovery]
+    B --> C[/workflow:session:start<br/>--auto/]
+    C --> D[Return: sessionId]
+
+    D --> E[Phase 2: Context Gathering]
+    E --> F[/workflow:tools:context-gather/]
+    F --> G[Return: context-package.json<br/>+ conflict_risk]
+
+    G --> H{conflict_risk<br/>>= medium?}
+    H -->|Yes| I[Phase 3: Conflict Resolution]
+    H -->|No| J[Phase 4: Task Generation]
+    I --> K[/workflow:tools:conflict<br/>-resolution/]
+    K --> J
+
+    J --> L[/workflow:tools:task-generate<br/>-agent/]
+    L --> M[Return: IMPL_PLAN.md<br/>+ IMPL-*.json<br/>+ TODO_LIST.md]
+
+    M --> N[Return Summary<br/>+ Next Steps]
+    N --> O([Plan Complete])
+
+    classDef startend fill:#c8e6c9,stroke:#388e3c
+    classDef action fill:#e3f2fd,stroke:#1976d2
+    classDef decision fill:#fff9c4,stroke:#f57c00
+    classDef tool fill:#ffecb3,stroke:#ffa000
+
+    class A,O startend,H decision,B,E,G,J,M,N action,C,F,K,L tool
+```
+
+### Process Phases
+
+**Phase 1: Session Discovery**
+```bash
+/workflow:session:start --auto "Implement OAuth2 authentication system"
+```
+- Creates or discovers workflow session
+- Returns: `sessionId`
+
+**Phase 2: Context Gathering**
+```bash
+/workflow:tools:context-gather
+```
+- Analyzes codebase structure
+- Identifies tech stack and patterns
+- Returns: `context-package.json` + `conflict_risk`
+
+**Phase 3: Conflict Resolution** (Conditional)
+```bash
+# Only if conflict_risk >= medium
+/workflow:tools:conflict-resolution
+```
+- Detects potential conflicts
+- Resolves dependency issues
+- Ensures clean execution path
+
+**Phase 4: Task Generation**
+```bash
+/workflow:tools:task-generate-agent
+```
+- Generates structured tasks
+- Creates dependency graph
+- Returns: `IMPL_PLAN.md` + `IMPL-*.json` + `TODO_LIST.md`
+
+### Artifacts
+
+**Location**: `.workflow/active/{WFS-session}/`
+
+```
+.workflow/active/WFS-oauth2-auth-2025-02-03/
+├── workflow-session.json          # Session metadata
+├── IMPL_PLAN.md                   # Implementation plan
+├── TODO_LIST.md                   # Progress tracking
+├── .task/
+│   ├── IMPL-001.json              # Main task
+│   ├── IMPL-002.json
+│   └── ...
+└── .process/
+    ├── context-package.json       # Project context
+    ├── conflict-resolution.json   # Conflict analysis
+    └── planning-notes.md
+```
+
+### Use Cases
+
+- Multi-module changes
+- Refactoring
+- Dependency analysis needed
+
+---
+
+## Workflow 2: tdd-plan -> execute -> tdd-verify
+
+**6-phase test-driven development workflow**
+
+### Command
+
+```bash
+/workflow:tdd-plan "Implement user registration with TDD"
+/workflow:execute  # Follow Red-Green-Refactor
+/workflow:tdd-verify  # Verify TDD compliance
+```
+
+### Flow Diagram
+
+```mermaid
+flowchart TD
+    A([Start]) --> B[Phase 1: Session Discovery]
+    B --> C[/workflow:session:start<br/>--type tdd --auto/]
+    C --> D[Parse: sessionId]
+
+    D --> E[Phase 2: Context Gathering]
+    E --> F[/workflow:tools:context-gather/]
+    F --> G[Return: context-package.json]
+
+    G --> H[Phase 3: Test Coverage Analysis]
+    H --> I[/workflow:tools:test-context<br/>-gather/]
+    I --> J[Detect test framework<br/>Analyze coverage]
+
+    J --> K{conflict_risk<br/>>= medium?}
+    K -->|Yes| L[Phase 4: Conflict Resolution]
+    K -->|No| M[Phase 5: TDD Task Generation]
+    L --> N[/workflow:tools:conflict<br/>-resolution/]
+    N --> M
+
+    M --> O[/workflow:tools:task-generate<br/>-tdd/]
+    O --> P[Generate IMPL tasks with<br/>Red-Green-Refactor cycles]
+
+    P --> Q[Phase 6: TDD Structure Validation]
+    Q --> R[Verify TDD compliance]
+
+    R --> S([TDD Plan Complete])
+
+    T[Execute] --> U[/workflow:execute/]
+    U --> V[Follow Red-Green-Refactor<br/>cycles in each task]
+
+    V --> W[Verify]
+    W --> X[/workflow:tdd-verify/]
+    X --> Y([Complete])
+
+    classDef startend fill:#c8e6c9,stroke:#388e3c
+    classDef action fill:#e3f2fd,stroke:#1976d2
+    classDef decision fill:#fff9c4,stroke:#f57c00
+    classDef tool fill:#ffecb3,stroke:#ffa000
+
+    class A,S,Y startend,K decision,B,E,G,H,J,M,P,Q,R,T,U,V,X action,C,F,I,N,O,W tool
+```
+
+### Process Phases
+
+**Phase 1: Session Discovery**
+```bash
+/workflow:session:start --type tdd --auto "TDD: User Registration"
+```
+
+**TDD Structured Format**:
+```
+TDD: [Feature Name]
+GOAL: [Objective]
+SCOPE: [Included/excluded]
+CONTEXT: [Background]
+TEST_FOCUS: [Test scenarios]
+```
+
+**Phase 2: Context Gathering**
+```bash
+/workflow:tools:context-gather
+```
+
+**Phase 3: Test Coverage Analysis**
+```bash
+/workflow:tools:test-context-gather
+```
+- Detect test framework
+- Analyze existing test coverage
+- Identify coverage gaps
+
+**Phase 4: Conflict Resolution** (Conditional)
+```bash
+# Only if conflict_risk >= medium
+/workflow:tools:conflict-resolution
+```
+
+**Phase 5: TDD Task Generation**
+```bash
+/workflow:tools:task-generate-tdd
+```
+- Generate IMPL tasks with built-in Red-Green-Refactor cycles
+- `meta.tdd_workflow: true`
+- `flow_control.implementation_approach` contains 3 steps (red/green/refactor)
+
+**Phase 6: TDD Structure Validation**
+- Verify TDD structure compliance
+
+### TDD Task Structure
+
+```json
+{
+  "id": "IMPL-001",
+  "title": "Implement user registration",
+  "meta": {
+    "tdd_workflow": true
+  },
+  "flow_control": {
+    "implementation_approach": [
+      {
+        "step": 1,
+        "title": "Red: Write failing test",
+        "description": "Write test that fails"
+      },
+      {
+        "step": 2,
+        "title": "Green: Make test pass",
+        "description": "Implement minimal code to pass",
+        "test_fix_cycle": {
+          "max_iterations": 3,
+          "pass_threshold": 0.95
+        }
+      },
+      {
+        "step": 3,
+        "title": "Refactor: Improve code",
+        "description": "Refactor while keeping tests green"
+      }
+    ]
+  }
+}
+```
+
+### The Iron Law
+
+```
+NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
+```
+
+**Enforcement Method**:
+- Phase 5: `implementation_approach` includes test-first steps (Red -> Green -> Refactor)
+- Green phase: Includes test-fix-cycle configuration (max 3 iterations)
+- Auto-revert: Triggered when max iterations reached without passing tests
+
+**Why Order Matters**:
+- Tests written after code pass immediately -> proves nothing
+- Test-first forces edge case discovery before implementation
+- Tests-after verify what was built, not what's required
+
+### Use Cases
+
+- Test-driven development
+- High-quality feature requirements
+- Critical system components
+
+---
+
+## Workflow 3: test-fix-gen -> test-cycle-execute
+
+**5-phase test fix generation workflow**
+
+### Command
+
+```bash
+# Session Mode
+/workflow:test-fix-gen WFS-user-auth-v2
+/workflow:test-cycle-execute
+
+# Prompt Mode
+/workflow:test-fix-gen "Test the auth API"
+/workflow:test-cycle-execute
+```
+
+### Flow Diagram
+
+```mermaid
+flowchart TD
+    A([Start]) --> B{Input Mode?}
+
+    B -->|Session<br/>Mode| C[Phase 1: Use Source<br/>Session]
+    B -->|Prompt<br/>Mode| D[Phase 1: Create<br/>Test Session]
+
+    C --> E[/workflow:session:start<br/>--type test --resume/]
+    D --> F[/workflow:session:start<br/>--type test --new/]
+
+    E --> G[Phase 2: Gather Test Context]
+    F --> H[Phase 2: Gather Test Context]
+
+    G --> I[/workflow:tools:test-context<br/>-gather/]
+    H --> I
+
+    I --> J[Phase 3: Test Generation Analysis]
+    J --> K[/workflow:tools:test-concept<br/>-enhanced/]
+    K --> L[Multi-layer test requirements<br/>L0: Static, L1: Unit<br/>L2: Integration, L3: E2E]
+
+    L --> M[Phase 4: Generate Test Tasks]
+    M --> N[/workflow:tools:test-task-generate/]
+    N --> O[IMPL-001: generate<br/>+ IMPL-001.5: quality gate<br/>+ IMPL-002: execute fix]
+
+    O --> P[Phase 5: Return Summary]
+    P --> Q[-> test-cycle-execute]
+
+    Q --> R([Test Fix Complete])
+
+    classDef startend fill:#c8e6c9,stroke:#388e3c
+    classDef action fill:#e3f2fd,stroke:#1976d2
+    classDef decision fill:#fff9c4,stroke:#f57c00
+    classDef tool fill:#ffecb3,stroke:#ffa000
+
+    class A,R startend,B decision,C,D,E,F,G,H,J,M,P,Q action,I,K,N tool
+```
+
+### Process Phases
+
+**Phase 1: Create/Use Test Session**
+
+**Session Mode** (uses existing session):
+```bash
+/workflow:session:start --type test --resume WFS-user-auth-v2
+```
+
+**Prompt Mode** (creates new session):
+```bash
+/workflow:session:start --type test --new
+```
+
+**Phase 2: Gather Test Context**
+```bash
+/workflow:tools:test-context-gather
+```
+
+**Phase 3: Test Generation Analysis**
+```bash
+/workflow:tools:test-concept-enhanced
+```
+- Multi-layer test requirements:
+  - **L0: Static** - Type checking, linting
+  - **L1: Unit** - Function-level tests
+  - **L2: Integration** - Component interaction
+  - **L3: E2E** - Full system tests
+
+**Phase 4: Generate Test Tasks**
+```bash
+/workflow:tools:test-task-generate
+```
+- `IMPL-001.json`: Test understanding & generation
+- `IMPL-001.5-review.json`: Quality gate
+- `IMPL-002.json`: Test execution & fix cycle
+
+**Phase 5: Return Summary**
+- -> `/workflow:test-cycle-execute`
+
+### Dual-Mode Support
+
+| Mode | Input Pattern | Context Source |
+|------|---------------|----------------|
+| **Session Mode** | `WFS-xxx` | Source session summaries |
+| **Prompt Mode** | Text/file path | Direct codebase analysis |
+
+### Artifacts
+
+**Location**: `.workflow/active/WFS-test-{session}/`
+
+```
+.workflow/active/WFS-test-user-auth-2025-02-03/
+├── workflow-session.json
+├── .task/
+│   ├── IMPL-001.json              # Test understanding & generation
+│   ├── IMPL-001.5-review.json     # Quality gate
+│   └── IMPL-002.json              # Test execution & fix cycle
+└── .process/
+    ├── TEST_ANALYSIS_RESULTS.md
+    └── test-context-package.json
+```
+
+### Use Cases
+
+- Test failure fixes
+- Coverage improvement
+- Test suite generation
+
+---
+
+## Level 3 Comparison Table
+
+| Aspect | plan | tdd-plan | test-fix-gen |
+|--------|------|----------|--------------|
+| **Purpose** | Complex features | Test-driven dev | Test fixes |
+| **Phases** | 5 | 6 | 5 |
+| **TDD** | No | Yes (Red-Green-Refactor) | Optional |
+| **Artifacts** | `.workflow/active/` | `.workflow/active/` | `.workflow/active/WFS-test-*/` |
+| **Verification** | plan-verify | tdd-verify | Built-in quality gate |
+| **Best For** | Multi-module changes | High-quality features | Test improvements |
+
+## Execution: execute
+
+All Level 3 workflows execute via `execute`:
+
+```bash
+/workflow:execute --session WFS-{session-id}
+```
+
+### Key Features
+
+- **Dependency analysis** - Automatic task dependency resolution
+- **Parallel execution** - Independent tasks run in parallel
+- **Progress tracking** - Session-based TODO updates
+- **Summaries** - Task completion summaries for dependent tasks
+
+## Related Workflows
+
+- [Level 2: Rapid](./level-2-rapid.mdx) - Simpler workflow
+- [Level 4: Brainstorm](./level-4-brainstorm.mdx) - Multi-role exploration
+- [Level 5: Intelligent](./level-5-intelligent.mdx) - Automated orchestration
+- [FAQ](./faq.mdx) - Common questions

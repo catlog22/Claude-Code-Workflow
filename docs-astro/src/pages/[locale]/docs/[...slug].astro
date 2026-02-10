@@ -1,0 +1,58 @@
+---
+import { getCollection, type CollectionEntry } from 'astro:content';
+import DocLayout from '../../../layouts/DocLayout.astro';
+
+export async function getStaticPaths() {
+  const docs = await getCollection('docs');
+  const guides = await getCollection('guides');
+  const apiReference = await getCollection('api-reference');
+
+  const allEntries = [
+    ...docs.map((entry) => ({ ...entry, collection: 'docs' as const })),
+    ...guides.map((entry) => ({ ...entry, collection: 'guides' as const })),
+    ...apiReference.map((entry) => ({ ...entry, collection: 'api-reference' as const })),
+  ];
+
+  return allEntries.map((entry) => {
+    // Extract locale and path from entry.id
+    // Format: "en/category/file.mdx" or "zh/category/file.mdx"
+    const parts = entry.id.split('/');
+    const locale = parts[0]; // 'en' or 'zh'
+    const slugParts = parts.slice(1); // Rest of the path (content tree path)
+
+    // Default slug derived from file path (collection entry id)
+    // Remove .mdx extension if present
+    const fileSlug = slugParts.join('/').replace(/\.mdx?$/, '');
+
+    // Allow frontmatter slug override (used to preserve legacy URLs during migration)
+    // Normalization rules:
+    // - strip leading/trailing slashes
+    // - treat "/" as empty
+    const rawOverride = (entry.data as any)?.slug as string | undefined;
+    const overrideSlug = rawOverride
+      ? rawOverride.replace(/^\/+|\/+$/g, '')
+      : undefined;
+
+    const slug = overrideSlug && overrideSlug !== '' ? overrideSlug : fileSlug;
+
+    return {
+      params: {
+        locale,
+        slug: slug || 'index',
+      },
+      props: {
+        entry,
+      },
+    };
+  });
+}
+
+interface Props {
+  entry: CollectionEntry<'docs'> | CollectionEntry<'guides'> | CollectionEntry<'api-reference'>;
+}
+
+const { entry } = Astro.props;
+const { headings } = await entry.render();
+---
+
+<DocLayout entry={entry} headings={headings} />

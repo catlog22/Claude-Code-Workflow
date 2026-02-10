@@ -1,0 +1,37 @@
+---
+title: "Agents Reference"
+description: "Complete reference for all CCW agents - specialized AI assistants for different development tasks"
+category: "api"
+locale: "en"
+order: 1
+---
+
+# Agents Reference
+
+CCW provides specialized agents for different development tasks. Each agent is optimized for a specific role in the development workflow.
+
+## Available Agents
+
+| Agent | Description |
+|-------|-------------|
+| [Action Planning Agent](/en/docs/api/agents/action-planning-agent) | Pure execution agent for creating implementation plans based on provided requirements and control flags. This agent executes planning tasks without complex d... |
+| [Cli Discuss Agent](/en/docs/api/agents/cli-discuss-agent) | Multi-CLI collaborative discussion agent with cross-verification and solution synthesis. |
+| [Cli Execution Agent](/en/docs/api/agents/cli-execution-agent) | Intelligent CLI execution agent with automated context discovery and smart tool selection. |
+| [Cli Explore Agent](/en/docs/api/agents/cli-explore-agent) | Read-only code exploration agent with dual-source analysis strategy (Bash + Gemini CLI). |
+| [Cli Lite Planning Agent](/en/docs/api/agents/cli-lite-planning-agent) | Generic planning agent for lite-plan, collaborative-plan, and lite-fix workflows. Generates structured plan JSON based on provided schema reference. |
+| [Cli Planning Agent](/en/docs/api/agents/cli-planning-agent) | Specialized agent for executing CLI analysis tools (Gemini/Qwen) and dynamically generating task JSON files based on analysis results. Primary use case: test... |
+| [Cli Roadmap Plan Agent](/en/docs/api/agents/cli-roadmap-plan-agent) | Specialized agent for requirement-level roadmap planning with JSONL output. |
+| [Code Developer Agent](/en/docs/api/agents/code-developer) | Pure code execution agent for implementing programming tasks and writing corresponding tests. Focuses on writing, implementing, and developing code with prov... |
+| [Conceptual Planning Agent](/en/docs/api/agents/conceptual-planning-agent) | Specialized agent for dedicated single-role conceptual planning and brainstorming analysis. This agent executes assigned planning role perspective (system-ar... |
+| [Context Search Agent](/en/docs/api/agents/context-search-agent) | Intelligent context collector for development tasks. Executes multi-layer file discovery, dependency analysis, and generates standardized context packages wi... |
+| [Debug Explore Agent](/en/docs/api/agents/debug-explore-agent) | Hypothesis-driven debugging agent with NDJSON logging, CLI-assisted analysis, and iterative verification. |
+| [Doc Generator Agent](/en/docs/api/agents/doc-generator) | Intelligent agent for generating documentation based on a provided task JSON with flow_control. This agent autonomously executes pre-analysis steps, synthesi... |
+| [Issue Plan Agent](/en/docs/api/agents/issue-plan-agent) | Closed-loop issue planning agent combining ACE exploration and solution generation. |
+| [Issue Queue Agent](/en/docs/api/agents/issue-queue-agent) | Solution ordering agent for queue formation with Gemini CLI conflict analysis. |
+| [Memory Bridge Agent](/en/docs/api/agents/memory-bridge) | Execute complex project documentation updates using script coordination |
+| [Tdd Developer Agent](/en/docs/api/agents/tdd-developer) | TDD-aware code execution agent specialized for Red-Green-Refactor workflows. Extends code-developer with TDD cycle awareness, automatic test-fix iteration, a... |
+| [Test Action Planning Agent](/en/docs/api/agents/test-action-planning-agent) | Specialized agent extending action-planning-agent for test planning documents. Generates test task JSONs (IMPL-001, IMPL-001.3, IMPL-001.5, IMPL-002) with pr... |
+| [Test Context Search Agent](/en/docs/api/agents/test-context-search-agent) | Specialized context collector for test generation workflows. Analyzes test coverage, identifies missing tests, loads implementation context from source sessi... |
+| [Test Fix Agent](/en/docs/api/agents/test-fix-agent) | Execute tests, diagnose failures, and fix code until all tests pass. This agent focuses on running test suites, analyzing failures, and modifying source code... |
+| [Ui Design Agent](/en/docs/api/agents/ui-design-agent) | Specialized agent for UI design token management and prototype generation with W3C Design Tokens Format compliance. |
+| [Universal Executor Agent](/en/docs/api/agents/universal-executor) | Versatile execution agent for implementing any task efficiently. Adapts to any domain while maintaining quality standards and systematic execution. Can handl... |

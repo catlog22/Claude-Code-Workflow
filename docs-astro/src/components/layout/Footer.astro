@@ -1,0 +1,203 @@
+---
+import { Github, Twitter, MessageCircle, Mail } from 'lucide-react';
+
+interface Props {
+  locale: 'en' | 'zh';
+}
+
+const { locale } = Astro.props;
+
+// Footer link groups
+const footerLinks = {
+  en: {
+    documentation: {
+      title: 'Documentation',
+      links: [
+        { label: 'Getting Started', href: '/en/getting-started/installation' },
+        { label: 'Workflows', href: '/en/workflows/4-level-system' },
+        { label: 'CLI Reference', href: '/en/cli/commands' },
+        { label: 'Dashboard Guide', href: '/en/dashboard/sessions' }
+      ]
+    },
+    community: {
+      title: 'Community',
+      links: [
+        { label: 'GitHub Discussions', href: 'https://github.com/ccw/discussions' },
+        { label: 'Discord', href: 'https://discord.gg/ccw' },
+        { label: 'Twitter', href: 'https://twitter.com/ccw' },
+        { label: 'Blog', href: '/en/blog' }
+      ]
+    },
+    resources: {
+      title: 'Resources',
+      links: [
+        { label: 'FAQ', href: '/en/faq' },
+        { label: 'Examples', href: '/en/examples' },
+        { label: 'Contributing', href: '/en/contributing' },
+        { label: 'Changelog', href: '/en/changelog' }
+      ]
+    },
+    legal: {
+      title: 'Legal',
+      links: [
+        { label: 'Privacy Policy', href: '/en/privacy' },
+        { label: 'Analytics', href: 'https://plausible.io/ccw-docs.example.com' },
+        { label: 'Terms of Service', href: '/en/terms' },
+        { label: 'License', href: '/en/license' }
+      ]
+    }
+  },
+  zh: {
+    documentation: {
+      title: '文档',
+      links: [
+        { label: '快速开始', href: '/zh/getting-started/installation' },
+        { label: '工作流指南', href: '/zh/workflows/4-level-system' },
+        { label: 'CLI 参考', href: '/zh/cli/commands' },
+        { label: 'Dashboard 指南', href: '/zh/dashboard/sessions' }
+      ]
+    },
+    community: {
+      title: '社区',
+      links: [
+        { label: 'GitHub Discussions', href: 'https://github.com/ccw/discussions' },
+        { label: 'Discord', href: 'https://discord.gg/ccw' },
+        { label: 'Twitter', href: 'https://twitter.com/ccw' },
+        { label: '博客', href: '/zh/blog' }
+      ]
+    },
+    resources: {
+      title: '资源',
+      links: [
+        { label: '常见问题', href: '/zh/faq' },
+        { label: '示例', href: '/zh/examples' },
+        { label: '贡献指南', href: '/zh/contributing' },
+        { label: '更新日志', href: '/zh/changelog' }
+      ]
+    },
+    legal: {
+      title: '法律',
+      links: [
+        { label: '隐私政策', href: '/zh/privacy' },
+        { label: '访问统计', href: 'https://plausible.io/ccw-docs.example.com' },
+        { label: '服务条款', href: '/zh/terms' },
+        { label: '许可证', href: '/zh/license' }
+      ]
+    }
+  }
+};
+
+const links = footerLinks[locale] || footerLinks.en;
+
+// Social links
+const socialLinks = [
+  { icon: Github, label: 'GitHub', href: 'https://github.com/ccw' },
+  { icon: Twitter, label: 'Twitter', href: 'https://twitter.com/ccw' },
+  { icon: MessageCircle, label: 'Discord', href: 'https://discord.gg/ccw' },
+  { icon: Mail, label: 'Email', href: 'mailto:hello@ccw.dev' }
+];
+
+const currentYear = new Date().getFullYear();
+---
+
+<footer role="contentinfo" class="bg-muted border-t border-border mt-auto" data-pagefind-ignore>
+  <div class="max-w-7xl mx-auto px-6 py-12">
+    <!-- Footer grid -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
+      <!-- Documentation links -->
+      <div>
+        <h3 class="font-semibold text-foreground mb-4">{links.documentation.title}</h3>
+        <ul class="space-y-2">
+          {links.documentation.links.map((link) => (
+            <li>
+              <a
+                href={link.href}
+                class="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                target={link.href.startsWith('http') ? '_blank' : undefined}
+                rel={link.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+              >
+                {link.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <!-- Community links -->
+      <div>
+        <h3 class="font-semibold text-foreground mb-4">{links.community.title}</h3>
+        <ul class="space-y-2">
+          {links.community.links.map((link) => (
+            <li>
+              <a
+                href={link.href}
+                class="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                target={link.href.startsWith('http') ? '_blank' : undefined}
+                rel={link.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+              >
+                {link.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <!-- Resources links -->
+      <div>
+        <h3 class="font-semibold text-foreground mb-4">{links.resources.title}</h3>
+        <ul class="space-y-2">
+          {links.resources.links.map((link) => (
+            <li>
+              <a
+                href={link.href}
+                class="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {link.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <!-- Legal links -->
+      <div>
+        <h3 class="font-semibold text-foreground mb-4">{links.legal.title}</h3>
+        <ul class="space-y-2">
+          {links.legal.links.map((link) => (
+            <li>
+              <a
+                href={link.href}
+                class="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {link.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+
+    <!-- Social links and copyright -->
+    <div class="pt-8 border-t border-border flex flex-col sm:flex-row justify-between items-center gap-4">
+      <!-- Social icons -->
+      <div class="flex items-center gap-4">
+        {socialLinks.map(({ icon: Icon, label, href }) => (
+          <a
+            href={href}
+            aria-label={label}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="p-2 text-muted-foreground hover:text-foreground hover:bg-background rounded-md transition-colors"
+          >
+            <Icon className="w-5 h-5" />
+          </a>
+        ))}
+      </div>
+
+      <!-- Copyright -->
+      <p class="text-sm text-muted-foreground">
+        &copy; {currentYear} CCW. {locale === 'en' ? 'All rights reserved.' : '保留所有权利。'}
+      </p>
+    </div>
+  </div>
+</footer>
