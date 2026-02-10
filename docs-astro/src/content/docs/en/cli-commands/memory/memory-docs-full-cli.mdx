@@ -1,0 +1,179 @@
+---
+title: "/memory:docs-full-cli"
+description: Generate full CLI documentation for all project modules
+category: cli-commands
+order: 4
+locale: en
+---
+
+# /memory:docs-full-cli
+
+Generate comprehensive CLI documentation for all project modules using batched agent execution with automatic tool fallback.
+
+## Overview
+
+The `/memory:docs-full-cli` command generates complete documentation for all modules in the project using CLI tools with intelligent batching and automatic fallback.
+
+**Parameters**:
+- `--tool &lt;gemini|qwen|codex&gt;`: Primary tool (default: gemini)
+- `--path &lt;directory&gt;`: Target directory (default: project root)
+
+**Execution Flow**:
+1. Module Detection → 2. Plan Presentation → 3. Batched Generation → 4. Verification
+
+## Features
+
+- **Full Coverage** - Documents all modules in the project
+- **Intelligent Batching** - Groups modules by depth (4 modules/batch)
+- **Automatic Fallback** - gemini→qwen→codex on failure
+- **Depth Sequential** - Process depths N→0, parallel batches within depth
+- **Smart Filtering** - Auto-detects and skips tests/build/config/docs
+
+## Usage
+
+```bash
+# Generate full documentation
+/memory:docs-full-cli
+
+# Target specific directory
+/memory:docs-full-cli --path src/auth
+
+# Use specific tool
+/memory:docs-full-cli --tool qwen
+```
+
+## Tool Fallback Hierarchy
+
+```javascript
+--tool gemini  →  [gemini, qwen, codex]  // default
+--tool qwen    →  [qwen, gemini, codex]
+--tool codex   →  [codex, gemini, qwen]
+```
+
+## Execution Flow
+
+### Phase 1: Module Detection & Analysis
+
+```javascript
+// Get module structure with classification
+Bash({command: "ccw tool exec get_modules_by_depth '{\"format\":\"list\"}' | ccw tool exec classify_folders '{}'", run_in_background: false});
+
+// OR with path parameter
+Bash({command: "cd &lt;target-path&gt; && ccw tool exec get_modules_by_depth '{\"format\":\"list\"}' | ccw tool exec classify_folders '{}'", run_in_background: false});
+```
+
+**Parse output** `depth:N|path:&lt;PATH&gt;|type:&lt;code|navigation&gt;|...` to extract module paths, types, and count.
+
+**Smart filter**: Auto-detect and skip tests/build/config/vendor based on project tech stack.
+
+### Phase 2: Plan Presentation
+
+- Parse `--tool` (default: gemini)
+- Get module structure with classification
+- **Smart filter modules** (auto-detect tech stack, skip tests/build/config)
+- Construct tool fallback order
+- **Present filtered plan** with module types and counts
+- **Wait for y/n confirmation**
+
+### Phase 3: Batched Documentation Generation
+
+```javascript
+let modules_by_depth = group_by_depth(all_modules);
+let tool_order = construct_tool_order(primary_tool);
+
+for (let depth of sorted_depths.reverse()) {  // N → 0
+  let batches = batch_modules(modules_by_depth[depth], 4);
+
+  for (let batch of batches) {
+    let parallel_tasks = batch.map(module => {
+      return async () => {
+        let strategy = module.depth >= 3 ? "full" : "single";
+        for (let tool of tool_order) {
+          Bash({
+            command: `cd ${module.path} && ccw tool exec generate_module_docs '{"strategy":"${strategy}","sourcePath":".","projectName":"${project_name}","tool":"${tool}"}'`,
+            run_in_background: false
+          });
+          if (bash_result.exit_code === 0) {
+            report(`✅ ${module.path} (Layer ${layer}) docs generated with ${tool}`);
+            return true;
+          }
+        }
+        report(`❌ FAILED: ${module.path} (Layer ${layer}) failed all tools`);
+        return false;
+      };
+    });
+    await Promise.all(parallel_tasks.map(task => task()));
+  }
+}
+```
+
+### Phase 4: Verification
+
+- Verify documentation files were created
+- Display statistics
+- Show summary of generated docs
+
+## Strategy Selection
+
+| Module Depth | Strategy | Description |
+|--------------|----------|-------------|
+| Depth &lt; 3 | single | Single document for module |
+| Depth &gt;= 3 | full | Comprehensive documentation with subsections |
+
+## Module Types
+
+| Type | Description | Documentation Focus |
+|------|-------------|---------------------|
+| **code** | Source code modules | API, classes, functions |
+| **navigation** | Directory structures | Organization, file purposes |
+
+## Examples
+
+### Basic Usage
+
+```bash
+# Generate full project documentation
+/memory:docs-full-cli
+
+# Output:
+# Analyzing workspace...
+# Found 45 modules (38 code, 7 navigation)
+# Filtered: 12 test/build/config modules skipped
+# Plan: Generate docs for 33 modules
+# Confirm? (y/n): y
+#
+# Depth 7: [4/4] ✅
+# Depth 6: [8/8] ✅
+# ...
+# Summary: 33/33 modules documented
+```
+
+### Directory-Specific
+
+```bash
+# Document specific feature
+/memory:docs-full-cli --path src/features/auth
+
+# Only documents auth feature
+```
+
+### Tool Selection
+
+```bash
+# Use Qwen for generation
+/memory:docs-full-cli --tool qwen
+```
+
+## Related Commands
+
+- **/memory:docs-related-cli** - Generate docs for changed modules only
+- **/memory:update-full** - Update CLAUDE.md files
+- **/memory:compact** - Compact session memory
+
+## Notes
+
+- **Smart filtering** automatically skips test/build/config directories
+- **Classification** distinguishes between code and navigation modules
+- **Depth-based strategy** optimizes documentation detail level
+- **Tool fallback** ensures completion even if primary tool fails
+- **Verification** confirms all documentation files created successfully

@@ -1,0 +1,239 @@
+---
+import type { Locale } from '../utils/navigation';
+import { buildTocTree, type TocHeading, type TocItem } from '../utils/toc';
+
+interface Props {
+  headings: readonly TocHeading[];
+  locale?: Locale;
+  /**
+   * Scroll offset (in px) used for:
+   * - IntersectionObserver rootMargin (fixed header)
+   * - smooth scrolling calculations
+   */
+  offsetPx?: number;
+  /** Selector for the content root that contains heading elements. */
+  contentSelector?: string;
+  title?: string;
+}
+
+const {
+  headings,
+  locale = 'en',
+  offsetPx = 80,
+  contentSelector = '.doc-content',
+  title,
+} = Astro.props;
+
+const toc = buildTocTree({ headings, minDepth: 2, maxDepth: 4 });
+
+const tocTitle = title ?? (locale === 'zh' ? '本页目录' : 'On this page');
+
+function renderItems(items: TocItem[], level = 0) {
+  return (
+    <ul
+      class:list={[
+        'space-y-1 text-sm',
+        level === 0 ? '' : 'mt-1 ml-2 border-l border-border pl-3',
+      ]}
+    >
+      {items.map((item) => (
+        <li>
+          <a
+            href={`#${item.slug}`}
+            class="toc-link block rounded-md px-2 py-1 -mx-2 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors leading-snug"
+            data-toc-link
+          >
+            {item.text}
+          </a>
+          {item.children.length > 0 && renderItems(item.children, level + 1)}
+        </li>
+      ))}
+    </ul>
+  );
+}
+---
+
+{toc.length > 0 && (
+  <div
+    class="sticky top-24 max-h-[calc(100vh-8rem)] overflow-auto pr-2"
+    data-pagefind-ignore
+    data-toc-scroll
+  >
+    <h2 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+      {tocTitle}
+    </h2>
+    <nav
+      class="toc"
+      aria-label={tocTitle}
+      data-toc-root
+      data-toc-offset={offsetPx}
+      data-toc-content={contentSelector}
+    >
+      {renderItems(toc)}
+    </nav>
+  </div>
+)}
+
+<style>
+  .toc-link.is-active {
+    @apply text-primary font-medium bg-primary/10;
+  }
+
+  /* Optional: small accent bar for the active item */
+  .toc-link.is-active {
+    position: relative;
+  }
+
+  .toc-link.is-active::before {
+    content: '';
+    position: absolute;
+    left: 0.25rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2px;
+    height: 1rem;
+    border-radius: 9999px;
+    background: oklch(var(--primary));
+  }
+
+  /* Match sidebar scrollbar style */
+  :global([data-toc-scroll])::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  :global([data-toc-scroll])::-webkit-scrollbar-thumb {
+    background: oklch(var(--border));
+    border-radius: 9999px;
+  }
+
+  :global([data-toc-scroll])::-webkit-scrollbar-track {
+    background: transparent;
+  }
+</style>
+
+<script>
+  function getIdFromHref(href: string | null): string | null {
+    if (!href) return null;
+    if (!href.startsWith('#')) return null;
+    const id = href.slice(1);
+    return id.length > 0 ? id : null;
+  }
+
+  function asHTMLElement(value: Element): HTMLElement | null {
+    return value instanceof HTMLElement ? value : null;
+  }
+
+  function scheduleRaf(fn: () => void) {
+    let scheduled = false;
+    return () => {
+      if (scheduled) return;
+      scheduled = true;
+      window.requestAnimationFrame(() => {
+        scheduled = false;
+        fn();
+      });
+    };
+  }
+
+  const tocRoots = Array.from(document.querySelectorAll('[data-toc-root]')).map(asHTMLElement).filter(Boolean);
+
+  for (const tocRoot of tocRoots) {
+    const offsetPx = Number(tocRoot.getAttribute('data-toc-offset') ?? '') || 80;
+    const contentSelector = tocRoot.getAttribute('data-toc-content') ?? '.doc-content';
+    const contentRoot = document.querySelector(contentSelector);
+
+    const headingEls = Array.from(
+      contentRoot?.querySelectorAll('h2[id], h3[id], h4[id]') ?? []
+    ).map(asHTMLElement).filter(Boolean);
+
+    const links = Array.from(tocRoot.querySelectorAll('a[data-toc-link]')) as HTMLAnchorElement[];
+    const linkById = new Map<string, HTMLAnchorElement>();
+
+    for (const link of links) {
+      const id = getIdFromHref(link.getAttribute('href'));
+      if (id) linkById.set(id, link);
+    }
+
+    if (headingEls.length === 0 || linkById.size === 0) continue;
+
+    // Make default anchor navigation respect the fixed header.
+    for (const heading of headingEls) {
+      heading.style.scrollMarginTop = `${offsetPx}px`;
+    }
+
+    let activeId: string | null = null;
+
+    const setActive = (nextId: string | null) => {
+      if (!nextId || nextId === activeId) return;
+
+      if (activeId) {
+        const prev = linkById.get(activeId);
+        prev?.classList.remove('is-active');
+        prev?.removeAttribute('aria-current');
+      }
+
+      const next = linkById.get(nextId);
+      next?.classList.add('is-active');
+      next?.setAttribute('aria-current', 'location');
+      activeId = nextId;
+    };
+
+    const resolveActiveId = (): string | null => {
+      let current: string | null = null;
+
+      for (const heading of headingEls) {
+        // `top` is relative to viewport.
+        const top = heading.getBoundingClientRect().top;
+        if (top - offsetPx <= 2) {
+          if (linkById.has(heading.id)) current = heading.id;
+          continue;
+        }
+        break;
+      }
+
+      if (current) return current;
+
+      // Before the first heading, keep the first visible TOC item active (helps orientation).
+      const first = headingEls.find((h) => linkById.has(h.id));
+      return first?.id ?? null;
+    };
+
+    const updateActive = scheduleRaf(() => setActive(resolveActiveId()));
+
+    // IntersectionObserver is the primary driver; scroll/resize are backup signals.
+    const observer = new IntersectionObserver(updateActive, {
+      root: null,
+      rootMargin: `-${offsetPx}px 0px -70% 0px`,
+      threshold: 0,
+    });
+
+    for (const heading of headingEls) observer.observe(heading);
+
+    window.addEventListener('scroll', updateActive, { passive: true });
+    window.addEventListener('resize', updateActive);
+
+    // Smooth scroll with offset compensation.
+    for (const link of links) {
+      link.addEventListener('click', (e) => {
+        const id = getIdFromHref(link.getAttribute('href'));
+        if (!id) return;
+
+        const target = document.getElementById(id);
+        if (!(target instanceof HTMLElement)) return;
+
+        e.preventDefault();
+        history.pushState(null, '', `#${id}`);
+
+        const y = target.getBoundingClientRect().top + window.scrollY - offsetPx;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+
+        // Update immediately so the TOC doesn't lag while animating.
+        setActive(id);
+      });
+    }
+
+    // Initial state (including deep links with a hash).
+    updateActive();
+    window.setTimeout(updateActive, 0);
+  }
+</script>

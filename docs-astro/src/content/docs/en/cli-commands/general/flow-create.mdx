@@ -1,0 +1,312 @@
+---
+title: /flow-create
+description: Generate workflow templates for flow-coordinator
+category: cli-commands
+order: 6
+locale: en
+---
+
+# /flow-create
+
+Flow template generator - create workflow templates for meta-skill/flow-coordinator with interactive step definition.
+
+## Overview
+
+The `/flow-create` command generates workflow templates that can be used by the flow-coordinator skill for executing predefined command chains.
+
+**Usage**: `/flow-create [template-name] [--output &lt;path&gt;]`
+
+## Features
+
+- **Interactive Design** - Guided template creation process
+- **Complexity Levels** - 4 levels from rapid to full workflows
+- **Step Definition** - Define workflow steps with commands and parameters
+- **Command Selection** - Choose from available CCW commands
+- **Template Validation** - Ensures template structure correctness
+
+## Usage
+
+```bash
+# Create template with default name
+/flow-create
+
+# Create specific template
+/flow-create bugfix-v2
+
+# Create with custom output
+/flow-create my-workflow --output ~/.claude/skills/my-skill/templates/
+```
+
+## Execution Flow
+
+```
+User Input → Phase 1: Template Design → Phase 2: Step Definition → Phase 3: Generate JSON
+                ↓                            ↓                           ↓
+         Name + Description           Define workflow steps        Write template file
+```
+
+## Phase 1: Template Design
+
+Gather basic template information:
+
+- **Template Name** - Identifier for the template
+- **Purpose** - What the template accomplishes
+- **Complexity Level** - 1-4 (Rapid to Full)
+
+### Complexity Levels
+
+| Level | Name | Steps | Description |
+|-------|------|-------|-------------|
+| **1** | Rapid | 1-2 | Ultra-lightweight (lite-lite-lite) |
+| **2** | Lightweight | 2-4 | Quick implementation |
+| **3** | Standard | 4-6 | With verification and testing |
+| **4** | Full | 6+ | Brainstorm + full workflow |
+
+### Purpose Categories
+
+- **Bug Fix** - Fix bugs and issues
+- **Feature** - Implement new features
+- **Generation** - Generate code or content
+- **Analysis** - Analyze code or architecture
+- **Transformation** - Transform or refactor code
+- **Orchestration** - Complex multi-step workflows
+
+## Phase 2: Step Definition
+
+Define workflow steps with:
+
+1. **Command Selection** - Choose from available CCW commands
+2. **Execution Unit** - Group related steps
+3. **Execution Mode** - mainprocess or async
+4. **Context Hint** - Description of step purpose
+
+### Command Categories
+
+- **Planning** - plan, lite-plan, multi-cli-plan, tdd-plan
+- **Execution** - execute, lite-execute, lite-lite-lite
+- **Testing** - test-fix-gen, test-cycle-execute, tdd-verify
+- **Review** - review-session-cycle, review-module-cycle
+- **Debug** - debug-with-file, lite-fix
+- **Brainstorm** - brainstorm:auto-parallel, brainstorm-with-file
+- **Issue** - issue:discover, issue:plan, issue:queue, issue:execute
+
+## Phase 3: Generate JSON
+
+Creates template file with structure:
+
+```json
+{
+  "name": "template-name",
+  "description": "Template description",
+  "level": 2,
+  "steps": [
+    {
+      "cmd": "/workflow:command",
+      "args": "\"{{goal}}\"",
+      "unit": "unit-name",
+      "execution": {
+        "type": "slash-command",
+        "mode": "mainprocess"
+      },
+      "contextHint": "Description of what this step does"
+    }
+  ]
+}
+```
+
+## Template Examples
+
+### Bug Fix Template (Level 2)
+
+```json
+{
+  "name": "hotfix-simple",
+  "description": "Quick bug fix workflow",
+  "level": 2,
+  "steps": [
+    {
+      "cmd": "/workflow:lite-fix",
+      "args": "\"{{goal}}\"",
+      "unit": "bug-fix",
+      "execution": {
+        "type": "slash-command",
+        "mode": "mainprocess"
+      },
+      "contextHint": "Diagnose and fix the bug"
+    },
+    {
+      "cmd": "/workflow:lite-execute",
+      "args": "--in-memory",
+      "unit": "bug-fix",
+      "execution": {
+        "type": "slash-command",
+        "mode": "async"
+      },
+      "contextHint": "Apply the fix"
+    }
+  ]
+}
+```
+
+### Feature Template (Level 3)
+
+```json
+{
+  "name": "feature-standard",
+  "description": "Standard feature implementation with verification",
+  "level": 3,
+  "steps": [
+    {
+      "cmd": "/workflow:plan",
+      "args": "\"{{goal}}\"",
+      "unit": "verified-planning",
+      "execution": {
+        "type": "slash-command",
+        "mode": "mainprocess"
+      },
+      "contextHint": "Create detailed implementation plan"
+    },
+    {
+      "cmd": "/workflow:plan-verify",
+      "args": "",
+      "unit": "verified-planning",
+      "execution": {
+        "type": "slash-command",
+        "mode": "mainprocess"
+      },
+      "contextHint": "Verify plan completeness and quality"
+    },
+    {
+      "cmd": "/workflow:execute",
+      "args": "--resume-session=\"{{session}}\"",
+      "unit": "verified-planning",
+      "execution": {
+        "type": "slash-command",
+        "mode": "mainprocess"
+      },
+      "contextHint": "Execute the implementation plan"
+    }
+  ]
+}
+```
+
+### Full Workflow Template (Level 4)
+
+```json
+{
+  "name": "full",
+  "description": "Comprehensive workflow with brainstorm and verification",
+  "level": 4,
+  "steps": [
+    {
+      "cmd": "/workflow:brainstorm:auto-parallel",
+      "args": "\"{{goal}}\"",
+      "execution": {
+        "type": "slash-command",
+        "mode": "mainprocess"
+      },
+      "contextHint": "Multi-perspective exploration of requirements"
+    },
+    {
+      "cmd": "/workflow:plan",
+      "unit": "verified-planning-execution",
+      "execution": {
+        "type": "slash-command",
+        "mode": "mainprocess"
+      },
+      "contextHint": "Create detailed implementation plan"
+    },
+    {
+      "cmd": "/workflow:plan-verify",
+      "unit": "verified-planning-execution",
+      "execution": {
+        "type": "slash-command",
+        "mode": "mainprocess"
+      },
+      "contextHint": "Verify plan completeness"
+    },
+    {
+      "cmd": "/workflow:execute",
+      "unit": "verified-planning-execution",
+      "execution": {
+        "type": "slash-command",
+        "mode": "mainprocess"
+      },
+      "contextHint": "Execute implementation"
+    },
+    {
+      "cmd": "/workflow:test-fix-gen",
+      "unit": "test-validation",
+      "execution": {
+        "type": "slash-command",
+        "mode": "mainprocess"
+      },
+      "contextHint": "Generate tests"
+    },
+    {
+      "cmd": "/workflow:test-cycle-execute",
+      "unit": "test-validation",
+      "execution": {
+        "type": "slash-command",
+        "mode": "mainprocess"
+      },
+      "contextHint": "Execute test-fix cycle"
+    }
+  ]
+}
+```
+
+## Execution Mode Types
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| **mainprocess** | Execute in main process | Sequential execution, state sharing |
+| **async** | Execute asynchronously | Parallel execution, independent steps |
+
+## Template Output Location
+
+Default: `~/.claude/skills/flow-coordinator/templates/{name}.json`
+
+Custom: Use `--output` to specify alternative location
+
+## Examples
+
+### Quick Bug Fix Template
+
+```bash
+/flow-create hotfix-simple
+
+# Interactive prompts:
+# Purpose: Bug Fix
+# Level: 2 (Lightweight)
+# Steps: Use Suggested
+# Output: ~/.claude/skills/flow-coordinator/templates/hotfix-simple.json
+```
+
+### Custom Multi-Stage Workflow
+
+```bash
+/flow-create complex-feature --output ~/.claude/skills/my-project/templates/
+
+# Interactive prompts:
+# Name: complex-feature
+# Purpose: Feature
+# Level: 4 (Full)
+# Steps: Custom definition
+# Output: ~/.claude/skills/my-project/templates/complex-feature.json
+```
+
+## Related Commands
+
+- **/flow-coordinator** - Execute workflow templates
+- **/ccw-coordinator** - Generic command orchestration
+- **Skill:flow-coordinator** - Flow coordinator skill
+
+## Notes
+
+- **Interactive design** process with guided prompts
+- **Complexity levels** determine workflow depth
+- **Execution units** group related steps
+- **Template validation** ensures correctness
+- **Custom output** supported via `--output` parameter
+- **Existing templates** can be used as examples

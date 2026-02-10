@@ -1,0 +1,238 @@
+---
+title: /ccw
+description: Main CCW workflow coordinator for intelligent command orchestration
+category: cli-commands
+order: 1
+locale: en
+---
+
+# /ccw
+
+Main CCW workflow coordinator - the unified entry point for intelligent command orchestration based on task complexity analysis.
+
+## Overview
+
+The `/ccw` command is the primary CCW workflow coordinator that automatically analyzes task requirements, evaluates complexity, and selects the appropriate workflow level and execution path.
+
+**Core Concept**: Minimum Execution Units - commands grouped into logical units for complete workflow milestones.
+
+## Features
+
+- **Auto Complexity Analysis** - Evaluates task based on keywords and context
+- **Workflow Selection** - Automatically selects optimal workflow level (1-5)
+- **Unit-Based Orchestration** - Groups commands into Minimum Execution Units
+- **State Persistence** - Tracks execution state in `.workflow/.ccw-coordinator/`
+- **Intelligent Routing** - Direct execution vs CLI-based execution
+
+## Usage
+
+```bash
+# Let CCW analyze and select workflow
+/ccw "Implement user authentication"
+
+# Explicit workflow selection
+/ccw --workflow rapid "Add logout endpoint"
+
+# Skip tests
+/ccw --skip-tests "Quick config fix"
+
+# Auto-confirm (skip confirmation prompts)
+/ccw --yes "Simple bug fix"
+```
+
+## Command Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `[task description]` | Task to execute (required) | - |
+| `--workflow &lt;name&gt;` | Explicit workflow selection | Auto-detected |
+| `--skip-tests` | Skip test validation unit | false |
+| `--yes` | Auto-confirm execution | false |
+
+## Workflow Levels
+
+The coordinator automatically selects from 5 workflow levels:
+
+### Level 1: Rapid Execution
+**Complexity**: Low | **Artifacts**: None | **State**: Stateless
+
+| Workflow | Description |
+|----------|-------------|
+| `lite-lite-lite` | Ultra-lightweight direct execution |
+
+**Use for**: Quick fixes, simple features, config adjustments
+
+### Level 2: Lightweight Planning
+**Complexity**: Low-Medium | **Artifacts**: Memory/Lightweight files
+
+| Workflow | Description |
+|----------|-------------|
+| `rapid` | lite-plan → lite-execute (+ optional test units) |
+
+**Use for**: Single-module features, bug fixes
+
+### Level 3: Standard Planning
+**Complexity**: Medium-High | **Artifacts**: Persistent session files
+
+| Workflow | Description |
+|----------|-------------|
+| `coupled` | plan → plan-verify → execute (+ optional test units) |
+| `tdd` | tdd-plan → execute → tdd-verify |
+
+**Use for**: Multi-module changes, refactoring, TDD
+
+### Level 4: Brainstorming
+**Complexity**: High | **Artifacts**: Multi-role analysis docs
+
+| Workflow | Description |
+|----------|-------------|
+| `brainstorm` | brainstorm:auto-parallel → plan → execute |
+
+**Use for**: New feature design, architecture refactoring
+
+### Level 5: Intelligent Orchestration
+**Complexity**: All levels | **Artifacts**: Full state persistence
+
+| Workflow | Description |
+|----------|-------------|
+| `full` | ccw-coordinator (auto-analyze & recommend) |
+
+**Use for**: Complex multi-step workflows, uncertain commands
+
+## Execution Flow
+
+```
+User Input: "task description"
+    ↓
+Phase 1: Complexity Analysis
+    ├─ Extract keywords
+    ├─ Calculate complexity score
+    └─ Detect constraints
+    ↓
+Phase 2: Workflow Selection
+    ├─ Map complexity to level
+    ├─ Select workflow
+    └─ Build command chain
+    ↓
+Phase 3: User Confirmation
+    ├─ Display selected workflow
+    └─ Show command chain
+    ↓
+Phase 4: Execute Command Chain
+    ├─ Setup TODO tracking
+    ├─ Execute commands sequentially
+    └─ Track state
+    ↓
+Output completion summary
+```
+
+## Complexity Evaluation
+
+Auto-evaluates complexity based on keywords:
+
+| Weight | Keywords |
+|--------|----------|
+| +2 | refactor, migrate, architect, system |
+| +2 | multiple, across, all, entire |
+| +1 | integrate, api, database |
+| +1 | security, performance, scale |
+
+**Thresholds**:
+- **High complexity** (&gt;=4): Level 3-4
+- **Medium complexity** (2-3): Level 2
+- **Low complexity** (&lt;2): Level 1
+
+## Minimum Execution Units
+
+| Unit Name | Commands | Purpose |
+|-----------|----------|---------|
+| **Quick Implementation** | lite-plan → lite-execute | Lightweight plan and execution |
+| **Multi-CLI Planning** | multi-cli-plan → lite-execute | Multi-perspective analysis |
+| **Bug Fix** | lite-fix → lite-execute | Bug diagnosis and fix |
+| **Verified Planning** | plan → plan-verify → execute | Planning with verification |
+| **TDD Planning** | tdd-plan → execute | Test-driven development |
+| **Test Validation** | test-fix-gen → test-cycle-execute | Test fix cycle |
+| **Code Review** | review-session-cycle → review-cycle-fix | Review and fix |
+
+## Command Chain Examples
+
+### Rapid Workflow (Level 2)
+
+```bash
+# Quick implementation
+Unit: quick-impl
+Commands:
+  1. /workflow:lite-plan "Add logout endpoint"
+  2. /workflow:lite-execute --in-memory
+
+(Optional) Unit: test-validation
+Commands:
+  3. /workflow:test-fix-gen
+  4. /workflow:test-cycle-execute
+```
+
+### Coupled Workflow (Level 3)
+
+```bash
+# Verified planning
+Unit: verified-planning-execution
+Commands:
+  1. /workflow:plan "Implement OAuth2"
+  2. /workflow:plan-verify
+  3. /workflow:execute
+
+(Optional) Unit: test-validation
+Commands:
+  4. /workflow:test-fix-gen
+  5. /workflow:test-cycle-execute
+```
+
+## Examples
+
+### Auto Workflow Selection
+
+```bash
+# CCW analyzes and selects appropriate workflow
+/ccw "Add user profile page"
+
+# Output:
+# Analyzing task...
+# Complexity: Low (score: 1)
+# Selected: Level 2 - Rapid Workflow
+# Commands: lite-plan → lite-execute
+# Confirm? (y/n): y
+```
+
+### Explicit Workflow
+
+```bash
+# Force specific workflow
+/ccw --workflow tdd "Implement authentication with TDD"
+
+# Uses TDD workflow regardless of complexity
+```
+
+### Skip Tests
+
+```bash
+# Quick fix without tests
+/ccw --skip-tests "Fix typo in config"
+
+# Omits test-validation unit
+```
+
+## Related Commands
+
+- **/ccw-plan** - Planning coordinator
+- **/ccw-test** - Test workflow coordinator
+- **/ccw-coordinator** - Generic command orchestration
+- **/ccw-debug** - Debug workflow coordinator
+
+## Notes
+
+- **Auto-analysis** evaluates task complexity based on keywords
+- **Workflow levels** map complexity to appropriate execution paths
+- **Minimum Execution Units** ensure complete workflow milestones
+- **State persistence** in `.workflow/.ccw-coordinator/{session}/`
+- **TODO tracking** with CCW prefix for visibility
+- **CLI execution** runs in background with hook callbacks

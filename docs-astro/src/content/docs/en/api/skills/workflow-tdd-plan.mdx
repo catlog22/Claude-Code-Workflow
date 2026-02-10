@@ -1,0 +1,760 @@
+---
+title: "Workflow Tdd Plan"
+description: "TDD workflow planning with Red-Green-Refactor task chain generation, test-first development structure, cycle tracking, and post-execution compliance verificatio"
+category: "api"
+locale: "en"
+order: 15
+---
+
+# Workflow Tdd Plan
+
+TDD workflow planning with Red-Green-Refactor task chain generation, test-first development structure, cycle tracking, and post-execution compliance verification. Triggers on "workflow:tdd-plan", "workflow:tdd-verify".
+
+## Overview
+
+| Property | Value |
+|----------|-------|
+| **Name** | `workflow-tdd-plan` |
+| **Tools** | `Task`, `AskUserQuestion`, `TodoWrite`, `Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`, `Skill` |
+
+## Reference
+
+6-phase TDD planning workflow that orchestrates session discovery, context gathering, test coverage analysis, conflict resolution, and TDD task generation to produce implementation plans with Red-Green-Refactor cycles. Includes post-execution TDD compliance verification.
+
+## Architecture Overview
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  Workflow TDD Plan Orchestrator (SKILL.md)                       │
+│  → Pure coordinator: Execute phases, parse outputs, pass context │
+└───────────────┬──────────────────────────────────────────────────┘
+                │
+   ┌────────────┼────────────┬────────────┬────────────┐
+   ↓            ↓            ↓            ↓            ↓
+┌────────┐ ┌────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+│ Phase 1│ │ Phase 2│ │ Phase 3  │ │ Phase 4  │ │ Phase 5  │
+│Session │ │Context │ │Test Covg │ │Conflict  │ │TDD Task  │
+│Discover│ │Gather  │ │Analysis  │ │Resolve   │ │Generate  │
+│ (ext)  │ │ (ext)  │ │ (local)  │ │(ext,cond)│ │ (local)  │
+└────────┘ └────────┘ └──────────┘ └──────────┘ └──────────┘
+    ↓           ↓           ↓            ↓            ↓
+ sessionId  contextPath  testContext  resolved    IMPL_PLAN.md
+            conflict_risk             artifacts   task JSONs
+
+Phase 6: TDD Structure Validation (inline in SKILL.md)
+
+Post-execution verification:
+┌──────────────┐     ┌───────────────────┐
+│  TDD Verify  │────→│ Coverage Analysis │
+│  (local)     │     │ (local)           │
+└──────────────┘     └───────────────────┘
+phases/03-tdd-        phases/04-tdd-
+verify.md             coverage-analysis.md
+```
+
+## Key Design Principles
+
+1. **Pure Orchestrator**: Execute phases in sequence, parse outputs, pass context between them
+2. **Auto-Continue**: All phases run autonomously without user intervention between phases
+3. **Task Attachment Model**: Sub-tasks are attached/collapsed dynamically in TodoWrite
+4. **Progressive Phase Loading**: Phase docs are read on-demand, not all at once
+5. **Conditional Execution**: Phase 4 only executes when conflict_risk >= medium
+6. **TDD-First**: Every feature starts with a failing test (Red phase)
+
+**CLI Tool Selection**: CLI tool usage is determined semantically from user's task description. Include "use Codex/Gemini/Qwen" in your request for CLI execution.
+
+**Task Attachment Model**:
+- Skill execute **expands workflow** by attaching sub-tasks to current TodoWrite
+- When executing a sub-command, its internal tasks are attached to the orchestrator's TodoWrite
+- Orchestrator **executes these attached tasks** sequentially
+- After completion, attached tasks are **collapsed** back to high-level phase summary
+- This is **task expansion**, not external delegation
+
+**Auto-Continue Mechanism**:
+- TodoList tracks current phase status and dynamically manages task attachment/collapse
+- When each phase finishes executing, automatically execute next pending phase
+- All phases run autonomously without user interaction
+- **CONTINUOUS EXECUTION** - Do not stop until all phases complete
+
+## Auto Mode
+
+When `--yes` or `-y`: Auto-continue all phases (skip confirmations), use recommended conflict resolutions, skip TDD clarifications.
+
+## Usage
+
+```
+Skill(skill="workflow-tdd-plan", args="<task description>")
+Skill(skill="workflow-tdd-plan", args="[-y|--yes] \"<task description>\"")
+
+# Flags
+-y, --yes    Skip all confirmations (auto mode)
+
+# Arguments
+<task description>    Task description text, TDD-structured format, or path to .md file
+
+# Examples
+Skill(skill="workflow-tdd-plan", args="\"Build user authentication with tests\"")              # Simple TDD task
+Skill(skill="workflow-tdd-plan", args="\"Add JWT auth with email/password and token refresh\"") # Detailed task
+Skill(skill="workflow-tdd-plan", args="-y \"Implement payment processing\"")                    # Auto mode
+Skill(skill="workflow-tdd-plan", args="\"tdd-requirements.md\"")                                # From file
+```
+
+## TDD Compliance Requirements
+
+### The Iron Law
+
+```
+NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
+```
+
+**Enforcement Method**:
+- Phase 5: `implementation_approach` includes test-first steps (Red → Green → Refactor)
+- Green phase: Includes test-fix-cycle configuration (max 3 iterations)
+- Auto-revert: Triggered when max iterations reached without passing tests
+
+**Verification**: Phase 6 validates Red-Green-Refactor structure in all generated tasks
+
+### TDD Compliance Checkpoint
+
+| Checkpoint | Validation Phase | Evidence Required |
+|------------|------------------|-------------------|
+| Test-first structure | Phase 5 | `implementation_approach` has 3 steps |
+| Red phase exists | Phase 6 | Step 1: `tdd_phase: "red"` |
+| Green phase with test-fix | Phase 6 | Step 2: `tdd_phase: "green"` + test-fix-cycle |
+| Refactor phase exists | Phase 6 | Step 3: `tdd_phase: "refactor"` |
+
+### Core TDD Principles
+
+**Red Flags - STOP and Reassess**:
+- Code written before test
+- Test passes immediately (no Red phase witnessed)
+- Cannot explain why test should fail
+- "Just this once" rationalization
+- "Tests after achieve same goals" thinking
+
+**Why Order Matters**:
+- Tests written after code pass immediately → proves nothing
+- Test-first forces edge case discovery before implementation
+- Tests-after verify what was built, not what's required
+
+## Core Rules
+
+1. **Start Immediately**: First action is TodoWrite initialization, second action is execute Phase 1
+2. **No Preliminary Analysis**: Do not read files before Phase 1
+3. **Parse Every Output**: Extract required data for next phase
+4. **Auto-Continue via TodoList**: Check TodoList status to execute next pending phase automatically
+5. **Track Progress**: Update TodoWrite dynamically with task attachment/collapse pattern
+6. **TDD Context**: All descriptions include "TDD:" prefix
+7. **Task Attachment Model**: Skill execute **attaches** sub-tasks to current workflow. Orchestrator **executes** these attached tasks itself, then **collapses** them after completion
+8. **CRITICAL: DO NOT STOP**: Continuous multi-phase workflow. After executing all attached tasks, immediately collapse them and execute next phase
+
+## Execution Flow
+
+```
+Input Parsing:
+   └─ Convert user input to TDD-structured format (TDD:/GOAL/SCOPE/CONTEXT/TEST_FOCUS)
+
+Phase 1: Session Discovery
+   └─ Ref: workflow-plan/phases/01-session-discovery.md (external)
+      └─ Output: sessionId (WFS-xxx)
+
+Phase 2: Context Gathering
+   └─ Ref: workflow-plan/phases/02-context-gathering.md (external)
+      ├─ Tasks attached: Analyze structure → Identify integration → Generate package
+      └─ Output: contextPath + conflict_risk
+
+Phase 3: Test Coverage Analysis                    ← ATTACHED (3 tasks)
+   └─ Ref: phases/01-test-context-gather.md
+      ├─ Phase 3.1: Detect test framework
+      ├─ Phase 3.2: Analyze existing test coverage
+      └─ Phase 3.3: Identify coverage gaps
+      └─ Output: test-context-package.json           ← COLLAPSED
+
+Phase 4: Conflict Resolution (conditional)
+   └─ Decision (conflict_risk check):
+      ├─ conflict_risk ≥ medium → Ref: workflow-plan/phases/03-conflict-resolution.md (external)
+      │   ├─ Tasks attached: Detect conflicts → Present to user → Apply strategies
+      │   └─ Output: Modified brainstorm artifacts     ← COLLAPSED
+      └─ conflict_risk < medium → Skip to Phase 5
+
+Phase 5: TDD Task Generation                       ← ATTACHED (3 tasks)
+   └─ Ref: phases/02-task-generate-tdd.md
+      ├─ Phase 5.1: Discovery - analyze TDD requirements
+      ├─ Phase 5.2: Planning - design Red-Green-Refactor cycles
+      └─ Phase 5.3: Output - generate IMPL tasks with internal TDD phases
+      └─ Output: IMPL-*.json, IMPL_PLAN.md           ← COLLAPSED
+
+Phase 6: TDD Structure Validation (inline)
+   └─ Internal validation + summary returned
+   └─ Recommend: plan-verify (external)
+
+Return:
+   └─ Summary with recommended next steps
+```
+
+### Phase Reference Documents
+
+**Local phases** (read on-demand when phase executes):
+
+| Phase | Document | Purpose |
+|-------|----------|---------|
+| Phase 3 | [phases/01-test-context-gather.md](phases/01-test-context-gather.md) | Test coverage context gathering via test-context-search-agent |
+| Phase 5 | [phases/02-task-generate-tdd.md](phases/02-task-generate-tdd.md) | TDD task JSON generation via action-planning-agent |
+
+**External phases** (from workflow-plan skill):
+
+| Phase | Document | Purpose |
+|-------|----------|---------|
+| Phase 1 | workflow-plan/phases/01-session-discovery.md | Session creation/discovery |
+| Phase 2 | workflow-plan/phases/02-context-gathering.md | Project context collection |
+| Phase 4 | workflow-plan/phases/03-conflict-resolution.md | Conflict detection and resolution (conditional) |
+
+**Post-execution verification**:
+
+| Phase | Document | Purpose |
+|-------|----------|---------|
+| TDD Verify | [phases/03-tdd-verify.md](phases/03-tdd-verify.md) | TDD compliance verification with quality gate |
+| Coverage Analysis | [phases/04-tdd-coverage-analysis.md](phases/04-tdd-coverage-analysis.md) | Test coverage and cycle analysis (called by TDD Verify) |
+
+## 6-Phase Execution
+
+### Phase 1: Session Discovery
+
+**Step 1.1: Execute** - Session discovery and initialization
+
+Read and execute: `workflow-plan/phases/01-session-discovery.md` with `--type tdd --auto "TDD: [structured-description]"`
+
+**TDD Structured Format**:
+```
+TDD: [Feature Name]
+GOAL: [Objective]
+SCOPE: [Included/excluded]
+CONTEXT: [Background]
+TEST_FOCUS: [Test scenarios]
+```
+
+**Parse**: Extract sessionId
+
+**TodoWrite**: Mark phase 1 completed, phase 2 in_progress
+
+**After Phase 1**: Return to user showing Phase 1 results, then auto-continue to Phase 2
+
+---
+
+### Phase 2: Context Gathering
+
+**Step 2.1: Execute** - Context gathering and analysis
+
+Read and execute: `workflow-plan/phases/02-context-gathering.md` with `--session [sessionId] "TDD: [structured-description]"`
+
+**Use Same Structured Description**: Pass the same structured format from Phase 1
+
+**Input**: `sessionId` from Phase 1
+
+**Parse Output**:
+- Extract: context-package.json path (store as `contextPath`)
+- Typical pattern: `.workflow/active/[sessionId]/.process/context-package.json`
+
+**Validation**:
+- Context package path extracted
+- File exists and is valid JSON
+
+**TodoWrite**: Mark phase 2 completed, phase 3 in_progress
+
+**After Phase 2**: Return to user showing Phase 2 results, then auto-continue to Phase 3
+
+---
+
+### Phase 3: Test Coverage Analysis
+
+**Step 3.1: Execute** - Test coverage analysis and framework detection
+
+Read and execute: `phases/01-test-context-gather.md` with `--session [sessionId]`
+
+**Purpose**: Analyze existing codebase for:
+- Existing test patterns and conventions
+- Current test coverage
+- Related components and integration points
+- Test framework detection
+
+**Parse**: Extract testContextPath (`.workflow/active/[sessionId]/.process/test-context-package.json`)
+
+**TodoWrite Update (Phase 3 - tasks attached)**:
+```json
+[
+  {"content": "Phase 1: Session Discovery", "status": "completed", "activeForm": "Executing session discovery"},
+  {"content": "Phase 2: Context Gathering", "status": "completed", "activeForm": "Executing context gathering"},
+  {"content": "Phase 3: Test Coverage Analysis", "status": "in_progress", "activeForm": "Executing test coverage analysis"},
+  {"content": "  → Detect test framework and conventions", "status": "in_progress", "activeForm": "Detecting test framework"},
+  {"content": "  → Analyze existing test coverage", "status": "pending", "activeForm": "Analyzing test coverage"},
+  {"content": "  → Identify coverage gaps", "status": "pending", "activeForm": "Identifying coverage gaps"},
+  {"content": "Phase 5: TDD Task Generation", "status": "pending", "activeForm": "Executing TDD task generation"},
+  {"content": "Phase 6: TDD Structure Validation", "status": "pending", "activeForm": "Validating TDD structure"}
+]
+```
+
+**Note**: Skill execute **attaches** test-context-gather's 3 tasks. Orchestrator **executes** these tasks.
+
+**Next Action**: Tasks attached → **Execute Phase 3.1-3.3** sequentially
+
+**TodoWrite Update (Phase 3 completed - tasks collapsed)**:
+```json
+[
+  {"content": "Phase 1: Session Discovery", "status": "completed", "activeForm": "Executing session discovery"},
+  {"content": "Phase 2: Context Gathering", "status": "completed", "activeForm": "Executing context gathering"},
+  {"content": "Phase 3: Test Coverage Analysis", "status": "completed", "activeForm": "Executing test coverage analysis"},
+  {"content": "Phase 5: TDD Task Generation", "status": "pending", "activeForm": "Executing TDD task generation"},
+  {"content": "Phase 6: TDD Structure Validation", "status": "pending", "activeForm": "Validating TDD structure"}
+]
+```
+
+**After Phase 3**: Return to user showing test coverage results, then auto-continue to Phase 4/5
+
+---
+
+### Phase 4: Conflict Resolution (Optional)
+
+**Trigger**: Only execute when context-package.json indicates conflict_risk is "medium" or "high"
+
+**Step 4.1: Execute** - Conflict detection and resolution
+
+Read and execute: `workflow-plan/phases/03-conflict-resolution.md` with `--session [sessionId] --context [contextPath]`
+
+**Input**:
+- sessionId from Phase 1
+- contextPath from Phase 2
+- conflict_risk from context-package.json
+
+**Parse Output**:
+- Extract: Execution status (success/skipped/failed)
+- Verify: conflict-resolution.json file path (if executed)
+
+**Skip Behavior**:
+- If conflict_risk is "none" or "low", skip directly to Phase 5
+- Display: "No significant conflicts detected, proceeding to TDD task generation"
+
+**TodoWrite Update (Phase 4 - tasks attached, if conflict_risk >= medium)**:
+```json
+[
+  {"content": "Phase 1: Session Discovery", "status": "completed", "activeForm": "Executing session discovery"},
+  {"content": "Phase 2: Context Gathering", "status": "completed", "activeForm": "Executing context gathering"},
+  {"content": "Phase 3: Test Coverage Analysis", "status": "completed", "activeForm": "Executing test coverage analysis"},
+  {"content": "Phase 4: Conflict Resolution", "status": "in_progress", "activeForm": "Executing conflict resolution"},
+  {"content": "  → Detect conflicts with CLI analysis", "status": "in_progress", "activeForm": "Detecting conflicts"},
+  {"content": "  → Log and analyze detected conflicts", "status": "pending", "activeForm": "Analyzing conflicts"},
+  {"content": "  → Apply resolution strategies", "status": "pending", "activeForm": "Applying resolution strategies"},
+  {"content": "Phase 5: TDD Task Generation", "status": "pending", "activeForm": "Executing TDD task generation"},
+  {"content": "Phase 6: TDD Structure Validation", "status": "pending", "activeForm": "Validating TDD structure"}
+]
+```
+
+**TodoWrite Update (Phase 4 completed - tasks collapsed)**:
+```json
+[
+  {"content": "Phase 1: Session Discovery", "status": "completed", "activeForm": "Executing session discovery"},
+  {"content": "Phase 2: Context Gathering", "status": "completed", "activeForm": "Executing context gathering"},
+  {"content": "Phase 3: Test Coverage Analysis", "status": "completed", "activeForm": "Executing test coverage analysis"},
+  {"content": "Phase 4: Conflict Resolution", "status": "completed", "activeForm": "Executing conflict resolution"},
+  {"content": "Phase 5: TDD Task Generation", "status": "pending", "activeForm": "Executing TDD task generation"},
+  {"content": "Phase 6: TDD Structure Validation", "status": "pending", "activeForm": "Validating TDD structure"}
+]
+```
+
+**After Phase 4**: Return to user showing conflict resolution results, then auto-continue to Phase 5
+
+**Memory State Check**:
+- Evaluate current context window usage and memory state
+- If memory usage is high (>110K tokens or approaching context limits):
+
+  **Step 4.5: Execute** - Memory compaction (external skill: compact)
+
+  - This optimizes memory before proceeding to Phase 5
+- Memory compaction is particularly important after analysis phase which may generate extensive documentation
+
+---
+
+### Phase 5: TDD Task Generation
+
+**Step 5.1: Execute** - TDD task generation via action-planning-agent with Phase 0 user configuration
+
+Read and execute: `phases/02-task-generate-tdd.md` with `--session [sessionId]`
+
+**Note**: Phase 0 now includes:
+- Supplementary materials collection (file paths or inline content)
+- Execution method preference (Agent/Hybrid/CLI)
+- CLI tool preference (Codex/Gemini/Qwen/Auto)
+- These preferences are passed to agent for task generation
+
+**Parse**: Extract feature count, task count, CLI execution IDs assigned
+
+**Validate**:
+- IMPL_PLAN.md exists (unified plan with TDD Implementation Tasks section)
+- IMPL-*.json files exist (one per feature, or container + subtasks for complex features)
+- TODO_LIST.md exists with internal TDD phase indicators
+- Each IMPL task includes:
+  - `meta.tdd_workflow: true`
+  - `meta.cli_execution_id: {session_id}-{task_id}`
+  - `meta.cli_execution: { "strategy": "new|resume|fork|merge_fork", ... }`
+  - `flow_control.implementation_approach` with exactly 3 steps (red/green/refactor)
+  - Green phase includes test-fix-cycle configuration
+  - `context.focus_paths`: absolute or clear relative paths
+  - `flow_control.pre_analysis`: includes exploration integration_points analysis
+- IMPL_PLAN.md contains workflow_type: "tdd" in frontmatter
+- Task count <=18 (compliance with hard limit)
+
+**Red Flag Detection** (Non-Blocking Warnings):
+- Task count >18: `Warning: Task count exceeds hard limit - request re-scope`
+- Missing cli_execution_id: `Warning: Task lacks CLI execution ID for resume support`
+- Missing test-fix-cycle: `Warning: Green phase lacks auto-revert configuration`
+- Generic task names: `Warning: Vague task names suggest unclear TDD cycles`
+- Missing focus_paths: `Warning: Task lacks clear file scope for implementation`
+
+**Action**: Log warnings to `.workflow/active/[sessionId]/.process/tdd-warnings.log` (non-blocking)
+
+**TodoWrite Update (Phase 5 - tasks attached)**:
+```json
+[
+  {"content": "Phase 1: Session Discovery", "status": "completed", "activeForm": "Executing session discovery"},
+  {"content": "Phase 2: Context Gathering", "status": "completed", "activeForm": "Executing context gathering"},
+  {"content": "Phase 3: Test Coverage Analysis", "status": "completed", "activeForm": "Executing test coverage analysis"},
+  {"content": "Phase 5: TDD Task Generation", "status": "in_progress", "activeForm": "Executing TDD task generation"},
+  {"content": "  → Discovery - analyze TDD requirements", "status": "in_progress", "activeForm": "Analyzing TDD requirements"},
+  {"content": "  → Planning - design Red-Green-Refactor cycles", "status": "pending", "activeForm": "Designing TDD cycles"},
+  {"content": "  → Output - generate IMPL tasks with internal TDD phases", "status": "pending", "activeForm": "Generating TDD tasks"},
+  {"content": "Phase 6: TDD Structure Validation", "status": "pending", "activeForm": "Validating TDD structure"}
+]
+```
+
+**TodoWrite Update (Phase 5 completed - tasks collapsed)**:
+```json
+[
+  {"content": "Phase 1: Session Discovery", "status": "completed", "activeForm": "Executing session discovery"},
+  {"content": "Phase 2: Context Gathering", "status": "completed", "activeForm": "Executing context gathering"},
+  {"content": "Phase 3: Test Coverage Analysis", "status": "completed", "activeForm": "Executing test coverage analysis"},
+  {"content": "Phase 5: TDD Task Generation", "status": "completed", "activeForm": "Executing TDD task generation"},
+  {"content": "Phase 6: TDD Structure Validation", "status": "in_progress", "activeForm": "Validating TDD structure"}
+]
+```
+
+### Phase 6: TDD Structure Validation & Action Plan Verification (RECOMMENDED)
+
+**Internal validation first, then recommend external verification**
+
+**Internal Validation**:
+1. Each task contains complete TDD workflow (Red-Green-Refactor internally)
+2. Task structure validation:
+   - `meta.tdd_workflow: true` in all IMPL tasks
+   - `meta.cli_execution_id` present (format: {session_id}-{task_id})
+   - `meta.cli_execution` strategy assigned (new/resume/fork/merge_fork)
+   - `flow_control.implementation_approach` has exactly 3 steps
+   - Each step has correct `tdd_phase`: "red", "green", "refactor"
+   - `context.focus_paths` are absolute or clear relative paths
+   - `flow_control.pre_analysis` includes exploration integration analysis
+3. Dependency validation:
+   - Sequential features: IMPL-N depends_on ["IMPL-(N-1)"] if needed
+   - Complex features: IMPL-N.M depends_on ["IMPL-N.(M-1)"] for subtasks
+   - CLI execution strategies correctly assigned based on dependency graph
+4. Agent assignment: All IMPL tasks use @code-developer
+5. Test-fix cycle: Green phase step includes test-fix-cycle logic with max_iterations
+6. Task count: Total tasks <=18 (simple + subtasks hard limit)
+7. User configuration:
+   - Execution method choice reflected in task structure
+   - CLI tool preference documented in implementation guidance (if CLI selected)
+
+**Red Flag Checklist** (from TDD best practices):
+- [ ] No tasks skip Red phase (`tdd_phase: "red"` exists in step 1)
+- [ ] Test files referenced in Red phase (explicit paths, not placeholders)
+- [ ] Green phase has test-fix-cycle with `max_iterations` configured
+- [ ] Refactor phase has clear completion criteria
+
+**Non-Compliance Warning Format**:
+```
+Warning TDD Red Flag: [issue description]
+   Task: [IMPL-N]
+   Recommendation: [action to fix]
+```
+
+**Evidence Gathering** (Before Completion Claims):
+
+```bash
+# Verify session artifacts exist
+ls -la .workflow/active/[sessionId]/{IMPL_PLAN.md,TODO_LIST.md}
+ls -la .workflow/active/[sessionId]/.task/IMPL-*.json
+
+# Count generated artifacts
+echo "IMPL tasks: $(ls .workflow/active/[sessionId]/.task/IMPL-*.json 2>/dev/null | wc -l)"
+
+# Sample task structure verification (first task)
+jq '{id, tdd: .meta.tdd_workflow, cli_id: .meta.cli_execution_id, phases: [.flow_control.implementation_approach[].tdd_phase]}' \
+  "$(ls .workflow/active/[sessionId]/.task/IMPL-*.json | head -1)"
+```
+
+**Evidence Required Before Summary**:
+| Evidence Type | Verification Method | Pass Criteria |
+|---------------|---------------------|---------------|
+| File existence | `ls -la` artifacts | All files present |
+| Task count | Count IMPL-*.json | Count matches claims (<=18) |
+| TDD structure | jq sample extraction | Shows red/green/refactor + cli_execution_id |
+| CLI execution IDs | jq extraction | All tasks have cli_execution_id assigned |
+| Warning log | Check tdd-warnings.log | Logged (may be empty) |
+
+**Return Summary**:
+```
+TDD Planning complete for session: [sessionId]
+
+Features analyzed: [N]
+Total tasks: [M] (1 task per simple feature + subtasks for complex features)
+
+Task breakdown:
+- Simple features: [K] tasks (IMPL-1 to IMPL-K)
+- Complex features: [L] features with [P] subtasks
+- Total task count: [M] (within 18-task hard limit)
+
+Structure:
+- IMPL-1: {Feature 1 Name} (Internal: Red → Green → Refactor)
+- IMPL-2: {Feature 2 Name} (Internal: Red → Green → Refactor)
+- IMPL-3: {Complex Feature} (Container)
+  - IMPL-3.1: {Sub-feature A} (Internal: Red → Green → Refactor)
+  - IMPL-3.2: {Sub-feature B} (Internal: Red → Green → Refactor)
+[...]
+
+Plans generated:
+- Unified Implementation Plan: .workflow/active/[sessionId]/IMPL_PLAN.md
+  (includes TDD Implementation Tasks section with workflow_type: "tdd")
+- Task List: .workflow/active/[sessionId]/TODO_LIST.md
+  (with internal TDD phase indicators and CLI execution strategies)
+- Task JSONs: .workflow/active/[sessionId]/.task/IMPL-*.json
+  (with cli_execution_id and execution strategies for resume support)
+
+TDD Configuration:
+- Each task contains complete Red-Green-Refactor cycle
+- Green phase includes test-fix cycle (max 3 iterations)
+- Auto-revert on max iterations reached
+- CLI execution strategies: new/resume/fork/merge_fork based on dependency graph
+
+User Configuration Applied:
+- Execution Method: [agent|hybrid|cli]
+- CLI Tool Preference: [codex|gemini|qwen|auto]
+- Supplementary Materials: [included|none]
+- Task generation follows cli-tools-usage.md guidelines
+
+ACTION REQUIRED: Before execution, ensure you understand WHY each Red phase test is expected to fail.
+   This is crucial for valid TDD - if you don't know why the test fails, you can't verify it tests the right thing.
+
+Recommended Next Steps:
+1. plan-verify (external) --session [sessionId]  # Verify TDD plan quality and dependencies
+2. workflow:execute (external) --session [sessionId]  # Start TDD execution with CLI strategies
+3. phases/03-tdd-verify.md [sessionId]  # Post-execution TDD compliance check
+
+Quality Gate: Consider running plan-verify to validate TDD task structure, dependencies, and CLI execution strategies
+```
+
+## Input Processing
+
+Convert user input to TDD-structured format:
+
+**Simple text** → Add TDD context
+**Detailed text** → Extract components with TEST_FOCUS
+**File/Issue** → Read and structure with TDD
+
+## Data Flow
+
+```
+User Input (task description)
+    ↓
+[Convert to TDD Structured Format]
+    ↓ TDD Structured Description:
+    ↓   TDD: [Feature Name]
+    ↓   GOAL: [objective]
+    ↓   SCOPE: [boundaries]
+    ↓   CONTEXT: [background]
+    ↓   TEST_FOCUS: [test scenarios]
+    ↓
+Phase 1: session:start --type tdd --auto "TDD: structured-description"
+    ↓ Output: sessionId
+    ↓
+Phase 2: context-gather --session sessionId "TDD: structured-description"
+    ↓ Output: contextPath + conflict_risk
+    ↓
+Phase 3: test-context-gather --session sessionId
+    ↓ Output: testContextPath (test-context-package.json)
+    ↓
+Phase 4: conflict-resolution [AUTO-TRIGGERED if conflict_risk >= medium]
+    ↓ Output: Modified brainstorm artifacts
+    ↓ Skip if conflict_risk is none/low → proceed directly to Phase 5
+    ↓
+Phase 5: task-generate-tdd --session sessionId
+    ↓ Output: IMPL_PLAN.md, task JSONs, TODO_LIST.md
+    ↓
+Phase 6: Internal validation + summary
+    ↓
+Return summary to user
+```
+
+## TodoWrite Pattern
+
+**Core Concept**: Dynamic task attachment and collapse for TDD workflow with test coverage analysis and Red-Green-Refactor cycle generation.
+
+### Key Principles
+
+1. **Task Attachment** (when Skill executed):
+   - Sub-command's internal tasks are **attached** to orchestrator's TodoWrite
+   - First attached task marked as `in_progress`, others as `pending`
+   - Orchestrator **executes** these attached tasks sequentially
+
+2. **Task Collapse** (after sub-tasks complete):
+   - Remove detailed sub-tasks from TodoWrite
+   - **Collapse** to high-level phase summary
+   - Maintains clean orchestrator-level view
+
+3. **Continuous Execution**:
+   - After collapse, automatically proceed to next pending phase
+   - No user intervention required between phases
+   - TodoWrite dynamically reflects current execution state
+
+**Lifecycle Summary**: Initial pending tasks → Phase executed (tasks ATTACHED) → Sub-tasks executed sequentially → Phase completed (tasks COLLAPSED to summary) → Next phase begins (conditional Phase 4 if conflict_risk >= medium) → Repeat until all phases complete.
+
+### TDD-Specific Features
+
+- **Phase 3**: Test coverage analysis detects existing patterns and gaps
+- **Phase 5**: Generated IMPL tasks contain internal Red-Green-Refactor cycles
+- **Conditional Phase 4**: Conflict resolution only if conflict_risk >= medium
+
+**Note**: See individual Phase descriptions (Phase 3, 4, 5) for detailed TodoWrite Update examples with full JSON structures.
+
+## Execution Flow Diagram
+
+```
+TDD Workflow Orchestrator
+│
+├─ Phase 1: Session Discovery
+│  └─ workflow-plan/phases/01-session-discovery.md --auto
+│     └─ Returns: sessionId
+│
+├─ Phase 2: Context Gathering
+│  └─ workflow-plan/phases/02-context-gathering.md
+│     └─ Returns: context-package.json path
+│
+├─ Phase 3: Test Coverage Analysis                    ← ATTACHED (3 tasks)
+│  └─ phases/01-test-context-gather.md
+│     ├─ Phase 3.1: Detect test framework
+│     ├─ Phase 3.2: Analyze existing test coverage
+│     └─ Phase 3.3: Identify coverage gaps
+│     └─ Returns: test-context-package.json           ← COLLAPSED
+│
+├─ Phase 4: Conflict Resolution (conditional)
+│  IF conflict_risk >= medium:
+│  └─ workflow-plan/phases/03-conflict-resolution.md   ← ATTACHED (3 tasks)
+│     ├─ Phase 4.1: Detect conflicts with CLI
+│     ├─ Phase 4.2: Log and analyze detected conflicts
+│     └─ Phase 4.3: Apply resolution strategies
+│     └─ Returns: conflict-resolution.json            ← COLLAPSED
+│  ELSE:
+│  └─ Skip to Phase 5
+│
+├─ Phase 5: TDD Task Generation                       ← ATTACHED (3 tasks)
+│  └─ phases/02-task-generate-tdd.md
+│     ├─ Phase 5.1: Discovery - analyze TDD requirements
+│     ├─ Phase 5.2: Planning - design Red-Green-Refactor cycles
+│     └─ Phase 5.3: Output - generate IMPL tasks with internal TDD phases
+│     └─ Returns: IMPL-*.json, IMPL_PLAN.md           ← COLLAPSED
+│        (Each IMPL task contains internal Red-Green-Refactor cycle)
+│
+└─ Phase 6: TDD Structure Validation
+   └─ Internal validation + summary returned
+   └─ Recommend: plan-verify (external)
+
+Key Points:
+• ← ATTACHED: Sub-tasks attached to orchestrator TodoWrite
+• ← COLLAPSED: Sub-tasks executed and collapsed to phase summary
+• TDD-specific: Each generated IMPL task contains complete Red-Green-Refactor cycle
+```
+
+## Error Handling
+
+- **Parsing failure**: Retry once, then report
+- **Validation failure**: Report missing/invalid data
+- **Command failure**: Keep phase in_progress, report error
+- **TDD validation failure**: Report incomplete chains or wrong dependencies
+
+### TDD Warning Patterns
+
+| Pattern | Warning Message | Recommended Action |
+|---------|----------------|-------------------|
+| Task count >10 | High task count detected | Consider splitting into multiple sessions |
+| Missing test-fix-cycle | Green phase lacks auto-revert | Add `max_iterations: 3` to task config |
+| Red phase missing test path | Test file path not specified | Add explicit test file paths |
+| Generic task names | Vague names like "Add feature" | Use specific behavior descriptions |
+| No refactor criteria | Refactor phase lacks completion criteria | Define clear refactor scope |
+
+### Non-Blocking Warning Policy
+
+**All warnings are advisory** - they do not halt execution:
+1. Warnings logged to `.process/tdd-warnings.log`
+2. Summary displayed in Phase 6 output
+3. User decides whether to address before execution
+
+### Error Handling Quick Reference
+
+| Error Type | Detection | Recovery Action |
+|------------|-----------|-----------------|
+| Parsing failure | Empty/malformed output | Retry once, then report |
+| Missing context-package | File read error | Re-run context-gather (workflow-plan/phases/02-context-gathering.md) |
+| Invalid task JSON | jq parse error | Report malformed file path |
+| Task count exceeds 18 | Count validation >=19 | Request re-scope, split into multiple sessions |
+| Missing cli_execution_id | All tasks lack ID | Regenerate tasks with phase 0 user config |
+| Test-context missing | File not found | Re-run phases/01-test-context-gather.md |
+| Phase timeout | No response | Retry phase, check CLI connectivity |
+| CLI tool not available | Tool not in cli-tools.json | Fall back to alternative preferred tool |
+
+## Post-Execution: TDD Verification
+
+After TDD tasks have been executed (via workflow:execute), run TDD compliance verification:
+
+Read and execute: `phases/03-tdd-verify.md` with `--session [sessionId]`
+
+This generates a comprehensive TDD_COMPLIANCE_REPORT.md with quality gate recommendation.
+
+## Related Skills
+
+**Prerequisite**:
+- None - TDD planning is self-contained (can optionally run brainstorm before)
+
+**Called by This Skill** (6 phases):
+- workflow-plan/phases/01-session-discovery.md - Phase 1: Create or discover TDD workflow session
+- workflow-plan/phases/02-context-gathering.md - Phase 2: Gather project context and analyze codebase
+- phases/01-test-context-gather.md - Phase 3: Analyze existing test patterns and coverage
+- workflow-plan/phases/03-conflict-resolution.md - Phase 4: Detect and resolve conflicts (conditional)
+- compact (external skill) - Phase 4.5: Memory optimization (if context approaching limits)
+- phases/02-task-generate-tdd.md - Phase 5: Generate TDD tasks
+
+**Follow-up**:
+- plan-verify (external) - Recommended: Verify TDD plan quality and structure before execution
+- workflow:status (external) - Review TDD task breakdown
+- workflow:execute (external) - Begin TDD implementation
+- phases/03-tdd-verify.md - Post-execution: Verify TDD compliance and generate quality report
+
+## Next Steps Decision Table
+
+| Situation | Recommended Action | Purpose |
+|-----------|-------------------|---------|
+| First time planning | Run plan-verify (external) | Validate task structure before execution |
+| Warnings in tdd-warnings.log | Review log, refine tasks | Address Red Flags before proceeding |
+| High task count warning | Consider new session | Split into focused sub-sessions |
+| Ready to implement | Run workflow:execute (external) | Begin TDD Red-Green-Refactor cycles |
+| After implementation | Run phases/03-tdd-verify.md | Generate TDD compliance report |
+| Need to review tasks | Run workflow:status (external) | Inspect current task breakdown |
+
+### TDD Workflow State Transitions
+
+```
+workflow-tdd-plan (this skill)
+        ↓
+[Planning Complete] ──→ plan-verify (external, recommended)
+        ↓
+[Verified/Ready] ─────→ workflow:execute (external)
+        ↓
+[Implementation] ─────→ phases/03-tdd-verify.md (post-execution)
+        ↓
+[Quality Report] ─────→ Done or iterate
+```

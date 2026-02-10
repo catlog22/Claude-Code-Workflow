@@ -1,0 +1,290 @@
+---
+title: "Issue Resolve"
+description: "Unified issue resolution pipeline with source selection"
+category: "api"
+locale: "en"
+order: 7
+---
+
+# Issue Resolve
+
+Unified issue resolution pipeline with source selection. Plan issues via AI exploration, convert from artifacts, import from brainstorm sessions, or form execution queues. Triggers on "issue:plan", "issue:queue", "issue:convert-to-plan", "issue:from-brainstorm", "resolve issue", "plan issue", "queue issues", "convert plan to issue".
+
+## Overview
+
+| Property | Value |
+|----------|-------|
+| **Name** | `issue-resolve` |
+| **Tools** | `Task`, `AskUserQuestion`, `TodoWrite`, `Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`, `Skill` |
+
+## Reference
+
+Unified issue resolution pipeline that orchestrates solution creation from multiple sources and queue formation for execution.
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Issue Resolve Orchestrator (SKILL.md)                           │
+│  → Source selection → Route to phase → Execute → Summary         │
+└───────────────┬─────────────────────────────────────────────────┘
+                │
+                ├─ AskUserQuestion: Select issue source
+                │
+    ┌───────────┼───────────┬───────────┬───────────┐
+    ↓           ↓           ↓           ↓           │
+┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐   │
+│ Phase 1 │ │ Phase 2 │ │ Phase 3 │ │ Phase 4 │   │
+│ Explore │ │ Convert │ │  From   │ │  Form   │   │
+│ & Plan  │ │Artifact │ │Brainstorm│ │  Queue  │   │
+└─────────┘ └─────────┘ └─────────┘ └─────────┘   │
+     ↓           ↓           ↓           ↓          │
+  Solutions   Solutions   Issue+Sol   Exec Queue    │
+  (bound)     (bound)     (bound)    (ordered)      │
+                                                     │
+                    ┌────────────────────────────────┘
+                    ↓
+              /issue:execute
+```
+
+## Key Design Principles
+
+1. **Source-Driven Routing**: AskUserQuestion selects workflow, then load single phase
+2. **Progressive Phase Loading**: Only read the selected phase document
+3. **CLI-First Data Access**: All issue/solution CRUD via `ccw issue` CLI commands
+4. **Auto Mode Support**: `-y` flag skips source selection (defaults to Explore & Plan)
+
+## Auto Mode
+
+When `--yes` or `-y`: Skip source selection, use Explore & Plan for issue IDs, or auto-detect source type for paths.
+
+## Usage
+
+```
+Skill(skill="issue-resolve", args="<task description or issue IDs>")
+Skill(skill="issue-resolve", args="[FLAGS] \"<input>\"")
+
+# Flags
+-y, --yes              Skip all confirmations (auto mode)
+--source <type>        Pre-select source: plan|convert|brainstorm|queue
+--batch-size <n>       Max issues per agent batch (plan mode, default: 3)
+--issue <id>           Bind to existing issue (convert mode)
+--supplement           Add tasks to existing solution (convert mode)
+--queues <n>           Number of parallel queues (queue mode, default: 1)
+
+# Examples
+Skill(skill="issue-resolve", args="GH-123,GH-124")                              # Explore & plan issues
+Skill(skill="issue-resolve", args="--source plan --all-pending")                 # Plan all pending issues
+Skill(skill="issue-resolve", args="--source convert \".workflow/.lite-plan/my-plan\"")  # Convert artifact
+Skill(skill="issue-resolve", args="--source brainstorm SESSION=\"BS-rate-limiting\"")   # From brainstorm
+Skill(skill="issue-resolve", args="--source queue")                              # Form execution queue
+Skill(skill="issue-resolve", args="-y GH-123")                                  # Auto mode, plan single issue
+```
+
+## Execution Flow
+
+```
+Input Parsing:
+   └─ Parse flags (--source, -y, --issue, etc.) and positional args
+
+Source Selection:
+   ├─ --source flag provided → Route directly
+   ├─ Auto-detect from input:
+   │   ├─ Issue IDs (GH-xxx, ISS-xxx) → Explore & Plan
+   │   ├─ SESSION="..." → From Brainstorm
+   │   ├─ File/folder path → Convert from Artifact
+   │   └─ No input or --all-pending → Explore & Plan (all pending)
+   └─ Otherwise → AskUserQuestion to select source
+
+Phase Execution (load one phase):
+   ├─ Phase 1: Explore & Plan    → phases/01-issue-plan.md
+   ├─ Phase 2: Convert Artifact  → phases/02-convert-to-plan.md
+   ├─ Phase 3: From Brainstorm   → phases/03-from-brainstorm.md
+   └─ Phase 4: Form Queue        → phases/04-issue-queue.md
+
+Post-Phase:
+   └─ Summary + Next steps recommendation
+```
+
+### Phase Reference Documents
+
+| Phase | Document | Load When | Purpose |
+|-------|----------|-----------|---------|
+| Phase 1 | [phases/01-issue-plan.md](phases/01-issue-plan.md) | Source = Explore & Plan | Batch plan issues via issue-plan-agent |
+| Phase 2 | [phases/02-convert-to-plan.md](phases/02-convert-to-plan.md) | Source = Convert Artifact | Convert lite-plan/session/markdown to solutions |
+| Phase 3 | [phases/03-from-brainstorm.md](phases/03-from-brainstorm.md) | Source = From Brainstorm | Convert brainstorm ideas to issue + solution |
+| Phase 4 | [phases/04-issue-queue.md](phases/04-issue-queue.md) | Source = Form Queue | Order bound solutions into execution queue |
+
+## Core Rules
+
+1. **Source Selection First**: Always determine source before loading any phase
+2. **Single Phase Load**: Only read the selected phase document, never load all phases
+3. **CLI Data Access**: Use `ccw issue` CLI for all issue/solution operations, NEVER read files directly
+4. **Content Preservation**: Each phase contains complete execution logic from original commands
+5. **Auto-Detect Input**: Smart input parsing reduces need for explicit --source flag
+
+## Input Processing
+
+### Auto-Detection Logic
+
+```javascript
+function detectSource(input, flags) {
+  // 1. Explicit --source flag
+  if (flags.source) return flags.source;
+
+  // 2. Auto-detect from input content
+  const trimmed = input.trim();
+
+  // Issue IDs pattern (GH-xxx, ISS-xxx, comma-separated)
+  if (trimmed.match(/^[A-Z]+-\d+/i) || trimmed.includes(',')) {
+    return 'plan';
+  }
+
+  // --all-pending or empty input → plan all pending
+  if (flags.allPending || trimmed === '') {
+    return 'plan';
+  }
+
+  // SESSION="..." pattern → brainstorm
+  if (trimmed.includes('SESSION=')) {
+    return 'brainstorm';
+  }
+
+  // File/folder path → convert
+  if (trimmed.match(/\.(md|json)$/) || trimmed.includes('.workflow/')) {
+    return 'convert';
+  }
+
+  // Cannot auto-detect → ask user
+  return null;
+}
+```
+
+### Source Selection (AskUserQuestion)
+
+```javascript
+// When source cannot be auto-detected
+const answer = AskUserQuestion({
+  questions: [{
+    question: "How would you like to create/manage issue solutions?",
+    header: "Source",
+    multiSelect: false,
+    options: [
+      {
+        label: "Explore & Plan (Recommended)",
+        description: "AI explores codebase and generates solutions for issues"
+      },
+      {
+        label: "Convert from Artifact",
+        description: "Convert existing lite-plan, workflow session, or markdown to solution"
+      },
+      {
+        label: "From Brainstorm",
+        description: "Convert brainstorm session ideas into issue with solution"
+      },
+      {
+        label: "Form Execution Queue",
+        description: "Order bound solutions into execution queue for /issue:execute"
+      }
+    ]
+  }]
+});
+
+// Route based on selection
+const sourceMap = {
+  "Explore & Plan": "plan",
+  "Convert from Artifact": "convert",
+  "From Brainstorm": "brainstorm",
+  "Form Execution Queue": "queue"
+};
+```
+
+## Data Flow
+
+```
+User Input (issue IDs / artifact path / session ID / flags)
+    ↓
+[Parse Flags + Auto-Detect Source]
+    ↓
+[Source Selection] ← AskUserQuestion (if needed)
+    ↓
+[Read Selected Phase Document]
+    ↓
+[Execute Phase Logic]
+    ↓
+[Summary + Next Steps]
+    ├─ After Plan/Convert/Brainstorm → Suggest /issue:queue or /issue:execute
+    └─ After Queue → Suggest /issue:execute
+```
+
+## TodoWrite Pattern
+
+```json
+[
+  {"content": "Select issue source", "status": "completed"},
+  {"content": "Execute: [selected phase name]", "status": "in_progress"},
+  {"content": "Summary & next steps", "status": "pending"}
+]
+```
+
+Phase-specific sub-tasks are attached when the phase executes (see individual phase docs for details).
+
+## Core Guidelines
+
+**Data Access Principle**: Issues and solutions files can grow very large. To avoid context overflow:
+
+| Operation | Correct | Incorrect |
+|-----------|---------|-----------|
+| List issues (brief) | `ccw issue list --status pending --brief` | `Read('issues.jsonl')` |
+| Read issue details | `ccw issue status <id> --json` | `Read('issues.jsonl')` |
+| Update status | `ccw issue update <id> --status ...` | Direct file edit |
+| Bind solution | `ccw issue bind <id> <sol-id>` | Direct file edit |
+| Batch solutions | `ccw issue solutions --status planned --brief` | Loop individual queries |
+
+**Output Options**:
+- `--brief`: JSON with minimal fields (orchestrator use)
+- `--json`: Full JSON (agent use only)
+
+**ALWAYS** use CLI commands for CRUD operations. **NEVER** read entire `issues.jsonl` or `solutions/*.jsonl` directly.
+
+## Error Handling
+
+| Error | Resolution |
+|-------|------------|
+| No source detected | Show AskUserQuestion with all 4 options |
+| Invalid source type | Show available sources, re-prompt |
+| Phase execution fails | Report error, suggest manual intervention |
+| No pending issues (plan) | Suggest `/issue:new` to create issues first |
+| No bound solutions (queue) | Suggest running plan/convert/brainstorm first |
+
+## Post-Phase Next Steps
+
+After successful phase execution, recommend next action:
+
+```javascript
+// After Plan/Convert/Brainstorm (solutions created)
+AskUserQuestion({
+  questions: [{
+    question: "Solutions created. What next?",
+    header: "Next",
+    multiSelect: false,
+    options: [
+      { label: "Form Queue", description: "Order solutions for execution (/issue:queue)" },
+      { label: "Plan More Issues", description: "Continue creating solutions" },
+      { label: "View Issues", description: "Review issue details" },
+      { label: "Done", description: "Exit workflow" }
+    ]
+  }]
+});
+
+// After Queue (queue formed)
+// → Suggest /issue:execute directly
+```
+
+## Related Skills & Commands
+
+- `issue-manage` - Interactive issue CRUD operations
+- `/issue:new` - Create structured issue from GitHub or text
+- `/issue:execute` - Execute queue with DAG-based parallel orchestration
+- `ccw issue list` - List all issues
+- `ccw issue status <id>` - View issue details

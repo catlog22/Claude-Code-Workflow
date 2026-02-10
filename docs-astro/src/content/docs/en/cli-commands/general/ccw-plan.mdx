@@ -1,0 +1,206 @@
+---
+title: /ccw-plan
+description: Planning coordinator for intelligent workflow selection
+category: cli-commands
+order: 2
+locale: en
+---
+
+# /ccw-plan
+
+Planning coordinator - analyzes requirements, selects planning strategy, and executes planning workflow in the main process.
+
+## Overview
+
+The `/ccw-plan` command serves as the planning orchestrator, automatically analyzing task requirements and selecting the appropriate planning workflow based on complexity and constraints.
+
+**Parameters**:
+- `--mode &lt;mode&gt;`: Planning mode (lite, multi-cli, full, plan-verify, replan, cli, issue, rapid-to-issue, brainstorm-with-file, analyze-with-file)
+- `--yes|-y`: Skip confirmation prompts
+- `"task description"`: Task to plan (required)
+
+## Features
+
+- **Auto Mode Detection** - Keyword-based mode selection
+- **Planning Units** - Commands grouped for complete planning milestones
+- **Multi-Mode Support** - 10+ planning workflows available
+- **Issue Integration** - Bridge to issue workflow
+- **With-File Workflows** - Multi-CLI collaboration support
+
+## Usage
+
+```bash
+# Auto-select mode (keyword-based detection)
+/ccw-plan "Add user authentication"
+
+# Standard planning modes
+/ccw-plan --mode lite "Add logout endpoint"
+/ccw-plan --mode multi-cli "Implement OAuth2"
+/ccw-plan --mode full "Design notification system"
+/ccw-plan --mode plan-verify "Payment processing"
+/ccw-plan --mode replan --session WFS-auth-2025-01-28
+
+# CLI-assisted planning (quick recommendations)
+/ccw-plan --mode cli "Should we use OAuth2 or JWT?"
+
+# With-File workflows
+/ccw-plan --mode brainstorm-with-file "用户通知系统重新设计"
+/ccw-plan --mode analyze-with-file "认证架构设计决策"
+
+# Issue workflow integration
+/ccw-plan --mode issue "Handle all pending security issues"
+/ccw-plan --mode rapid-to-issue "Plan and create user profile issue"
+
+# Auto mode (skip confirmations)
+/ccw-plan --yes "Quick feature: user profile endpoint"
+```
+
+## Planning Modes
+
+### Lite Modes (Level 2)
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| `lite` | In-memory planning | Clear requirements, single module |
+| `multi-cli` | Multi-CLI collaborative | Technology selection, solution comparison |
+
+### Full Modes (Level 3)
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| `full` | 5-phase standard planning | Complex features, multi-module |
+| `plan-verify` | Planning with quality gate | Production features, high quality required |
+
+### Special Modes
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| `cli` | Quick CLI recommendations | Quick questions, architectural decisions |
+| `replan` | Modify existing plan | Plan adjustments, scope changes |
+| `tdd` | Test-driven development planning | TDD workflow |
+
+### With-File Modes (Level 3-4)
+
+| Mode | Description | Multi-CLI |
+|------|-------------|-----------|
+| `brainstorm-with-file` | Multi-perspective ideation | Yes |
+| `analyze-with-file` | Collaborative analysis | Yes |
+
+### Issue Modes
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| `issue` | Batch issue planning | Handle multiple issues |
+| `rapid-to-issue` | Plan + create issue | Bridge planning to issue tracking |
+
+## Planning Units
+
+| Unit Name | Commands | Purpose |
+|-----------|----------|---------|
+| **Quick Planning** | lite-plan → lite-execute | Lightweight plan and execution |
+| **Multi-CLI Planning** | multi-cli-plan → lite-execute | Multi-perspective analysis |
+| **Verified Planning** | plan → plan-verify → execute | Planning with verification |
+| **TDD Planning** | tdd-plan → execute | Test-driven development |
+| **Issue Planning** | issue:discover → issue:plan → issue:queue → issue:execute | Issue workflow |
+| **Brainstorm to Issue** | brainstorm:auto-parallel → issue:from-brainstorm → issue:queue | Exploration to issues |
+
+## Mode Selection Decision Tree
+
+```
+User calls: /ccw-plan "task description"
+    ↓
+Explicit --mode specified?
+    ├─ Yes → Use specified mode
+    └─ No → Detect keywords
+        ├─ "brainstorm" → brainstorm-with-file
+        ├─ "analyze" → analyze-with-file
+        ├─ "test", "tdd" → tdd
+        ├─ "issue" → issue or rapid-to-issue
+        ├─ Complexity high → full or plan-verify
+        └─ Default → lite
+```
+
+## Execution Flow
+
+```
+User Input
+    ↓
+Phase 1: Analyze Requirements
+    ├─ Extract: goal, scope, complexity, constraints
+    └─ Detect: task type, keywords
+    ↓
+Phase 2: Select Mode & Build Chain
+    ├─ Detect mode (explicit or auto)
+    ├─ Build command chain based on mode
+    └─ Show planning strategy
+    ↓
+Phase 3: User Confirmation (optional)
+    ├─ Show command chain
+    └─ Allow mode change
+    ↓
+Phase 4: Execute Planning Chain
+    ├─ Setup TODO tracking (CCWP prefix)
+    ├─ Initialize status file
+    └─ Execute commands sequentially
+    ↓
+Output completion summary
+```
+
+## Examples
+
+### Auto Mode Selection
+
+```bash
+# CCW detects keywords and selects mode
+/ccw-plan "Implement user authentication with TDD"
+
+# Output:
+# Detecting mode...
+# Keywords: "TDD" → Mode: tdd
+# Commands: tdd-plan
+# Confirm? (y/n): y
+```
+
+### Brainstorm Mode
+
+```bash
+# Multi-perspective exploration
+/ccw-plan --mode brainstorm-with-file "Design notification system"
+
+# Uses brainstorm workflow with multi-CLI collaboration
+```
+
+### CLI Quick Recommendations
+
+```bash
+# Quick architectural question
+/ccw-plan --mode cli "Should we use Redux or Zustand for state?"
+
+# Uses CLI for quick analysis and recommendations
+```
+
+### Replan Existing Session
+
+```bash
+# Modify existing plan
+/ccw-plan --mode replan --session WFS-auth-2025-01-28
+
+# Opens existing plan for modification
+```
+
+## Related Commands
+
+- **/ccw** - Main workflow coordinator
+- **/ccw-test** - Test workflow coordinator
+- **/ccw-debug** - Debug workflow coordinator
+- **/workflow:plan** - Standard planning workflow
+- **/workflow:tdd-plan** - TDD planning workflow
+
+## Notes
+
+- **Keyword detection** for auto mode selection
+- **Planning units** ensure complete planning milestones
+- **TODO tracking** with CCWP prefix
+- **Status file** in `.workflow/.ccw-plan/{session}/`
+- **Multi-CLI collaboration** for with-file modes
+- **Issue integration** for seamless workflow transition

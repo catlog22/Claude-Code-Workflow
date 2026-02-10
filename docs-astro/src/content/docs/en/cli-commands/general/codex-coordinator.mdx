@@ -1,0 +1,296 @@
+---
+title: /codex-coordinator
+description: Command orchestration tool for Codex workflows
+category: cli-commands
+order: 7
+locale: en
+---
+
+# /codex-coordinator
+
+Command orchestration tool for Codex - analyzes requirements, recommends command chains, and executes sequentially with state persistence.
+
+## Overview
+
+The `/codex-coordinator` command is the Codex equivalent of the CCW coordinator, providing intelligent orchestration for Codex-specific workflows.
+
+**Parameters**:
+- `TASK="<task description>"`: Task to orchestrate (required)
+- `--depth=<standard|deep>`: Analysis depth (default: standard)
+- `--auto-confirm`: Skip user confirmation
+- `--verbose`: Enable verbose output
+
+**Execution Model**: Intelligent agent-driven workflow - Claude analyzes each phase and orchestrates command execution.
+
+## Core Concept: Minimum Execution Units
+
+**Definition**: Commands that must execute together as an atomic group to achieve meaningful workflow milestones.
+
+### Available Codex Commands
+
+| Category | Commands | Purpose |
+|----------|----------|---------|
+| **Planning** | lite-plan-a, lite-plan-b, plan-a, plan-b | Various planning approaches |
+| **Execution** | execute, execute-a, execute-b | Implementation workflows |
+| **Analysis** | analyze-a, analyze-b | Code analysis |
+| **Testing** | test-a, test-b | Test generation |
+| **Brainstorming** | brainstorm-a, brainstorm-with-file, brainstorm-to-cycle | Idea exploration |
+| **Cleanup** | clean, compact | Code cleanup and memory compaction |
+
+## Usage
+
+```bash
+# Basic usage
+/codex-coordinator TASK="Implement user authentication"
+
+# With deep analysis
+/codex-coordinator TASK="Design notification system" --depth=deep
+
+# Auto-confirm
+/codex-coordinator TASK="Fix typo in config" --auto-confirm
+
+# Verbose output
+/codex-coordinator TASK="Add API endpoint" --verbose
+```
+
+## Execution Flow
+
+### Phase 1: Analyze Requirements
+
+```javascript
+async function analyzeRequirements(taskDescription) {
+  const analysis = {
+    goal: extractGoal(taskDescription),
+    scope: determineScope(taskDescription),
+    complexity: calculateComplexity(taskDescription),
+    task_type: classifyTask(taskDescription),
+    constraints: identifyConstraints(taskDescription)
+  };
+  return analysis;
+}
+```
+
+**Output**:
+- Goal: Primary objective
+- Scope: Affected modules
+- Complexity: simple/medium/complex
+- Task type: feature/bugfix/refactor
+- Constraints: Dependencies, requirements
+
+### Phase 2: Recommend Command Chain
+
+```javascript
+async function recommendCommandChain(analysis) {
+  const { inputPort, outputPort } = determinePortFlow(analysis.task_type, analysis.complexity);
+  const chain = selectChainByTaskType(analysis);
+  return chain;
+}
+```
+
+**Output**:
+- Recommended command sequence
+- Execution parameters
+- Expected artifacts
+- Estimated complexity
+
+### Phase 3: User Confirmation
+
+```javascript
+async function getUserConfirmation(chain) {
+  const response = await AskUserQuestion({
+    questions: [{
+      question: 'Proceed with this command chain?',
+      header: 'Confirm Chain',
+      options: [
+        { label: 'Confirm and execute', description: 'Proceed with commands' },
+        { label: 'Show details', description: 'View each command' },
+        { label: 'Adjust chain', description: 'Remove or reorder' },
+        { label: 'Cancel', description: 'Abort' }
+      ]
+    }]
+  });
+  return response;
+}
+```
+
+### Phase 4: Execute Sequential Command Chain
+
+```javascript
+async function executeCommandChain(chain, analysis) {
+  const sessionId = `codex-coord-${Date.now()}`;
+  const state = {
+    session_id: sessionId,
+    status: 'running',
+    analysis: analysis,
+    command_chain: chain.map((cmd, idx) => ({ ...cmd, index: idx, status: 'pending' })),
+    execution_results: []
+  };
+
+  // Save initial state
+  Write(`.workflow/.codex-coordinator/${sessionId}/state.json`, JSON.stringify(state, null, 2));
+
+  for (let i = 0; i < chain.length; i++) {
+    const cmd = chain[i];
+
+    // Build command string
+    let commandStr = `@~/.codex/prompts/${cmd.name}.md`;
+
+    // Add parameters
+    if (i > 0 && state.execution_results.length > 0) {
+      const lastResult = state.execution_results[state.execution_results.length - 1];
+      commandStr += ` --resume="${lastResult.session_id || lastResult.artifact}"`;
+    }
+
+    // Add depth for complex tasks
+    if (analysis.complexity === 'complex' && (cmd.name.includes('analyze') || cmd.name.includes('plan'))) {
+      commandStr += ` --depth=deep`;
+    }
+
+    // Add task description for planning commands
+    if (cmd.type === 'planning' && i === 0) {
+      commandStr += ` TASK="${analysis.goal}"`;
+    }
+
+    // Execute command
+    console.log(`Executing: ${commandStr}`);
+    state.execution_results.push({
+      index: i,
+      command: cmd.name,
+      status: 'in-progress',
+      started_at: new Date().toISOString()
+    });
+
+    state.command_chain[i].status = 'completed';
+    state.updated_at = new Date().toISOString();
+    Write(`.workflow/.codex-coordinator/${sessionId}/state.json`, JSON.stringify(state, null, 2));
+  }
+
+  return state;
+}
+```
+
+## Command Invocation Format
+
+**Format**: `@~/.codex/prompts/&lt;command-name&gt;.md &lt;parameters&gt;`
+
+### Examples
+
+```bash
+# Planning command
+@~/.codex/prompts/plan-a.md TASK="Implement OAuth2"
+
+# Execution with resume
+@~/.codex/prompts/execute-a.md --resume="session-id"
+
+# Analysis with depth
+@~/.codex/prompts/analyze-a.md --depth=deep
+```
+
+## Available Codex Workflows
+
+### Planning Workflows
+
+| Command | Purpose | Output |
+|---------|---------|--------|
+| **lite-plan-a** | Lightweight planning A | Quick plan |
+| **lite-plan-b** | Lightweight planning B | Alternative quick plan |
+| **plan-a** | Standard planning A | Detailed plan |
+| **plan-b** | Standard planning B | Alternative detailed plan |
+
+### Execution Workflows
+
+| Command | Purpose | Output |
+|---------|---------|--------|
+| **execute** | Standard execution | Implemented code |
+| **execute-a** | Execution variant A | Implementation A |
+| **execute-b** | Execution variant B | Implementation B |
+
+### Analysis Workflows
+
+| Command | Purpose | Output |
+|---------|---------|--------|
+| **analyze-a** | Code analysis A | Analysis report |
+| **analyze-b** | Code analysis B | Alternative analysis |
+
+### Testing Workflows
+
+| Command | Purpose | Output |
+|---------|---------|--------|
+| **test-a** | Test generation A | Test suite A |
+| **test-b** | Test generation B | Test suite B |
+
+### Brainstorming Workflows
+
+| Command | Purpose | Output |
+|---------|---------|--------|
+| **brainstorm-a** | Brainstorming A | Ideas A |
+| **brainstorm-with-file** | Documented brainstorm | brainstorm.md |
+| **brainstorm-to-cycle** | Brainstorm to cycle | Actionable cycle |
+
+### Cleanup Workflows
+
+| Command | Purpose | Output |
+|---------|---------|--------|
+| **clean** | Code cleanup | Cleaned code |
+| **compact** | Memory compaction | Compressed state |
+
+## Examples
+
+### Simple Feature
+
+```bash
+/codex-coordinator TASK="Add user profile page" --auto-confirm
+
+# Output:
+# Analyzing: "Add user profile page"
+# Complexity: Low
+# Recommended: lite-plan-a → execute
+# Executing: @~/.codex/prompts/lite-plan-a.md TASK="Add user profile page"
+# Executing: @~/.codex/prompts/execute.md
+# ✅ Complete! Session: codex-coord-1738425600000
+```
+
+### Complex Feature
+
+```bash
+/codex-coordinator TASK="Refactor authentication system" --depth=deep
+
+# Output:
+# Analyzing: "Refactor authentication system"
+# Complexity: High
+# Recommended: plan-a → execute → test-a
+# Executing: @~/.codex/prompts/plan-a.md --depth=deep
+# Executing: @~/.codex/prompts/execute.md
+# Executing: @~/.codex/prompts/test-a.md
+# ✅ Complete! Session: codex-coord-1738425600000
+```
+
+## Session Management
+
+### Resume Previous Session
+
+```bash
+# Find session
+ls .workflow/.codex-coordinator/
+
+# Load state
+cat .workflow/.codex-coordinator/{session-id}/state.json
+
+# Resume from last completed command
+# (Manual continuation based on state)
+```
+
+## Related Commands
+
+- **/ccw-coordinator** - CCW workflow coordinator
+- **@~/.codex/prompts/** - Individual Codex commands
+- **/ccw** - Main CCW workflow coordinator
+
+## Notes
+
+- **Agent-driven** workflow - Claude intelligently orchestrates
+- **State persistence** in `.workflow/.codex-coordinator/`
+- **Command chaining** with parameter passing
+- **Resume support** from state files
+- **Depth control** for analysis complexity
+- **Auto-confirm** for non-interactive use

@@ -1,0 +1,293 @@
+---
+title: /ccw-coordinator
+description: Generic command orchestration tool for CCW workflows
+category: cli-commands
+order: 4
+locale: en
+---
+
+# /ccw-coordinator
+
+Generic command orchestration tool - analyzes requirements, recommends command chains, and executes sequentially with state persistence.
+
+## Overview
+
+The `/ccw-coordinator` command is a generic orchestrator that can handle any CCW workflow by analyzing task requirements and recommending optimal command chains.
+
+**Parameters**:
+- `[task description]`: Task to orchestrate (required)
+
+**Execution Model**: Pseudocode guidance - Claude intelligently executes each phase based on context.
+
+## Core Concept: Minimum Execution Units
+
+**Definition**: Commands that must execute together as an atomic group to achieve meaningful workflow milestones.
+
+### Examples of Execution Units
+
+| Unit Name | Commands | Purpose |
+|-----------|----------|---------|
+| **Quick Implementation** | `/workflow:lite-plan` → `/workflow:lite-execute` | Lightweight plan and execution |
+| **Multi-CLI Planning** | `/workflow:multi-cli-plan` → `/workflow:lite-execute` | Multi-perspective analysis |
+| **Bug Fix** | `/workflow:lite-fix` → `/workflow:lite-execute` | Bug diagnosis and fix |
+| **Verified Planning** | `/workflow:plan` → `/workflow:plan-verify` → `/workflow:execute` | Planning with verification |
+| **TDD Planning** | `/workflow:tdd-plan` → `/workflow:execute` | Test-driven development |
+
+## Command Port Mapping
+
+Each workflow command has defined input/output ports for intelligent routing:
+
+```javascript
+const commandPorts = {
+  // Planning Commands
+  'lite-plan': {
+    name: 'lite-plan',
+    input: ['task-description'],
+    output: ['memory-plan'],
+    tags: ['planning', 'lite']
+  },
+  'plan': {
+    name: 'plan',
+    input: ['task-description', 'brainstorm-artifacts'],
+    output: ['impl-plan', 'tasks-json'],
+    tags: ['planning', 'full']
+  },
+  'multi-cli-plan': {
+    name: 'multi-cli-plan',
+    input: ['decision-topic'],
+    output: ['comparison-report', 'recommendation'],
+    tags: ['planning', 'multi-cli', 'analysis']
+  },
+  // ... more commands
+};
+```
+
+## Usage
+
+```bash
+# Let coordinator analyze and recommend
+/ccw-coordinator "Implement user authentication"
+
+# The coordinator will:
+# 1. Analyze task requirements
+# 2. Recommend optimal command chain
+# 3. Execute commands sequentially
+# 4. Track state throughout
+```
+
+## Execution Flow
+
+### Phase 1: Analyze Requirements
+
+```javascript
+async function analyzeRequirements(taskDescription) {
+  const analysis = {
+    goal: extractGoal(taskDescription),
+    scope: determineScope(taskDescription),
+    complexity: calculateComplexity(taskDescription),
+    task_type: classifyTask(taskDescription),
+    constraints: identifyConstraints(taskDescription)
+  };
+  return analysis;
+}
+```
+
+**Output**:
+- Goal: What needs to be accomplished
+- Scope: Affected modules/components
+- Complexity: simple/medium/complex
+- Task type: feature, bugfix, refactor, etc.
+- Constraints: Time, resources, dependencies
+
+### Phase 2: Recommend Command Chain
+
+```javascript
+async function recommendCommandChain(analysis) {
+  const { inputPort, outputPort } = determinePortFlow(analysis.task_type, analysis.constraints);
+  const chain = selectChainByPorts(inputPort, outputPort, analysis);
+  return chain;
+}
+```
+
+**Output**:
+- Selected workflow level
+- Command chain with units
+- Execution mode (mainprocess/async)
+- Expected artifacts
+
+### Phase 3: User Confirmation
+
+```javascript
+async function getUserConfirmation(chain) {
+  const response = await AskUserQuestion({
+    questions: [{
+      question: 'Proceed with this command chain?',
+      header: 'Confirm',
+      options: [
+        { label: 'Confirm and execute', description: 'Proceed with commands' },
+        { label: 'Show details', description: 'View each command' },
+        { label: 'Adjust chain', description: 'Remove or reorder' },
+        { label: 'Cancel', description: 'Abort' }
+      ]
+    }]
+  });
+  return response;
+}
+```
+
+### Phase 4: Execute Sequential Command Chain
+
+```javascript
+async function executeCommandChain(chain, analysis) {
+  const sessionId = `ccw-coord-${Date.now()}`;
+  const state = {
+    session_id: sessionId,
+    status: 'running',
+    analysis: analysis,
+    command_chain: chain.map((cmd, idx) => ({ ...cmd, index: idx, status: 'pending' })),
+    execution_results: []
+  };
+
+  // Save initial state
+  Write(`.workflow/.ccw-coordinator/${sessionId}/state.json`, JSON.stringify(state, null, 2));
+
+  for (let i = 0; i < chain.length; i++) {
+    const cmd = chain[i];
+    console.log(`[${i+1}/${chain.length}] Executing: ${cmd.command}`);
+
+    // Update status to running
+    state.command_chain[i].status = 'running';
+    Write(`.workflow/.ccw-coordinator/${sessionId}/state.json`, JSON.stringify(state, null, 2));
+
+    // Execute command via CLI
+    const taskId = Bash(
+      `ccw cli -p "${escapePrompt(prompt)}" --tool claude --mode write`,
+      { run_in_background: true }
+    ).task_id;
+
+    // Save execution record
+    state.execution_results.push({
+      index: i,
+      command: cmd.command,
+      status: 'in-progress',
+      task_id: taskId,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  return state;
+}
+```
+
+## Command Chain Examples
+
+### Quick Implementation Unit
+
+```javascript
+// Commands: 2 | Units: 1 (quick-impl)
+const quickImplChain = [
+  {
+    command: '/workflow:lite-plan',
+    args: '"{{goal}}"',
+    unit: 'quick-impl',
+    execution: { type: 'slash-command', mode: 'mainprocess' }
+  },
+  {
+    command: '/workflow:lite-execute',
+    args: '--in-memory',
+    unit: 'quick-impl',
+    execution: { type: 'slash-command', mode: 'async' }
+  }
+];
+```
+
+### Verified Planning Unit
+
+```javascript
+// Commands: 3 | Units: 1 (verified-planning-execution)
+const verifiedChain = [
+  {
+    command: '/workflow:plan',
+    args: '"{{goal}}"',
+    unit: 'verified-planning-execution',
+    execution: { type: 'slash-command', mode: 'mainprocess' }
+  },
+  {
+    command: '/workflow:plan-verify',
+    args: '',
+    unit: 'verified-planning-execution',
+    execution: { type: 'slash-command', mode: 'mainprocess' }
+  },
+  {
+    command: '/workflow:execute',
+    args: '--resume-session="{{session}}"',
+    unit: 'verified-planning-execution',
+    execution: { type: 'slash-command', mode: 'mainprocess' }
+  }
+];
+```
+
+## Parameter Patterns
+
+| Command Type | Parameter Pattern | Example |
+|--------------|------------------|---------|
+| **Planning** | `"task description"` | `/workflow:plan -y "Implement OAuth2"` |
+| **Execution (with plan)** | `--resume-session="WFS-xxx"` | `/workflow:execute -y --resume-session="WFS-plan-001"` |
+| **Execution (standalone)** | `--in-memory` or `"task"` | `/workflow:lite-execute -y --in-memory` |
+| **Session-based** | `--session="WFS-xxx"` | `/workflow:test-fix-gen -y --session="WFS-impl-001"` |
+| **Fix/Debug** | `"problem description"` | `/workflow:lite-fix -y "Fix timeout bug"` |
+
+## Examples
+
+### Simple Feature
+
+```bash
+/ccw-coordinator "Add user profile page"
+
+# Output:
+# Analyzing: "Add user profile page"
+# Complexity: Low (score: 1)
+# Recommended: Level 2 - Rapid Workflow
+# Command chain:
+#   Unit: quick-impl
+#   1. /workflow:lite-plan "Add user profile page"
+#   2. /workflow:lite-execute --in-memory
+# Confirm? (y/n): y
+#
+# [1/2] Executing: /workflow:lite-plan
+# [2/2] Executing: /workflow:lite-execute
+# ✅ Complete! Session: ccw-coord-1738425600000
+```
+
+### Complex Feature
+
+```bash
+/ccw-coordinator "Refactor authentication system with OAuth2"
+
+# Output:
+# Analyzing: "Refactor authentication system..."
+# Complexity: High (score: 6)
+# Recommended: Level 3 - Standard Workflow
+# Command chain:
+#   Unit: verified-planning-execution
+#   1. /workflow:plan "Refactor authentication..."
+#   2. /workflow:plan-verify
+#   3. /workflow:execute --resume-session="{session}"
+# Confirm? (y/n): y
+```
+
+## Related Commands
+
+- **/ccw** - Main workflow coordinator
+- **/ccw-plan** - Planning coordinator
+- **/ccw-test** - Test coordinator
+- **/ccw-debug** - Debug coordinator
+
+## Notes
+
+- **Atomic execution** - Never split minimum execution units
+- **State persistence** - All state saved to `.workflow/.ccw-coordinator/`
+- **User control** - Confirmation before execution
+- **Context passing** - Parameters chain across commands
+- **Resume support** - Can resume from state.json
+- **Intelligent routing** - Port-based command matching

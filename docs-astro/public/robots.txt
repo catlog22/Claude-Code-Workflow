@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://ccw-docs.example.com/sitemap-index.xml

@@ -1,0 +1,40 @@
+---
+interface Props {
+  title?: string;
+  icon?: string;
+  href?: string;
+}
+
+const { title, icon, href } = Astro.props;
+const Tag = href ? 'a' : 'div';
+---
+
+<Tag
+  href={href}
+  class:list={[
+    'card block rounded-lg border border-gray-200 dark:border-gray-700 p-6 transition-all',
+    {
+      'hover:border-blue-500 dark:hover:border-blue-400 hover:shadow-md': href,
+    },
+  ]}
+>
+  {icon && (
+    <div class="mb-3 text-2xl">
+      {icon}
+    </div>
+  )}
+  {title && (
+    <h3 class="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
+      {title}
+    </h3>
+  )}
+  <div class="prose prose-sm dark:prose-invert max-w-none text-gray-600 dark:text-gray-400">
+    <slot />
+  </div>
+</Tag>
+
+<style>
+  .card :global(p:last-child) {
+    margin-bottom: 0;
+  }
+</style>

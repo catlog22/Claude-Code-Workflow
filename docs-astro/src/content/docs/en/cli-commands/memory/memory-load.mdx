@@ -1,0 +1,190 @@
+---
+title: "/memory:load"
+description: Load project context and core content into memory
+category: cli-commands
+order: 3
+locale: en
+---
+
+# /memory:load
+
+Delegate to a universal-executor agent to analyze the project and return a structured "Core Content Pack" for memory optimization.
+
+## Overview
+
+The `/memory:load` command analyzes the project and returns a structured content package loaded directly into main thread memory, providing essential context for subsequent agent operations while minimizing token consumption.
+
+**Core Philosophy**:
+- **Agent-Driven**: Fully delegates execution to universal-executor agent
+- **Read-Only Analysis**: Does not modify code, only extracts context
+- **Structured Output**: Returns standardized JSON content package
+- **Memory Optimization**: Package loaded directly into main thread memory
+- **Token Efficiency**: CLI analysis executed within agent to save tokens
+
+## Features
+
+- **Project Analysis** - Comprehensive codebase understanding
+- **Core Content Extraction** - Identifies key components and patterns
+- **Structured Output** - JSON format for easy integration
+- **Memory Optimization** - Reduces token usage for subsequent operations
+- **Tech Stack Detection** - Automatic identification of technologies used
+
+## Usage
+
+```bash
+# Load project context into memory
+/memory:load
+
+# Load with custom scope
+/memory:load --path src/features
+
+# Load with specific depth
+/memory:load --depth 3
+```
+
+## Execution Flow
+
+```
+User Input
+    ↓
+Delegate to universal-executor agent
+    ↓
+Phase 1: Project Analysis
+    ├─ Analyze project structure
+    ├─ Identify tech stack
+    ├─ Detect key components
+    └─ Extract architectural patterns
+    ↓
+Phase 2: Core Content Extraction
+    ├─ Extract main components
+    ├─ Identify data structures
+    ├─ Find key interfaces
+    └─ Document important patterns
+    ↓
+Phase 3: Structured Output Generation
+    ├─ Format as JSON
+    ├─ Organize by categories
+    └─ Add metadata
+    ↓
+Phase 4: Memory Loading
+    ├─ Load into main thread memory
+    ├─ Make available for subsequent operations
+    └─ Display summary
+```
+
+## Output Format
+
+The command returns a structured "Core Content Pack":
+
+```json
+{
+  "project_name": "string",
+  "tech_stack": ["list", "of", "technologies"],
+  "architecture": {
+    "overview": "string",
+    "key_components": ["list"],
+    "patterns": ["list"]
+  },
+  "core_content": {
+    "components": [
+      {
+        "name": "string",
+        "purpose": "string",
+        "location": "path",
+        "dependencies": ["list"]
+      }
+    ],
+    "data_structures": [
+      {
+        "name": "string",
+        "purpose": "string",
+        "location": "path"
+      }
+    ],
+    "interfaces": [
+      {
+        "name": "string",
+        "methods": ["list"],
+        "location": "path"
+      }
+    ]
+  },
+  "metadata": {
+    "total_modules": number,
+    "depth_analyzed": number,
+    "timestamp": "ISO8601"
+  }
+}
+```
+
+## Examples
+
+### Basic Usage
+
+```bash
+# Load full project context
+/memory:load
+
+# Output:
+# Delegating to universal-executor agent...
+# Analyzing project structure...
+# Detected: TypeScript, React, Node.js
+# Extracting core content...
+# Core Content Pack loaded:
+# - 45 components identified
+# - 12 data structures
+# - 28 interfaces
+# Memory load complete
+```
+
+### Scoped Analysis
+
+```bash
+# Load specific directory
+/memory:load --path src/features/auth
+
+# Only analyzes auth feature
+```
+
+## Core Content Pack Categories
+
+### Components
+- Main application components
+- UI elements
+- Service classes
+- Utility functions
+
+### Data Structures
+- Type definitions
+- Interfaces
+- Enums
+- Configuration schemas
+
+### Patterns
+- Architectural patterns
+- Design patterns
+- Coding conventions
+- Best practices
+
+## Benefits
+
+1. **Token Efficiency** - Reduces token usage for subsequent operations
+2. **Faster Context Loading** - Pre-loaded content available immediately
+3. **Improved Accuracy** - Better context for agent decisions
+4. **Structured Knowledge** - Organized project information
+5. **Quick Navigation** - Easy access to key components
+
+## Related Commands
+
+- **/memory:update-full** - Full project documentation update
+- **/memory:update-related** - Changed module documentation update
+- **/memory:compact** - Compact session memory
+
+## Notes
+
+- **Read-only operation** - Does not modify any files
+- **Agent-driven** - Fully delegates to universal-executor agent
+- **Memory optimization** - Reduces token consumption for subsequent operations
+- **Project agnostic** - Works with any project type and structure
+- **Automatic tech stack detection** - Identifies technologies in use
+- **Structured output** - JSON format for easy integration

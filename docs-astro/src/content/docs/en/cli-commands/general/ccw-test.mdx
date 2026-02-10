@@ -1,0 +1,222 @@
+---
+title: /ccw-test
+description: Test workflow coordinator for testing strategies
+category: cli-commands
+order: 3
+locale: en
+---
+
+# /ccw-test
+
+Test workflow coordinator - analyzes testing requirements, selects test strategy, and executes test workflow.
+
+## Overview
+
+The `/ccw-test` command serves as the testing orchestrator, automatically analyzing testing requirements and selecting the appropriate test workflow based on the testing context.
+
+**Parameters**:
+- `--mode &lt;mode&gt;`: Test mode (test-gen, test-fix-gen, test-cycle-execute, tdd-verify)
+- `--session &lt;id&gt;`: Resume from existing session
+- `"test description or session ID"`: Test target
+
+## Features
+
+- **Auto Test Mode Detection** - Analyzes context to select appropriate test workflow
+- **Test Units** - Commands grouped for complete testing milestones
+- **Progressive Layers** - L0-L3 test requirements
+- **AI Code Validation** - Detects common AI-generated code issues
+- **Quality Gates** - Multiple validation checkpoints
+
+## Usage
+
+```bash
+# Session mode - test validation for completed implementation
+/ccw-test WFS-user-auth-v2
+
+# Prompt mode - text description
+/ccw-test "Test the user authentication API endpoints"
+
+# Prompt mode - file reference
+/ccw-test ./docs/api-requirements.md
+
+# Explicit mode selection
+/ccw-test --mode test-gen "Generate comprehensive tests for auth module"
+/ccw-test --mode test-fix-gen "Test failures in login flow"
+/ccw-test --mode test-cycle-execute WFS-test-auth
+```
+
+## Test Modes
+
+### Test Generation
+
+| Mode | Description | Output | Follow-up |
+|------|-------------|--------|-----------|
+| `test-gen` | Extensive test generation | test-tasks | `/workflow:execute` |
+
+**Purpose**: Generate comprehensive test examples and execute tests
+
+### Test Fix Generation
+
+| Mode | Description | Output | Follow-up |
+|------|-------------|--------|-----------|
+| `test-fix-gen` | Test and fix specific issues | test-tasks | `/workflow:test-cycle-execute` |
+
+**Purpose**: Generate tests for specific problems and fix in testing
+
+### Test Cycle Execution
+
+| Mode | Description | Output | Follow-up |
+|------|-------------|--------|-----------|
+| `test-cycle-execute` | Iterative test and fix | test-passed | N/A |
+
+**Purpose**: Execute test-fix cycle until 95% pass rate
+
+### TDD Verification
+
+| Mode | Description | Output |
+|------|-------------|--------|
+| `tdd-verify` | Verify TDD compliance | Quality report |
+
+**Purpose**: Verify Red-Green-Refactor cycle compliance
+
+## Test Units
+
+| Unit Name | Commands | Purpose |
+|-----------|----------|---------|
+| **Test Generation** | test-gen → execute | Generate and run comprehensive tests |
+| **Test Fix** | test-fix-gen → test-cycle-execute | Generate tests and fix iteratively |
+
+## Progressive Test Layers
+
+| Layer | Description | Components |
+|-------|-------------|------------|
+| **L0** | AI code issues | Hallucinated imports, placeholder code, mock leakage |
+| **L0.5** | Common issues | Edge cases, error handling |
+| **L1** | Unit tests | Component-level testing |
+| **L2** | Integration tests | API/database integration |
+| **L3** | E2E tests | Full workflow testing |
+
+## Execution Flow
+
+### Session Mode
+
+```
+Session ID Input
+    ↓
+Phase 1: Create Test Session
+    └─ /workflow:session:start --type test
+    └─ Output: testSessionId
+    ↓
+Phase 2: Test Context Gathering
+    └─ /workflow:tools:test-context-gather
+    └─ Output: test-context-package.json
+    ↓
+Phase 3: Test Concept Enhancement
+    └─ /workflow:tools:test-concept-enhanced
+    └─ Output: TEST_ANALYSIS_RESULTS.md (L0-L3 requirements)
+    ↓
+Phase 4: Test Task Generation
+    └─ /workflow:tools:test-task-generate
+    └─ Output: IMPL_PLAN.md, IMPL-*.json (4+ tasks)
+    ↓
+Return summary → Next: /workflow:test-cycle-execute
+```
+
+### Prompt Mode
+
+```
+Description/File Input
+    ↓
+Phase 1: Create Test Session
+    └─ /workflow:session:start --type test "description"
+    ↓
+Phase 2: Context Gathering
+    └─ /workflow:tools:context-gather
+    ↓
+Phase 3-4: Same as Session Mode
+```
+
+## Minimum Task Structure (test-fix-gen)
+
+| Task | Type | Agent | Purpose |
+|------|------|-------|---------|
+| **IMPL-001** | test-gen | @code-developer | Test understanding & generation (L1-L3) |
+| **IMPL-001.3** | code-validation | @test-fix-agent | Code validation gate (L0 + AI issues) |
+| **IMPL-001.5** | test-quality-review | @test-fix-agent | Test quality gate |
+| **IMPL-002** | test-fix | @test-fix-agent | Test execution & fix cycle |
+
+## Examples
+
+### Session Mode
+
+```bash
+# Test validation for completed implementation
+/ccw-test WFS-user-auth-v2
+
+# Output:
+# Creating test session...
+# Gathering test context...
+# Analyzing test coverage...
+# Generating test tasks...
+# Created 4 test tasks
+# Next: /workflow:test-cycle-execute
+```
+
+### Prompt Mode
+
+```bash
+# Test specific functionality
+/ccw-test "Test the user authentication API endpoints in src/auth/api.ts"
+
+# Generates tests for specific module
+```
+
+### Test Fix for Failures
+
+```bash
+# Fix failing tests
+/ccw-test --mode test-fix-gen "Login tests failing with timeout error"
+
+# Generates tasks to diagnose and fix test failures
+```
+
+## AI Code Issue Detection (L0)
+
+The test workflow automatically detects common AI-generated code problems:
+
+| Issue Type | Description | Detection |
+|------------|-------------|-----------|
+| **Hallucinated Imports** | Imports that don't exist | Static analysis |
+| **Placeholder Code** | TODO/FIXME in production | Pattern matching |
+| **Mock Leakage** | Test mocks in production code | Code analysis |
+| **Incomplete Implementation** | Empty functions/stubs | AST analysis |
+
+## Quality Gates
+
+### IMPL-001.3 - Code Validation
+- Validates L0 requirements (AI code issues)
+- Checks for hallucinated imports
+- Detects placeholder code
+- Ensures no mock leakage
+
+### IMPL-001.5 - Test Quality
+- Reviews test coverage
+- Validates test patterns
+- Checks assertion quality
+- Ensures proper error handling
+
+## Related Commands
+
+- **/workflow:test-fix-gen** - Test fix generation workflow
+- **/workflow:test-cycle-execute** - Test cycle execution
+- **/workflow:tdd-plan** - TDD planning workflow
+- **/workflow:tdd-verify** - TDD verification
+
+## Notes
+
+- **Progressive layers** ensure comprehensive testing (L0-L3)
+- **AI code validation** detects common AI-generated issues
+- **Quality gates** ensure high test standards
+- **Iterative fixing** until 95% pass rate
+- **Project type detection** applies appropriate test templates
+- **CLI tool preference** supports semantic detection

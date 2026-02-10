@@ -1,0 +1,294 @@
+---
+title: "Issue Discover"
+description: "Unified issue discovery and creation"
+category: "api"
+locale: "en"
+order: 5
+---
+
+# Issue Discover
+
+Unified issue discovery and creation. Create issues from GitHub/text, discover issues via multi-perspective analysis, or prompt-driven iterative exploration. Triggers on "issue:new", "issue:discover", "issue:discover-by-prompt", "create issue", "discover issues", "find issues".
+
+## Overview
+
+| Property | Value |
+|----------|-------|
+| **Name** | `issue-discover` |
+| **Tools** | `Task`, `AskUserQuestion`, `TodoWrite`, `Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`, `Skill`, `mcp__ace-tool__search_context`, `mcp__exa__search` |
+
+## Reference
+
+Unified issue discovery and creation skill covering three entry points: manual issue creation, perspective-based discovery, and prompt-driven exploration.
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Issue Discover Orchestrator (SKILL.md)                          │
+│  → Action selection → Route to phase → Execute → Summary         │
+└───────────────┬─────────────────────────────────────────────────┘
+                │
+                ├─ AskUserQuestion: Select action
+                │
+    ┌───────────┼───────────┬───────────┐
+    ↓           ↓           ↓           │
+┌─────────┐ ┌─────────┐ ┌─────────┐   │
+│ Phase 1 │ │ Phase 2 │ │ Phase 3 │   │
+│  Create │ │Discover │ │Discover │   │
+│   New   │ │  Multi  │ │by Prompt│   │
+└─────────┘ └─────────┘ └─────────┘   │
+     ↓           ↓           ↓          │
+  Issue      Discoveries  Discoveries   │
+(registered)  (export)    (export)      │
+     │           │           │          │
+     └───────────┴───────────┘          │
+                  ↓                     │
+          issue-resolve (plan/queue)    │
+                  ↓                     │
+            /issue:execute              │
+```
+
+## Key Design Principles
+
+1. **Action-Driven Routing**: AskUserQuestion selects action, then load single phase
+2. **Progressive Phase Loading**: Only read the selected phase document
+3. **CLI-First Data Access**: All issue CRUD via `ccw issue` CLI commands
+4. **Auto Mode Support**: `-y` flag skips action selection with auto-detection
+
+## Auto Mode
+
+When `--yes` or `-y`: Skip action selection, auto-detect action from input type.
+
+## Usage
+
+```
+Skill(skill="issue-discover", args="<input>")
+Skill(skill="issue-discover", args="[FLAGS] \"<input>\"")
+
+# Flags
+-y, --yes              Skip all confirmations (auto mode)
+--action <type>        Pre-select action: new|discover|discover-by-prompt
+
+# Phase-specific flags
+--priority <1-5>       Issue priority (new mode)
+--perspectives <list>  Comma-separated perspectives (discover mode)
+--external             Enable Exa research (discover mode)
+--scope <pattern>      File scope (discover/discover-by-prompt mode)
+--depth <level>        standard|deep (discover-by-prompt mode)
+--max-iterations <n>   Max exploration iterations (discover-by-prompt mode)
+
+# Examples
+Skill(skill="issue-discover", args="https://github.com/org/repo/issues/42")                   # Create from GitHub
+Skill(skill="issue-discover", args="\"Login fails with special chars\"")                       # Create from text
+Skill(skill="issue-discover", args="--action discover src/auth/**")                            # Multi-perspective discovery
+Skill(skill="issue-discover", args="--action discover src/api/** --perspectives=security,bug") # Focused discovery
+Skill(skill="issue-discover", args="--action discover-by-prompt \"Check API contracts\"")      # Prompt-driven discovery
+Skill(skill="issue-discover", args="-y \"auth broken\"")                                       # Auto mode create
+```
+
+## Execution Flow
+
+```
+Input Parsing:
+   └─ Parse flags (--action, -y, --perspectives, etc.) and positional args
+
+Action Selection:
+   ├─ --action flag provided → Route directly
+   ├─ Auto-detect from input:
+   │   ├─ GitHub URL or #number → Create New (Phase 1)
+   │   ├─ Path pattern (src/**, *.ts) → Discover (Phase 2)
+   │   ├─ Short text (< 80 chars) → Create New (Phase 1)
+   │   └─ Long descriptive text (≥ 80 chars) → Discover by Prompt (Phase 3)
+   └─ Otherwise → AskUserQuestion to select action
+
+Phase Execution (load one phase):
+   ├─ Phase 1: Create New          → phases/01-issue-new.md
+   ├─ Phase 2: Discover            → phases/02-discover.md
+   └─ Phase 3: Discover by Prompt  → phases/03-discover-by-prompt.md
+
+Post-Phase:
+   └─ Summary + Next steps recommendation
+```
+
+### Phase Reference Documents
+
+| Phase | Document | Load When | Purpose |
+|-------|----------|-----------|---------|
+| Phase 1 | [phases/01-issue-new.md](phases/01-issue-new.md) | Action = Create New | Create issue from GitHub URL or text description |
+| Phase 2 | [phases/02-discover.md](phases/02-discover.md) | Action = Discover | Multi-perspective issue discovery (bug, security, test, etc.) |
+| Phase 3 | [phases/03-discover-by-prompt.md](phases/03-discover-by-prompt.md) | Action = Discover by Prompt | Prompt-driven iterative exploration with Gemini planning |
+
+## Core Rules
+
+1. **Action Selection First**: Always determine action before loading any phase
+2. **Single Phase Load**: Only read the selected phase document, never load all phases
+3. **CLI Data Access**: Use `ccw issue` CLI for all issue operations, NEVER read files directly
+4. **Content Preservation**: Each phase contains complete execution logic from original commands
+5. **Auto-Detect Input**: Smart input parsing reduces need for explicit --action flag
+
+## Input Processing
+
+### Auto-Detection Logic
+
+```javascript
+function detectAction(input, flags) {
+  // 1. Explicit --action flag
+  if (flags.action) return flags.action;
+
+  const trimmed = input.trim();
+
+  // 2. GitHub URL → new
+  if (trimmed.match(/github\.com\/[\w-]+\/[\w-]+\/issues\/\d+/) || trimmed.match(/^#\d+$/)) {
+    return 'new';
+  }
+
+  // 3. Path pattern (contains **, /, or --perspectives) → discover
+  if (trimmed.match(/\*\*/) || trimmed.match(/^src\//) || flags.perspectives) {
+    return 'discover';
+  }
+
+  // 4. Short text (< 80 chars, no special patterns) → new
+  if (trimmed.length > 0 && trimmed.length < 80 && !trimmed.includes('--')) {
+    return 'new';
+  }
+
+  // 5. Long descriptive text → discover-by-prompt
+  if (trimmed.length >= 80) {
+    return 'discover-by-prompt';
+  }
+
+  // Cannot auto-detect → ask user
+  return null;
+}
+```
+
+### Action Selection (AskUserQuestion)
+
+```javascript
+// When action cannot be auto-detected
+const answer = AskUserQuestion({
+  questions: [{
+    question: "What would you like to do?",
+    header: "Action",
+    multiSelect: false,
+    options: [
+      {
+        label: "Create New Issue (Recommended)",
+        description: "Create issue from GitHub URL, text description, or structured input"
+      },
+      {
+        label: "Discover Issues",
+        description: "Multi-perspective discovery: bug, security, test, quality, performance, etc."
+      },
+      {
+        label: "Discover by Prompt",
+        description: "Describe what to find — Gemini plans the exploration strategy iteratively"
+      }
+    ]
+  }]
+});
+
+// Route based on selection
+const actionMap = {
+  "Create New Issue": "new",
+  "Discover Issues": "discover",
+  "Discover by Prompt": "discover-by-prompt"
+};
+```
+
+## Data Flow
+
+```
+User Input (URL / text / path pattern / descriptive prompt)
+    ↓
+[Parse Flags + Auto-Detect Action]
+    ↓
+[Action Selection] ← AskUserQuestion (if needed)
+    ↓
+[Read Selected Phase Document]
+    ↓
+[Execute Phase Logic]
+    ↓
+[Summary + Next Steps]
+    ├─ After Create → Suggest issue-resolve (plan solution)
+    └─ After Discover → Suggest export to issues, then issue-resolve
+```
+
+## TodoWrite Pattern
+
+```json
+[
+  {"content": "Select action", "status": "completed"},
+  {"content": "Execute: [selected phase name]", "status": "in_progress"},
+  {"content": "Summary & next steps", "status": "pending"}
+]
+```
+
+Phase-specific sub-tasks are attached when the phase executes (see individual phase docs for details).
+
+## Core Guidelines
+
+**Data Access Principle**: Issues files can grow very large. To avoid context overflow:
+
+| Operation | Correct | Incorrect |
+|-----------|---------|-----------|
+| List issues (brief) | `ccw issue list --status pending --brief` | `Read('issues.jsonl')` |
+| Read issue details | `ccw issue status <id> --json` | `Read('issues.jsonl')` |
+| Create issue | `echo '...' \| ccw issue create` | Direct file write |
+| Update status | `ccw issue update <id> --status ...` | Direct file edit |
+
+**ALWAYS** use CLI commands for CRUD operations. **NEVER** read entire `issues.jsonl` directly.
+
+## Error Handling
+
+| Error | Resolution |
+|-------|------------|
+| No action detected | Show AskUserQuestion with all 3 options |
+| Invalid action type | Show available actions, re-prompt |
+| Phase execution fails | Report error, suggest manual intervention |
+| No files matched (discover) | Check target pattern, verify path exists |
+| Gemini planning failed (discover-by-prompt) | Retry with qwen fallback |
+
+## Post-Phase Next Steps
+
+After successful phase execution, recommend next action:
+
+```javascript
+// After Create New (issue created)
+AskUserQuestion({
+  questions: [{
+    question: "Issue created. What next?",
+    header: "Next",
+    multiSelect: false,
+    options: [
+      { label: "Plan Solution", description: "Generate solution via issue-resolve" },
+      { label: "Create Another", description: "Create more issues" },
+      { label: "View Issues", description: "Review all issues" },
+      { label: "Done", description: "Exit workflow" }
+    ]
+  }]
+});
+
+// After Discover / Discover by Prompt (discoveries generated)
+AskUserQuestion({
+  questions: [{
+    question: "Discovery complete. What next?",
+    header: "Next",
+    multiSelect: false,
+    options: [
+      { label: "Export to Issues", description: "Convert discoveries to issues" },
+      { label: "Plan Solutions", description: "Plan solutions for exported issues via issue-resolve" },
+      { label: "Done", description: "Exit workflow" }
+    ]
+  }]
+});
+```
+
+## Related Skills & Commands
+
+- `issue-resolve` - Plan solutions, convert artifacts, form queues, from brainstorm
+- `issue-manage` - Interactive issue CRUD operations
+- `/issue:execute` - Execute queue with DAG-based parallel orchestration
+- `ccw issue list` - List all issues
+- `ccw issue status <id>` - View issue details

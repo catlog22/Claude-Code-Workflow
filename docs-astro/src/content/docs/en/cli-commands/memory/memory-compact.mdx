@@ -1,0 +1,250 @@
+---
+title: "/memory:compact"
+description: Compact session memory into structured text for recovery
+category: cli-commands
+order: 6
+locale: en
+---
+
+# /memory:compact
+
+Compress current session working memory into structured text optimized for session recovery and persistent storage.
+
+## Overview
+
+The `/memory:compact` command compresses the current session's working memory into structured text, extracting critical information and saving it to persistent storage via MCP `core_memory` tool.
+
+**Parameters**:
+- `--description="..."`: Custom session description
+- `--tags=<tag1,tag2>`: Add custom tags
+- `--force`: Override existing memory without confirmation
+
+**Execution Flow**:
+1. Session Analysis → 2. Structure Extraction → 3. Text Generation → 4. MCP Import
+
+## Features
+
+- **Session Compression** - Extracts key information from working memory
+- **Structured Format** - Organizes content for easy recovery
+- **Critical State Capture** - Preserves objectives, plans, and decisions
+- **Tag Support** - Add custom tags for organization
+- **Persistent Storage** - Saves via MCP core_memory tool
+- **Session Recovery** - Enables resuming from compacted state
+
+## Usage
+
+```bash
+# Compact current session
+/memory:compact
+
+# With custom description
+/memory:compact --description="User authentication implementation"
+
+# With tags
+/memory:compact --tags=auth,security,api
+
+# Force overwrite
+/memory:compact --force
+```
+
+## Execution Flow
+
+### Phase 1: Session Analysis
+
+Analyze current session state to extract:
+- Session objectives and goals
+- Implementation plan
+- Files modified
+- Key decisions made
+- Constraints and requirements
+- Current state
+
+### Phase 2: Structure Extraction
+
+```javascript
+const sessionAnalysis = {
+  objective: extract_objective(session),
+  plan: extract_plan(session),
+  files: extract_files(session),
+  decisions: extract_decisions(session),
+  constraints: extract_constraints(session),
+  state: extract_state(session),
+  notes: extract_notes(session)
+};
+```
+
+### Phase 3: Structured Text Generation
+
+```text
+# Session: {session_id}
+
+## Objective
+{objective}
+
+## Implementation Plan
+{plan}
+
+## Files Modified
+{files}
+
+## Key Decisions
+{decisions}
+
+## Constraints
+{constraints}
+
+## Current State
+{state}
+
+## Notes
+{notes}
+```
+
+### Phase 4: MCP Import
+
+```javascript
+mcp__ccw-tools__core_memory({
+  operation: "import",
+  text: structuredText
+})
+```
+
+## Output Format
+
+```json
+{
+  "operation": "import",
+  "id": "CMEM-YYYYMMDD-HHMMSS",
+  "message": "Created memory: CMEM-YYYYMMDD-HHMMSS"
+}
+```
+
+## Structured Text Template
+
+```markdown
+# Session: {session_id}
+
+**Date**: {timestamp}
+**Description**: {custom_description or auto-generated}
+**Tags**: {tags}
+
+---
+
+## Objective
+
+{session_objective}
+
+---
+
+## Implementation Plan
+
+{implementation_plan}
+
+---
+
+## Files Modified
+
+| File | Changes |
+|------|---------|
+| {file1} | {changes1} |
+| {file2} | {changes2} |
+
+---
+
+## Key Decisions
+
+1. {decision1}
+2. {decision2}
+3. {decision3}
+
+---
+
+## Constraints
+
+- {constraint1}
+- {constraint2}
+
+---
+
+## Current State
+
+{current_state}
+
+---
+
+## Notes
+
+{additional_notes}
+```
+
+## Examples
+
+### Basic Usage
+
+```bash
+# Compact current session
+/memory:compact
+
+# Output:
+# Analyzing session...
+# Extracting key information...
+# Generating structured text...
+# Importing to core memory...
+# ✅ Memory compacted: CMEM-20250203-143022
+```
+
+### With Custom Description
+
+```bash
+# Compact with description
+/memory:compact --description="OAuth2 implementation"
+
+# Description is saved with the memory
+```
+
+### With Tags
+
+```bash
+# Compact with tags
+/memory:compact --tags=oauth,authentication,security
+
+# Tags help with organization and retrieval
+```
+
+## Recovery
+
+To recover a compacted session:
+
+```bash
+# List available memories
+mcp__ccw-tools__core_memory({ operation: "list" })
+
+# Export specific memory
+mcp__ccw-tools__core_memory({ operation: "export", id: "CMEM-YYYYMMDD-HHMMSS" })
+
+# Search for memories
+mcp__ccw-tools__core_memory({ operation: "search", query: "oauth" })
+```
+
+## Use Cases
+
+1. **Session Handoff** - Preserve context for later continuation
+2. **Knowledge Base** - Store insights and decisions for reference
+3. **Team Sharing** - Share session state with team members
+4. **Documentation** - Generate structured records of work sessions
+5. **Recovery** - Restore session state after interruption
+
+## Related Commands
+
+- **/memory:load** - Load project context into memory
+- **/memory:update-full** - Update all CLAUDE.md files
+- **/memory:update-related** - Update changed CLAUDE.md files
+
+## Notes
+
+- **Persistent storage** - Saved via MCP core_memory tool
+- **Structured format** - Optimized for readability and parsing
+- **Automatic ID generation** - Format: CMEM-YYYYMMDD-HHMMSS
+- **Force option** - Override existing memory without confirmation
+- **Tag support** - Add custom tags for organization and search
+- **Custom description** - Add meaningful description for easy identification

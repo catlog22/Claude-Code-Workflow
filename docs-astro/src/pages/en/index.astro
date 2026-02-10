@@ -1,0 +1,59 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import WorkflowSelector from '../../components/WorkflowSelector';
+
+const websiteSchema = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'Claude Code Workflow',
+  url: 'https://ccw-docs.example.com',
+  description: 'JSON-driven multi-agent development framework with intelligent CLI orchestration.',
+  inLanguage: 'en',
+});
+---
+
+<BaseLayout title="Claude Code Workflow Documentation" description="JSON-driven multi-agent development framework with intelligent CLI orchestration." locale="en">
+  <script type="application/ld+json" set:html={websiteSchema} slot="head" />
+  <div class="max-w-4xl mx-auto">
+    <h1 class="text-4xl font-bold mb-6 text-accent">
+      Welcome to Claude Code Workflow
+    </h1>
+    <p class="text-xl text-muted-foreground mb-8">
+      JSON-driven multi-agent development framework with intelligent CLI orchestration.
+    </p>
+
+    <div class="grid gap-6 md:grid-cols-2">
+      <div class="p-6 border border-border rounded-lg hover:shadow-md transition-shadow">
+        <h2 class="text-2xl font-semibold mb-3">Getting Started</h2>
+        <p class="text-muted-foreground">
+          Learn the basics and set up your first workflow in minutes.
+        </p>
+      </div>
+
+      <div class="p-6 border border-border rounded-lg hover:shadow-md transition-shadow">
+        <h2 class="text-2xl font-semibold mb-3">4-Level Workflows</h2>
+        <p class="text-muted-foreground">
+          Explore our intelligent workflow system from lite to brainstorm modes.
+        </p>
+      </div>
+
+      <div class="p-6 border border-border rounded-lg hover:shadow-md transition-shadow">
+        <h2 class="text-2xl font-semibold mb-3">CLI Orchestration</h2>
+        <p class="text-muted-foreground">
+          Leverage Gemini, Codex, and Qwen for collaborative development.
+        </p>
+      </div>
+
+      <div class="p-6 border border-border rounded-lg hover:shadow-md transition-shadow">
+        <h2 class="text-2xl font-semibold mb-3">Dashboard</h2>
+        <p class="text-muted-foreground">
+          Visualize and manage your workflows with our interactive dashboard.
+        </p>
+      </div>
+    </div>
+
+    <div class="mt-12">
+      <WorkflowSelector client:visible locale="en" />
+    </div>
+  </div>
+</BaseLayout>

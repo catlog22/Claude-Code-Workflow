@@ -1,0 +1,75 @@
+---
+interface Props {
+  type?: 'info' | 'warning' | 'success' | 'danger';
+  title?: string;
+}
+
+const { type = 'info', title } = Astro.props;
+
+const variants = {
+  info: {
+    bg: 'bg-blue-50 dark:bg-blue-950',
+    border: 'border-blue-200 dark:border-blue-800',
+    icon: 'text-blue-600 dark:text-blue-400',
+    title: 'text-blue-900 dark:text-blue-100',
+  },
+  warning: {
+    bg: 'bg-yellow-50 dark:bg-yellow-950',
+    border: 'border-yellow-200 dark:border-yellow-800',
+    icon: 'text-yellow-600 dark:text-yellow-400',
+    title: 'text-yellow-900 dark:text-yellow-100',
+  },
+  success: {
+    bg: 'bg-green-50 dark:bg-green-950',
+    border: 'border-green-200 dark:border-green-800',
+    icon: 'text-green-600 dark:text-green-400',
+    title: 'text-green-900 dark:text-green-100',
+  },
+  danger: {
+    bg: 'bg-red-50 dark:bg-red-950',
+    border: 'border-red-200 dark:border-red-800',
+    icon: 'text-red-600 dark:text-red-400',
+    title: 'text-red-900 dark:text-red-100',
+  },
+};
+
+const variant = variants[type];
+
+const icons = {
+  info: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+  warning: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
+  success: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
+  danger: 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z',
+};
+---
+
+<div class={`callout rounded-lg border-l-4 p-4 ${variant.bg} ${variant.border}`}>
+  <div class="flex items-start gap-3">
+    <svg
+      class={`h-5 w-5 flex-shrink-0 ${variant.icon}`}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d={icons[type]}
+      ></path>
+    </svg>
+    <div class="flex-1">
+      {title && <p class={`font-semibold mb-1 ${variant.title}`}>{title}</p>}
+      <div class="prose prose-sm dark:prose-invert max-w-none">
+        <slot />
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .callout :global(p:last-child) {
+    margin-bottom: 0;
+  }
+</style>

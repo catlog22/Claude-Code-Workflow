@@ -1,0 +1,389 @@
+---
+import { getCollection } from 'astro:content';
+import { ChevronRight } from 'lucide-react';
+import { buildNavigationTree, getActiveState, normalizePath } from '../../utils/navigation';
+
+interface Props {
+  locale: 'en' | 'zh';
+  currentPath?: string;
+}
+
+const { locale, currentPath = '/' } = Astro.props;
+const normalizedCurrentPath = normalizePath(currentPath);
+
+const [docs, guides, apiReference] = await Promise.all([
+  getCollection('docs'),
+  getCollection('guides'),
+  getCollection('api-reference'),
+]);
+
+const entries = [...docs, ...guides, ...apiReference].filter((e) => e.data.locale === locale);
+const navigation = buildNavigationTree({
+  entries,
+  locale,
+  basePath: `/${locale}/docs`,
+});
+---
+
+<aside
+  class="sidebar fixed top-16 left-0 w-70 h-[calc(100vh-4rem)] bg-muted border-r border-border overflow-y-auto z-40 transition-transform duration-300 lg:translate-x-0 -translate-x-full"
+  id="sidebar"
+  data-locale={locale}
+  data-current-path={normalizedCurrentPath}
+  data-pagefind-ignore
+>
+  <nav class="p-6" aria-label="Main navigation">
+    {navigation.map((category) => (
+      <div class="mb-6 first:mt-0">
+        <!-- Category header -->
+        <h2 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
+          {category.title}
+        </h2>
+
+        <!-- Sections -->
+        {category.sections.map((section) => {
+          const sectionState = getActiveState(section.href, normalizedCurrentPath);
+          const isSectionOpenByDefault = section.pages.length > 0 && sectionState.isWithin;
+
+          return (
+          <div class="mb-2">
+            {section.pages.length > 0 ? (
+              <!-- Section with pages (accordion) -->
+              <div
+                class="group"
+                data-accordion-id={section.id}
+                data-default-open={isSectionOpenByDefault ? 'true' : 'false'}
+                data-open={isSectionOpenByDefault ? 'true' : 'false'}
+              >
+                <div class="flex items-center gap-1">
+                  <a
+                    href={section.href}
+                    class:list={[
+                      'flex-1 block px-3 py-2 text-sm rounded-md transition-colors relative',
+                      sectionState.isActive
+                        ? 'text-primary bg-primary/10 font-bold before:absolute before:left-3 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-4 before:bg-primary before:rounded-full'
+                        : 'text-foreground hover:bg-background',
+                    ]}
+                    aria-current={sectionState.isActive ? 'page' : undefined}
+                    data-sidebar-focusable
+                    data-role="section-link"
+                    data-accordion-id={section.id}
+                  >
+                    {section.title}
+                  </a>
+
+                  <button
+                    type="button"
+                    class="p-2 hover:bg-background rounded-md transition-colors"
+                    aria-label={locale === 'zh' ? `展开/收起 ${section.title}` : `Toggle ${section.title}`}
+                    aria-expanded={isSectionOpenByDefault ? 'true' : 'false'}
+                    data-sidebar-focusable
+                    data-role="section-toggle"
+                    data-accordion-id={section.id}
+                  >
+                    <ChevronRight
+                      className="w-4 h-4 transition-transform duration-200"
+                      data-role="chevron"
+                      aria-hidden="true"
+                    />
+                  </button>
+                </div>
+
+                <!-- Page links -->
+                <div
+                  class:list={[
+                    'mt-1 ml-2 border-l border-border pl-4',
+                    { hidden: !isSectionOpenByDefault },
+                  ]}
+                  data-role="section-panel"
+                  data-accordion-id={section.id}
+                >
+                  {section.pages.map((page) => {
+                    const pageState = getActiveState(page.href, normalizedCurrentPath);
+
+                    return (
+                      <a
+                        href={page.href}
+                        class:list={[
+                          'block px-3 py-2 text-sm rounded-md transition-colors relative',
+                          pageState.isActive
+                            ? 'text-primary bg-primary/10 font-bold before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-4 before:bg-primary before:rounded-full'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-background',
+                        ]}
+                        aria-current={pageState.isActive ? 'page' : undefined}
+                        data-sidebar-focusable
+                        data-role="page-link"
+                        data-parent-accordion-id={section.id}
+                      >
+                        {page.title}
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <!-- Section without subsections (direct link) -->
+              <a
+                href={section.href}
+                class:list={[
+                  'block px-3 py-2 text-sm rounded-md transition-colors relative',
+                  sectionState.isActive
+                    ? 'text-primary bg-primary/10 font-bold before:absolute before:left-3 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-4 before:bg-primary before:rounded-full'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-background',
+                ]}
+                aria-current={sectionState.isActive ? 'page' : undefined}
+                data-sidebar-focusable
+                data-role="section-link"
+              >
+                {section.title}
+              </a>
+            )}
+          </div>
+          );
+        })}
+      </div>
+    ))}
+  </nav>
+</aside>
+
+<!-- Sidebar overlay for mobile -->
+<div
+  id="sidebar-overlay"
+  class="fixed inset-0 bg-black/50 z-30 lg:hidden hidden transition-opacity duration-300"
+  aria-hidden="true"
+></div>
+
+<script>
+  const sidebar = document.getElementById('sidebar');
+  const locale = sidebar?.getAttribute('data-locale') || 'en';
+
+  // Mobile menu toggle handler
+  window.addEventListener('toggle-mobile-menu', ((e: CustomEvent) => {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+
+    if (e.detail.open) {
+      sidebar?.classList.remove('-translate-x-full');
+      overlay?.classList.remove('hidden');
+    } else {
+      sidebar?.classList.add('-translate-x-full');
+      overlay?.classList.add('hidden');
+    }
+  }) as EventListener);
+
+  // Close sidebar when clicking overlay
+  const overlay = document.getElementById('sidebar-overlay');
+  overlay?.addEventListener('click', () => {
+    const sidebar = document.getElementById('sidebar');
+    const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+
+    sidebar?.classList.add('-translate-x-full');
+    overlay?.classList.add('hidden');
+    mobileMenuToggle?.setAttribute('aria-expanded', 'false');
+  });
+
+  // Close sidebar on escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+
+      if (!sidebar?.classList.contains('-translate-x-full')) {
+        sidebar?.classList.add('-translate-x-full');
+        overlay?.classList.add('hidden');
+        mobileMenuToggle?.setAttribute('aria-expanded', 'false');
+      }
+    }
+  });
+
+  // Accordion open/close state persisted in sessionStorage
+  const accordionStorageKey = `ccw:sidebar:openSections:${locale}`;
+
+  const readOpenIds = () => {
+    try {
+      const raw = sessionStorage.getItem(accordionStorageKey);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const writeOpenIds = (ids: string[]) => {
+    try {
+      sessionStorage.setItem(accordionStorageKey, JSON.stringify(ids));
+    } catch {
+      // ignore - sessionStorage may be unavailable in some contexts
+    }
+  };
+
+  const persistOpenState = (id: string, open: boolean) => {
+    if (isForcedOpen(id)) return;
+    const openIds = new Set(readOpenIds());
+    if (open) openIds.add(id);
+    else openIds.delete(id);
+    writeOpenIds(Array.from(openIds));
+  };
+
+  const setSectionOpen = (id: string, open: boolean) => {
+    const root = sidebar?.querySelector(`[data-accordion-id="${CSS.escape(id)}"]`);
+    const panel = sidebar?.querySelector(`[data-role="section-panel"][data-accordion-id="${CSS.escape(id)}"]`);
+    const toggle = sidebar?.querySelector(`[data-role="section-toggle"][data-accordion-id="${CSS.escape(id)}"]`);
+
+    if (!root || !panel || !toggle) return;
+
+    root.setAttribute('data-open', open ? 'true' : 'false');
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    const chevron = toggle.querySelector<HTMLElement>('[data-role="chevron"]');
+    chevron?.classList.toggle('rotate-90', open);
+    panel.classList.toggle('hidden', !open);
+  };
+
+  const isForcedOpen = (id: string) => {
+    const root = sidebar?.querySelector(`[data-accordion-id="${CSS.escape(id)}"]`);
+    return root?.getAttribute('data-default-open') === 'true';
+  };
+
+  // Restore persisted state after SSR default open, while always keeping the active section visible
+  const restoreAccordionState = () => {
+    const openIds = new Set(readOpenIds());
+    const sections = Array.from(sidebar?.querySelectorAll('[data-accordion-id][data-default-open]') || []);
+
+    sections.forEach((el) => {
+      const id = el.getAttribute('data-accordion-id');
+      if (!id) return;
+
+      const forced = isForcedOpen(id);
+      const shouldOpen = forced || openIds.has(id);
+      setSectionOpen(id, shouldOpen);
+    });
+
+    // Ensure active link's parent section is open
+    const activeLink = sidebar?.querySelector('[aria-current="page"][data-role="page-link"]');
+    const parentId = activeLink?.getAttribute('data-parent-accordion-id');
+    if (parentId) setSectionOpen(parentId, true);
+  };
+
+  restoreAccordionState();
+
+  sidebar?.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement | null;
+    const toggle = target?.closest?.('[data-role="section-toggle"]') as HTMLButtonElement | null;
+    if (!toggle) return;
+
+    const id = toggle.getAttribute('data-accordion-id');
+    if (!id) return;
+
+    if (isForcedOpen(id)) {
+      setSectionOpen(id, true);
+      return;
+    }
+
+    const root = sidebar?.querySelector(`[data-accordion-id="${CSS.escape(id)}"]`);
+    const isOpen = root?.getAttribute('data-open') === 'true';
+    const nextOpen = !isOpen;
+    setSectionOpen(id, nextOpen);
+    persistOpenState(id, nextOpen);
+  });
+
+  // Keyboard navigation (Arrow keys for movement, Enter for activation)
+  const getFocusableItems = () =>
+    Array.from(sidebar?.querySelectorAll<HTMLElement>('[data-sidebar-focusable]') || []).filter((el) => {
+      if (el.closest('.hidden')) return false;
+      return true;
+    });
+
+  const focusByOffset = (offset: number) => {
+    const items = getFocusableItems();
+    const active = document.activeElement as HTMLElement | null;
+    const index = active ? items.indexOf(active) : -1;
+    if (index === -1) return;
+
+    const next = items[index + offset];
+    next?.focus();
+  };
+
+  const focusFirstChildPage = (sectionId: string) => {
+    const panel = sidebar?.querySelector(`[data-role="section-panel"][data-accordion-id="${CSS.escape(sectionId)}"]`);
+    const first = panel?.querySelector<HTMLElement>('[data-role="page-link"]');
+    first?.focus();
+  };
+
+  const focusSectionLink = (sectionId: string) => {
+    const link = sidebar?.querySelector<HTMLElement>(
+      `[data-role="section-link"][data-accordion-id="${CSS.escape(sectionId)}"]`
+    );
+    link?.focus();
+  };
+
+  sidebar?.addEventListener('keydown', (e) => {
+    const active = document.activeElement as HTMLElement | null;
+    if (!active || !sidebar?.contains(active)) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      focusByOffset(1);
+      return;
+    }
+
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      focusByOffset(-1);
+      return;
+    }
+
+    if (e.key === 'ArrowRight') {
+      const id = active.getAttribute('data-accordion-id');
+      const role = active.getAttribute('data-role');
+      if (!id || (role !== 'section-link' && role !== 'section-toggle')) return;
+
+      e.preventDefault();
+      setSectionOpen(id, true);
+      persistOpenState(id, true);
+      focusFirstChildPage(id);
+      return;
+    }
+
+    if (e.key === 'ArrowLeft') {
+      const role = active.getAttribute('data-role');
+
+      if (role === 'page-link') {
+        const parentId = active.getAttribute('data-parent-accordion-id');
+        if (!parentId) return;
+        e.preventDefault();
+        focusSectionLink(parentId);
+        return;
+      }
+
+      const id = active.getAttribute('data-accordion-id');
+      if (!id || (role !== 'section-link' && role !== 'section-toggle')) return;
+
+      if (isForcedOpen(id)) return;
+
+      e.preventDefault();
+      setSectionOpen(id, false);
+      persistOpenState(id, false);
+      return;
+    }
+
+    // Enter is handled by native link/button behavior.
+  });
+</script>
+
+<style>
+  /* Custom scrollbar for sidebar */
+  .sidebar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .sidebar::-webkit-scrollbar-thumb {
+    background: oklch(var(--border));
+    border-radius: 9999px;
+  }
+
+  .sidebar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+</style>

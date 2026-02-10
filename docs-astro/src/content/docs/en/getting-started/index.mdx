@@ -1,0 +1,288 @@
+---
+title: CCW Help Documentation
+description: Documentation for CCW Help Documentation
+category: getting-started
+order: 1
+locale: en
+---
+
+# Welcome to CCW Help Documentation
+
+CCW is a professional workflow automation platform that combines AI-powered intelligence with structured development workflows. With 40+ commands and 15 integrated workflows, CCW transforms how you build, test, and ship software.
+
+## What is CCW?
+
+CCW (Claude Code Workflows) is an advanced development environment that orchestrates AI agents, workflows, and tools to accelerate software development while maintaining quality standards.
+
+**Key Capabilities:**
+
+- **AI-Powered Development** - Leverage multiple AI models (Gemini, Codex, Claude, Qwen) for code analysis, generation, and review
+- **Structured Workflows** - 15 workflow levels from rapid execution to intelligent orchestration
+- **40+ Commands** - Comprehensive command set covering planning, execution, testing, review, and maintenance
+- **Session Management** - Full state persistence with resumable sessions
+- **Multi-Agent Coordination** - Parallel execution with dependency-aware task distribution
+- **Quality Gates** - Built-in testing, verification, and code review workflows
+
+## Quick Links
+
+[Workflows Explore 15 workflow levels from rapid execution to intelligent orchestration](/en/workflows/introduction)
+
+  [Commands Complete command reference for workflow, issue, CLI, and memory operations](/en/cli-commands/general/ccw)
+
+  [FAQ Common questions, troubleshooting tips, and best practices](/en/faq)
+
+
+## Key Features
+
+### 40+ Commands
+
+CCW provides a comprehensive command set organized into categories:
+
+| Category | Commands | Purpose |
+|----------|----------|---------|
+| **Workflow** | 13 commands | Planning, execution, review, cleanup |
+| **Issue** | 7 commands | Issue discovery, planning, resolution |
+| **CLI** | 2 commands | CLI initialization and review |
+| **Memory** | 6 commands | Knowledge management and documentation |
+| **General** | 7+ commands | Coordination, debugging, flow creation |
+
+### 15 Integrated Workflows
+
+```mermaid
+graph TB
+    subgraph Main["Main Workflow (5 Levels)"]
+        L1["Level 1: Rapid<br/>lite-lite-lite"]
+        L2["Level 2: Lightweight<br/>lite-plan, lite-fix, multi-cli-plan"]
+        L3["Level 3: Standard<br/>plan, tdd-plan, test-fix-gen"]
+        L4["Level 4: Brainstorm<br/>brainstorm:auto-parallel"]
+        L5["Level 5: Intelligent<br/>ccw-coordinator"]
+        L1 --> L2 --> L3 --> L4 --> L5
+    end
+
+    subgraph Issue["Issue Workflow"]
+        I1["Phase 1: Accumulation"]
+        I2["Phase 2: Resolution"]
+        I1 --> I2
+    end
+
+    Main -.->|After development| Issue
+
+    classDef level1 fill:#e3f2fd,stroke:#1976d2
+    classDef level2 fill:#bbdefb,stroke:#1976d2
+    classDef level3 fill:#90caf9,stroke:#1976d2
+    classDef level4 fill:#64b5f6,stroke:#1976d2
+    classDef level5 fill:#42a5f5,stroke:#1976d2
+    classDef issue fill:#fff3e0,stroke:#f57c00
+
+    class L1 level1,L2 level2,L3 level3,L4 level4,L5 level5,I1,I2 issue
+```
+
+**Main Workflow Levels:**
+
+- **Level 1**: Ultra-lightweight direct execution with zero overhead
+- **Level 2**: Lightweight planning (lite-plan), bug fixing (lite-fix), multi-CLI analysis (multi-cli-plan)
+- **Level 3**: Standard planning (plan), test-driven development (tdd-plan), test fix generation (test-fix-gen)
+- **Level 4**: Brainstorming with multi-role parallel analysis
+- **Level 5**: Intelligent orchestration with auto command selection
+
+**Issue Workflow:**
+
+- **Accumulation Phase**: discover, new
+- **Resolution Phase**: plan, queue, execute
+
+### AI-Powered Intelligence
+
+CCW integrates multiple AI models to provide intelligent assistance:
+
+| Model | Capabilities | Use Cases |
+|-------|--------------|-----------|
+| **Gemini** | Analysis + Write | Code review, debugging, refactoring |
+| **Codex** | Analysis + Write + Review | Git-aware code review, implementation |
+| **Claude** | Analysis + Write | Complex reasoning, documentation |
+| **Qwen** | Analysis + Write | Code generation, pattern matching |
+
+**Multi-CLI Collaboration**:
+
+```bash
+# Compare solutions across multiple AI perspectives
+/ccw multi-cli-plan "Compare Redis vs RabbitMQ for message queuing"
+```
+
+### Session Management
+
+CCW provides full state persistence for all workflow sessions:
+
+```bash
+# Start a planning session
+/ccw workflow:plan "Implement user authentication"
+
+# Resume a paused session
+/ccw workflow:session:resume WFS-user-auth
+
+# List all sessions
+/ccw workflow:session:list
+
+# Complete and archive
+/ccw workflow:session:complete WFS-user-auth
+```
+
+**Session Structure:**
+```
+.workflow/active/WFS-{session}/
+├── workflow-session.json          # Session metadata
+├── IMPL_PLAN.md                   # Implementation plan
+├── TODO_LIST.md                   # Progress tracking
+├── .task/
+│   ├── IMPL-001.json              # Task definitions
+│   └── ...
+└── .summaries/
+    ├── IMPL-001-summary.md        # Completion summaries
+    └── ...
+```
+
+## Getting Started
+
+### Choose Your Starting Point
+
+
+        ### New to CCW?
+
+      Start with **Level 1 workflows** for simple tasks:
+- Quick fixes and config adjustments
+- Simple feature implementation
+- Direct execution without planning overhead
+        
+[Learn Level 1](/en/workflows/level-1-ultra-lightweight)
+
+
+  
+
+        ### Experienced Developer?
+
+      Jump to **Level 3 workflows** for complex features:
+- Multi-module changes
+- Test-driven development
+- Complete planning with verification
+        
+[Learn Level 3](/en/workflows/level-3-standard)
+
+
+### Quick Start Examples
+
+**Quick Fix (Level 1):**
+```bash
+# Direct execution for simple changes
+/ccw lite-lite-lite "Fix typo in login button"
+```
+
+**Bug Fix with Diagnosis (Level 2):**
+```bash
+# Intelligent bug diagnosis and fix
+/ccw lite-fix "Users getting 500 error on profile update"
+```
+
+**Feature Development (Level 3):**
+```bash
+# Complete planning and execution
+/ccw workflow:plan "Add OAuth2 authentication"
+/ccw workflow:execute --session WFS-oauth-auth
+```
+
+**New Feature Design (Level 4):**
+```bash
+# Multi-role brainstorming
+/ccw brainstorm:auto-parallel "Design real-time notification system"
+```
+
+**Uncertain Commands (Level 5):**
+```bash
+# Auto-analyze and recommend command chain
+/ccw ccw-coordinator "Need to refactor the entire API layer"
+```
+
+## Architecture Overview
+
+```mermaid
+flowchart LR
+    User[Developer] --> CCW[CCW CLI]
+    CCW --> Workflow{Workflow Engine}
+
+    Workflow --> L1[Level 1: Direct]
+    Workflow --> L2[Level 2: Lightweight]
+    Workflow --> L3[Level 3: Standard]
+    Workflow --> L4[Level 4: Brainstorm]
+    Workflow --> L5[Level 5: Intelligent]
+
+    L1 --> Agent[Agent Execution]
+    L2 --> Agent
+    L3 --> Agent
+    L4 --> MultiAgent[Multi-Agent Parallel]
+    L5 --> Coordinator[Intelligent Coordinator]
+
+    Agent --> AI[AI Models]
+    MultiAgent --> AI
+    Coordinator --> AI
+
+    AI --> Output[Code + Artifacts]
+    Output --> Repo[Git Repository]
+    Repo --> Session[Session State]
+
+    classDef user fill:#f3f9ff,stroke:#1976d2
+    classDef ccw fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef agent fill:#c8e6c9,stroke:#388e3c
+    classDef ai fill:#fff9c4,stroke:#f57c00
+    classDef storage fill:#f1f8e9,stroke:#33691e
+
+    class User user,CCW ccw,Workflow ccw,Agent agent,MultiAgent agent,Coordinator ccw,AI ai,Output storage,Repo storage,Session storage
+```
+
+## Next Steps
+
+### Learn the Fundamentals
+
+1. **[Workflow Introduction](./workflows/introduction.mdx)** - Understanding workflow levels and selection
+2. **[Command Reference](./commands/general/ccw.mdx)** - Complete command documentation
+3. **[FAQ](./faq.mdx)** - Common questions and troubleshooting
+
+### Explore by Use Case
+
+| Use Case | Recommended Workflow | Documentation |
+|----------|---------------------|---------------|
+| Quick fixes | `lite-lite-lite` | [Level 1](./workflows/level-1-ultra-lightweight.mdx) |
+| Bug diagnosis | `lite-fix` | [Level 2](./workflows/level-2-rapid.mdx) |
+| Feature development | `plan` → `execute` | [Level 3](./workflows/level-3-standard.mdx) |
+| Test-driven development | `tdd-plan` → `execute` | [Level 3](./workflows/level-3-standard.mdx) |
+| Architecture design | `brainstorm:auto-parallel` | [Level 4](./workflows/level-4-brainstorm.mdx) |
+| Complex workflows | `ccw-coordinator` | [Level 5](./workflows/level-5-intelligent.mdx) |
+| Issue tracking | Issue Workflow | [Workflow FAQ](./workflows/faq.mdx) |
+
+### Try It Out
+
+**Installation:**
+```bash
+npm install -g @ccw/cli
+```
+
+**Initialize Project:**
+```bash
+ccw init
+```
+
+**First Workflow:**
+```bash
+# Simple task
+ccw lite-lite-lite "Add user profile page"
+
+# Complex feature
+ccw workflow:plan "Implement shopping cart"
+```
+
+## Support
+
+- **Documentation**: [docs.ccw.dev](https://docs.ccw.dev)
+- **GitHub**: [github.com/ccw/ccw](https://github.com/ccw/ccw)
+- **Issues**: [github.com/ccw/ccw/issues](https://github.com/ccw/ccw/issues)
+
+---
+
+**Ready to get started?** Explore the [Workflow Introduction](./workflows/introduction.mdx) to learn about all 15 workflow levels.

@@ -1,0 +1,125 @@
+---
+import { Menu, Search, Github } from 'lucide-react';
+import SearchModal from '../SearchModal';
+import ThemeToggle from '../ThemeToggle';
+
+interface Props {
+  locale: 'en' | 'zh';
+  currentPath?: string;
+}
+
+const { locale, currentPath = '/' } = Astro.props;
+
+// Language switch configuration
+const altLocale = locale === 'en' ? 'zh' : 'en';
+const altLocalePath = currentPath.replace(`/${locale}/`, `/${altLocale}/`);
+const localeLabels = {
+  en: 'English',
+  zh: '简体中文'
+};
+---
+
+<header role="banner" class="fixed top-0 left-0 right-0 h-16 bg-background/80 backdrop-blur-md border-b border-border z-50" data-pagefind-ignore>
+  <div class="h-full flex items-center justify-between px-6">
+    <!-- Left: Logo and Mobile Menu -->
+    <div class="flex items-center gap-4">
+      <!-- Mobile menu button (hidden on desktop) -->
+      <button
+        id="mobile-menu-toggle"
+        type="button"
+        aria-label="Toggle mobile menu"
+        aria-expanded="false"
+        class="lg:hidden p-2 hover:bg-muted rounded-md transition-colors"
+      >
+        <Menu className="w-6 h-6" />
+      </button>
+
+      <!-- Logo -->
+      <a href={`/${locale}/`} class="flex items-center gap-2 font-semibold text-lg hover:opacity-80 transition-opacity">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="32" height="32" rx="6" fill="oklch(var(--primary))" />
+          <path d="M8 12L16 8L24 12V20L16 24L8 20V12Z" stroke="oklch(var(--primary-foreground))" stroke-width="2" stroke-linejoin="round" />
+        </svg>
+        <span class="hidden sm:inline">CCW Help</span>
+      </a>
+    </div>
+
+    <!-- Right: Search, Theme, Language, GitHub -->
+    <div class="flex items-center gap-2">
+      <!-- Search button -->
+      <button
+        id="search-trigger"
+        type="button"
+        aria-label="Search documentation"
+        class="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-muted hover:bg-background border border-border rounded-md transition-colors"
+      >
+        <Search className="w-4 h-4 text-muted-foreground" />
+        <span class="text-sm text-muted-foreground">Search...</span>
+        <kbd class="hidden md:inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-mono bg-background border border-border rounded">
+          <span>⌘</span>
+          <span>K</span>
+        </kbd>
+      </button>
+
+      <!-- Mobile search icon -->
+      <button
+        id="mobile-search-trigger"
+        type="button"
+        aria-label="Search"
+        class="sm:hidden p-2 hover:bg-muted rounded-md transition-colors"
+      >
+        <Search className="w-5 h-5" />
+      </button>
+
+      <!-- Theme toggle (React Island: light / dark / system) -->
+      <ThemeToggle client:load locale={locale} />
+
+      <!-- Language switcher -->
+      <a
+        href={altLocalePath}
+        class="px-3 py-1.5 text-sm font-medium hover:bg-muted rounded-md transition-colors"
+        aria-label={`Switch to ${localeLabels[altLocale]}`}
+        data-plausible-event="lang-switch"
+      >
+        {altLocale.toUpperCase()}
+      </a>
+
+      <!-- GitHub link -->
+      <a
+        href="https://github.com/ccw/docs"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="View on GitHub"
+        class="p-2 hover:bg-muted rounded-md transition-colors"
+      >
+        <Github className="w-5 h-5" />
+      </a>
+    </div>
+  </div>
+</header>
+
+<script>
+  // Mobile menu toggle (will be connected to MobileMenu component)
+  const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+  mobileMenuToggle?.addEventListener('click', () => {
+    const isExpanded = mobileMenuToggle.getAttribute('aria-expanded') === 'true';
+    mobileMenuToggle.setAttribute('aria-expanded', String(!isExpanded));
+
+    // Dispatch custom event for MobileMenu component to listen
+    window.dispatchEvent(new CustomEvent('toggle-mobile-menu', { detail: { open: !isExpanded } }));
+  });
+
+  // Search triggers
+  const searchTrigger = document.getElementById('search-trigger');
+  const mobileSearchTrigger = document.getElementById('mobile-search-trigger');
+
+  const openSearch = () => {
+    window.dispatchEvent(new CustomEvent('open-search'));
+  };
+
+  searchTrigger?.addEventListener('click', openSearch);
+  mobileSearchTrigger?.addEventListener('click', openSearch);
+</script>
+
+<!-- Search Modal -->
+<SearchModal client:only="react" locale={locale} />

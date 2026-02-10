@@ -1,0 +1,443 @@
+---
+title: Level 2 - Rapid Workflows
+description: Lightweight planning and bug diagnosis workflows for single-module features
+category: workflows
+order: 3
+locale: en
+---
+
+# Level 2: Rapid Workflows
+
+**Complexity**: Low-Medium | **Artifacts**: Memory/Lightweight files | **State**: Session-scoped
+
+Level 2 workflows provide lightweight planning or single analysis with fast iteration. They're designed for tasks with relatively clear requirements that don't need full session persistence.
+
+## Overview
+
+```mermaid
+flowchart TD
+    Start([User Input]) --> Select{Select Workflow}
+
+    Select -->|Clear<br/>requirements| LP[lite-plan]
+    Select -->|Bug fix| LF[lite-fix]
+    Select -->|Multi-CLI<br/>needed| MCP[multi-cli-plan]
+
+    LP --> LE[lite-execute]
+    LF --> LE
+    MCP --> LE
+
+    LE --> Test{Tests?}
+    Test -->|Yes| TFG[test-fix-gen]
+    Test -->|No| Done([Complete])
+    TFG --> TCE[test-cycle-execute]
+    TCE --> Done
+
+    classDef startend fill:#c8e6c9,stroke:#388e3c
+    classDef workflow fill:#e3f2fd,stroke:#1976d2
+    classDef decision fill:#fff9c4,stroke:#f57c00
+    classDef execute fill:#c5e1a5,stroke:#388e3c
+
+    class Start,Done startend,Select,Test decision,LP,LF,MCP workflow,LE execute,TFG,TCE execute
+```
+
+## Included Workflows
+
+| Workflow | Purpose | Artifacts | Execution |
+|----------|---------|-----------|-----------|
+| `lite-plan` | Clear requirement development | memory://plan | -> `lite-execute` |
+| `lite-fix` | Bug diagnosis and fix | `.workflow/.lite-fix/` | -> `lite-execute` |
+| `multi-cli-plan` | Multi-perspective tasks | `.workflow/.multi-cli-plan/` | -> `lite-execute` |
+
+### Common Characteristics
+
+| Property | Value |
+|----------|-------|
+| **Complexity** | Low-Medium |
+| **State** | Session-scoped / Lightweight persistence |
+| **Execution** | Unified via `lite-execute` |
+| **Use Case** | Relatively clear requirements |
+
+---
+
+## Workflow 1: lite-plan -> lite-execute
+
+**In-memory planning + Direct execution**
+
+### Command
+
+```bash
+/workflow:lite-plan "Add user authentication API"
+/workflow:lite-execute
+```
+
+### Flow Diagram
+
+```mermaid
+flowchart TD
+    A([Start]) --> B[Phase 1: Code Exploration]
+    B --> C{Code<br/>Exploration?}
+    C -->|Yes| D[cli-explore-agent<br/>Multi-angle analysis]
+    C -->|No| E[Skip exploration]
+
+    D --> F[Phase 2: Complexity Assessment]
+    E --> F
+
+    F --> G{Complexity}
+    G -->|Low| H[Direct Claude<br/>Planning]
+    G -->|Medium| H
+    G -->|High| I[cli-lite-planning<br/>-agent]
+
+    H --> J[Phase 3: Planning]
+    I --> J
+
+    J --> K[Phase 4: Confirmation]
+    K --> L{Confirm?}
+    L -->|Modify| M[Adjust plan]
+    M --> K
+    L -->|Allow| N[Phase 5: Execute]
+    L -->|Cancel| O([Abort])
+
+    N --> P[Build executionContext]
+    P --> Q[/workflow:lite-execute]
+    Q --> R([Complete])
+
+    classDef startend fill:#c8e6c9,stroke:#388e3c
+    classDef action fill:#e3f2fd,stroke:#1976d2
+    classDef decision fill:#fff9c4,stroke:#f57c00
+    classDef agent fill:#ffecb3,stroke:#ffa000
+
+    class A,R,O startend,B,D,E,J,M,P,Q action,C,G,L decision,F,H,I agent
+```
+
+### Process Phases
+
+**Phase 1: Code Exploration** (Optional)
+```bash
+# If -e flag specified
+/workflow:lite-plan -e "Add user authentication API"
+```
+- Multi-angle code analysis via cli-explore-agent
+- Identifies patterns, dependencies, integration points
+
+**Phase 2: Complexity Assessment**
+- Low: Direct planning without agent
+- Medium/High: Use cli-lite-planning-agent
+
+**Phase 3: Planning**
+- Load plan schema: `~/.ccw/workflows/cli-templates/schemas/plan-json-schema.json`
+- Generate plan.json following schema
+
+**Phase 4: Confirmation & Selection**
+- Display plan summary (tasks, complexity, estimated time)
+- Ask user selections:
+  - Confirm: Allow / Modify / Cancel
+  - Execution: Agent / Codex / Auto
+  - Review: Gemini / Agent / Skip
+
+**Phase 5: Execute**
+- Build executionContext (plan + explorations + clarifications + selections)
+- Execute via `/workflow:lite-execute --in-memory`
+
+### Artifacts
+
+- **In-memory**: `memory://plan` (not persisted)
+- **Optional**: `.workflow/.lite-exploration/` (if code exploration used)
+
+### Use Case
+
+Clear single-module features
+
+**Example**:
+```bash
+/workflow:lite-plan "Add email validation to user registration form"
+/workflow:lite-execute
+```
+
+---
+
+## Workflow 2: lite-fix
+
+**Intelligent diagnosis + Fix (5 phases)**
+
+### Command
+
+```bash
+/workflow:lite-fix "Login timeout after 30 seconds"
+/workflow:lite-execute --in-memory --mode bugfix
+
+# Emergency hotfix mode
+/workflow:lite-fix --hotfix "Production database connection failing"
+```
+
+### Flow Diagram
+
+```mermaid
+flowchart TD
+    A([Start]) --> B[Phase 1: Bug Analysis<br/>& Diagnosis]
+    B --> C[Severity Pre-assessment<br/>Low/Medium/High/Critical]
+    C --> D[Parallel cli-explore<br/>-agent Diagnosis<br/>1-4 angles]
+
+    D --> E[Phase 2: Clarification]
+    E --> F{More info<br/>needed?}
+    F -->|Yes| G[AskUserQuestion<br/>Aggregate clarifications]
+    F -->|No| H[Phase 3: Fix Planning]
+    G --> H
+
+    H --> I{Severity}
+    I -->|Low/Medium| J[Direct Claude<br/>Planning]
+    I -->|High/Critical| K[cli-lite-planning<br/>-agent]
+
+    J --> L[Phase 4: Confirmation]
+    K --> L
+
+    L --> M[User confirms<br/>execution method]
+    M --> N[Phase 5: Execute]
+    N --> O[/workflow:lite-execute<br/>--in-memory --mode bugfix/]
+    O --> P([Complete])
+
+    Q[Hotfix Mode] --> R[Skip diagnosis<br/>Minimal planning]
+    R --> N
+
+    classDef startend fill:#c8e6c9,stroke:#388e3c
+    classDef action fill:#e3f2fd,stroke:#1976d2
+    classDef decision fill:#fff9c4,stroke:#f57c00
+    classDef agent fill:#ffecb3,stroke:#ffa000
+    classDef hotfix fill:#ffccbc,stroke:#bf360c
+
+    class A,P startend,B,E,G,H,L,M,N,O action,F,I decision,C,D,J,K agent,Q,R hotfix
+```
+
+### Process Phases
+
+**Phase 1: Bug Analysis & Diagnosis**
+- Intelligent severity pre-assessment (Low/Medium/High/Critical)
+- Parallel cli-explore-agent diagnosis (1-4 angles)
+
+**Phase 2: Clarification** (Optional)
+- Aggregate clarification needs
+- AskUserQuestion for missing info
+
+**Phase 3: Fix Planning**
+- Low/Medium severity -> Direct Claude planning
+- High/Critical severity -> cli-lite-planning-agent
+
+**Phase 4: Confirmation & Selection**
+- Display fix-plan summary
+- User confirms execution method
+
+**Phase 5: Execute**
+- Execute via `/workflow:lite-execute --in-memory --mode bugfix`
+
+### Artifacts
+
+**Location**: `.workflow/.lite-fix/{bug-slug}-{YYYY-MM-DD}/`
+
+```
+.workflow/.lite-fix/
+└── login-timeout-fix-2025-02-03/
+    ├── diagnosis-root-cause.json
+    ├── diagnosis-impact.json
+    ├── diagnosis-code-flow.json
+    ├── diagnosis-similar.json
+    ├── diagnoses-manifest.json
+    ├── fix-plan.json
+    └── README.md
+```
+
+### Severity Levels
+
+| Severity | Description | Planning Method |
+|----------|-------------|-----------------|
+| **Low** | Simple fix, clear root cause | Direct Claude (optional rationale) |
+| **Medium** | Moderate complexity, some investigation | Direct Claude (with rationale) |
+| **High** | Complex, multiple components affected | cli-lite-planning-agent (full schema) |
+| **Critical** | Production incident, urgent | cli-lite-planning-agent + hotfix mode |
+
+### Hotfix Mode
+
+```bash
+/workflow:lite-fix --hotfix "Production API returning 500 errors"
+```
+
+**Characteristics**:
+- Skip most diagnosis phases
+- Minimal planning (direct execution)
+- Auto-generate follow-up tasks for complete fix + post-mortem
+
+### Use Cases
+
+- Bug diagnosis
+- Production emergencies
+- Root cause analysis
+
+---
+
+## Workflow 3: multi-cli-plan -> lite-execute
+
+**Multi-CLI collaborative analysis + Consensus convergence**
+
+### Command
+
+```bash
+/workflow:multi-cli-plan "Compare Redis vs Memcached for caching"
+/workflow:lite-execute
+```
+
+### Flow Diagram
+
+```mermaid
+flowchart TD
+    A([Start]) --> B[Phase 1: Context Gathering]
+    B --> C[ACE semantic search<br/>Build context package]
+
+    C --> D[Phase 2: Multi-CLI Discussion<br/>Iterative]
+    D --> E[cli-discuss-agent]
+    E --> F[Gemini + Codex + Claude]
+
+    F --> G{Converged?}
+    G -->|No| H[Cross-verification<br/>Synthesize solutions]
+    H --> D
+    G -->|Yes| I[Phase 3: Present Options]
+
+    I --> J[Display solutions<br/>with trade-offs]
+
+    J --> K[Phase 4: User Decision]
+    K --> L[User selects solution]
+
+    L --> M[Phase 5: Plan Generation]
+    M --> N[cli-lite-planning<br/>-agent]
+    N --> O[-> lite-execute]
+
+    O --> P([Complete])
+
+    classDef startend fill:#c8e6c9,stroke:#388e3c
+    classDef action fill:#e3f2fd,stroke:#1976d2
+    classDef decision fill:#fff9c4,stroke:#f57c00
+    classDef agent fill:#ffecb3,stroke:#ffa000
+
+    class A,P startend,B,C,E,H,J,L,M,O action,G,K decision,F,N agent
+```
+
+### Process Phases
+
+**Phase 1: Context Gathering**
+- ACE semantic search
+- Build context package
+
+**Phase 2: Multi-CLI Discussion** (Iterative)
+- cli-discuss-agent executes Gemini + Codex + Claude
+- Cross-verification, synthesize solutions
+- Loop until convergence or max rounds
+
+**Phase 3: Present Options**
+- Display solutions with trade-offs
+
+**Phase 4: User Decision**
+- User selects solution
+
+**Phase 5: Plan Generation**
+- cli-lite-planning-agent generates plan
+- -> lite-execute
+
+### Artifacts
+
+**Location**: `.workflow/.multi-cli-plan/{MCP-task-slug-date}/`
+
+```
+.workflow/.multi-cli-plan/
+└── redis-vs-memcached-2025-02-03/
+    ├── context-package.json
+    ├── rounds/
+    │   ├── round-1/
+    │   │   ├── gemini-analysis.md
+    │   │   ├── codex-analysis.md
+    │   │   ├── claude-analysis.md
+    │   │   └── synthesis.json
+    │   ├── round-2/
+    │   └── ...
+    ├── selected-solution.json
+    ├── IMPL_PLAN.md
+    └── plan.json
+```
+
+### vs lite-plan Comparison
+
+| Aspect | multi-cli-plan | lite-plan |
+|--------|---------------|-----------|
+| **Context** | ACE semantic search | Manual file patterns |
+| **Analysis** | Multi-CLI cross-verification | Single planning |
+| **Iteration** | Multiple rounds until convergence | Single round |
+| **Confidence** | High (consensus-driven) | Medium (single perspective) |
+| **Time** | Longer (multi-round) | Faster |
+
+### Use Cases
+
+- Multi-perspective analysis
+- Technology selection
+- Solution comparison
+- Architecture decisions
+
+---
+
+## Level 2 Comparison Table
+
+| Aspect | lite-plan | lite-fix | multi-cli-plan |
+|--------|-----------|----------|----------------|
+| **Purpose** | Clear requirements | Bug diagnosis | Multi-perspective |
+| **Planning** | In-memory | Severity-based | Consensus-driven |
+| **Artifacts** | memory://plan | .lite-fix/ | .multi-cli-plan/ |
+| **Code Exploration** | Optional (-e flag) | Built-in diagnosis | ACE search |
+| **Multi-CLI** | No | No | Yes (Gemini/Codex/Claude) |
+| **Best For** | Single-module features | Bug fixes | Technology decisions |
+
+## Execution: lite-execute
+
+All Level 2 workflows execute via `lite-execute`:
+
+```bash
+/workflow:lite-execute --in-memory
+```
+
+### Execution Flow
+
+```mermaid
+flowchart TD
+    A([Start]) --> B[Initialize tracking<br/>previousExecutionResults]
+    B --> C[Task grouping<br/>& batch creation]
+
+    C --> D[Extract explicit<br/>depends_on]
+    D --> E[Group: independent<br/>tasks -> parallel batch]
+    E --> F[Group: dependent<br/>tasks -> sequential phases]
+
+    F --> G[Create TodoWrite<br/>list for batches]
+    G --> H[Launch execution]
+
+    H --> I[Phase 1: All independent<br/>tasks - Single batch]
+    I --> J[Phase 2+: Dependent tasks<br/>by dependency order]
+
+    J --> K[Track progress<br/>TodoWrite updates]
+    K --> L{Code review?}
+    L -->|Yes| M[Review process]
+    L -->|No| N([Complete])
+    M --> N
+
+    classDef startend fill:#c8e6c9,stroke:#388e3c
+    classDef action fill:#e3f2fd,stroke:#1976d2
+    classDef decision fill:#fff9c4,stroke:#f57c00
+
+    class A,N startend,B,D,E,F,G,I,J,K,M action,C,L decision
+```
+
+### Features
+
+- **Parallel execution** for independent tasks
+- **Sequential phases** for dependent tasks
+- **Progress tracking** via TodoWrite
+- **Optional code review**
+
+## Related Workflows
+
+- [Level 1: Ultra-Lightweight](./level-1-ultra-lightweight.mdx) - Simpler workflow
+- [Level 3: Standard](./level-3-standard.mdx) - Full session management
+- [Level 4: Brainstorm](./level-4-brainstorm.mdx) - Multi-role exploration
+- [FAQ](./faq.mdx) - Common questions

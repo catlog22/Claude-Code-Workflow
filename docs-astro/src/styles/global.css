@@ -1,0 +1,142 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* OKLCH Color System - Light Mode (WCAG AA compliant) */
+  --background: 0.99 0 0;           /* Pure white background */
+  --foreground: 0.20 0 0;           /* Deep gray text (4.5:1+ contrast) */
+
+  /* Primary color - Amber tone (warm, readable) */
+  --primary: 0.65 0.18 85;          /* Amber */
+  --primary-foreground: 0.99 0 0;   /* White foreground */
+
+  /* Secondary color - Neutral gray */
+  --secondary: 0.85 0.02 265;       /* Light blue-gray */
+  --secondary-foreground: 0.20 0 0; /* Dark text */
+
+  /* Accent color - Blue for links */
+  --accent: 0.55 0.20 220;          /* Deep blue */
+  --accent-foreground: 0.99 0 0;    /* White */
+
+  /* Muted backgrounds and text */
+  --muted: 0.96 0 0;                /* Light gray background */
+  --muted-foreground: 0.45 0 0;     /* Medium gray text */
+
+  /* Border and ring */
+  --border: 0.88 0 0;               /* Medium gray border */
+  --ring: 0.65 0.18 85;             /* Same as primary */
+}
+
+:root[data-theme="dark"],
+:root.dark {
+  /* OKLCH Color System - Dark Mode (WCAG AA compliant) */
+  --background: 0.15 0.01 265;      /* Deep blue-gray background */
+  --foreground: 0.92 0 0;           /* Near-white text */
+
+  /* Primary color - Brighter amber */
+  --primary: 0.70 0.20 85;          /* Brighter amber */
+  --primary-foreground: 0.15 0.01 265; /* Dark background */
+
+  /* Secondary color - Dark gray */
+  --secondary: 0.22 0.02 265;       /* Dark blue-gray */
+  --secondary-foreground: 0.92 0 0; /* Light text */
+
+  /* Accent color - Brighter blue */
+  --accent: 0.65 0.22 220;          /* Brighter blue */
+  --accent-foreground: 0.15 0.01 265; /* Dark background */
+
+  /* Muted backgrounds and text */
+  --muted: 0.22 0.02 265;           /* Dark gray background */
+  --muted-foreground: 0.65 0 0;     /* Medium gray text */
+
+  /* Border and ring */
+  --border: 0.30 0.02 265;          /* Dark border */
+  --ring: 0.70 0.20 85;             /* Brighter amber */
+}
+
+/* Typography optimizations for bilingual content */
+@layer base {
+  html {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', 'Noto Sans SC', system-ui, sans-serif;
+  }
+
+  /* Chinese text optimization */
+  html[lang="zh"] body,
+  html[lang="zh-CN"] body {
+    font-size: 16px;
+    line-height: 1.8;
+    letter-spacing: 0.02em;
+  }
+
+  /* English text optimization */
+  html[lang="en"] body {
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  /* Code blocks with monospace font */
+  code,
+  pre {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+  }
+
+  /* Inline code styling */
+  :not(pre) > code {
+    @apply bg-muted text-foreground px-1 py-0.5 rounded text-sm;
+    font-size: 0.9em;
+  }
+
+  /* Headings with tighter letter-spacing */
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.02em;
+    font-weight: 600;
+  }
+
+  /*
+    Smooth theme transitions:
+    BaseLayout toggles `.theme-transition` on <html> for 200ms when switching
+    theme modes. We keep this opt-in (not always-on) to avoid performance cost.
+  */
+  html.theme-transition,
+  html.theme-transition * {
+    transition-property: background-color, border-color, color, fill, stroke;
+    transition-duration: 200ms;
+    transition-timing-function: ease;
+  }
+
+  /* Visible focus indicators for keyboard navigation (WCAG 2.1 AA) */
+  :focus-visible {
+    outline: 2px solid oklch(var(--primary));
+    outline-offset: 2px;
+  }
+}
+
+/* CodeTabs line numbers via CSS counter */
+@layer components {
+  .codetabs-lines {
+    counter-reset: codetabs-line;
+  }
+
+  .codetabs-line {
+    counter-increment: codetabs-line;
+  }
+
+  .codetabs-line::before {
+    content: counter(codetabs-line);
+    display: inline-block;
+    width: 2.5em;
+    margin-right: 1em;
+    text-align: right;
+    color: oklch(var(--muted-foreground));
+    user-select: none;
+    pointer-events: none;
+  }
+}

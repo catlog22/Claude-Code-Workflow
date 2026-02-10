@@ -1,0 +1,724 @@
+---
+title: Frequently Asked Questions
+description: Documentation for Frequently Asked Questions
+category: getting-started
+order: 99
+locale: en
+---
+
+# Frequently Asked Questions
+
+Common questions about CCW, workflows, commands, and troubleshooting.
+
+## General Questions
+
+### What is CCW?
+
+CCW (Claude Code Workflows) is a professional workflow automation platform that combines AI-powered intelligence with structured development workflows. It provides 40+ commands and 15 integrated workflows to accelerate software development while maintaining quality standards.
+
+**Key Features:**
+- AI-powered code analysis, generation, and review
+- 15 workflow levels from rapid execution to intelligent orchestration
+- Session management with full state persistence
+- Multi-agent coordination with parallel execution
+- Built-in testing, verification, and code review
+
+### What are the system requirements?
+
+**Minimum Requirements:**
+- Node.js 16.x or higher
+- Git 2.x or higher
+- 4GB RAM available
+- 500MB disk space
+
+**Recommended:**
+- Node.js 18.x LTS
+- 8GB RAM available
+- 2GB disk space for artifacts and sessions
+
+### How do I install CCW?
+
+```bash
+# Install globally via npm
+npm install -g @ccw/cli
+
+# Or use npx (no installation required)
+npx @ccw/cli init
+
+# Initialize in your project
+ccw init
+```
+
+### Is CCW free to use?
+
+Yes, CCW is open-source and free to use. However, CCW integrates with third-party AI services (Gemini, Codex, Claude, Qwen) that may have their own pricing. You'll need API keys for any AI services you want to use.
+
+### What programming languages are supported?
+
+CCW supports all programming languages. The AI models can analyze and generate code in any language, including:
+
+- **Web**: JavaScript, TypeScript, Python, PHP, Ruby
+- **Mobile**: Swift, Kotlin, React Native, Flutter
+- **Systems**: Rust, Go, C, C++
+- **Data**: Python, R, SQL
+- **Enterprise**: Java, C#, .NET
+
+## Workflow Selection
+
+### How do I choose the right workflow?
+
+<details>
+<summary>Decision Framework</summary>
+
+Use this quick decision tree:
+
+1. **Post-development maintenance?** → Use [Issue Workflow](/en/workflows/faq#what-is-the-difference-between-main-workflow-and-issue-workflow)
+2. **Uncertain which commands to use?** → Use `ccw-coordinator` (Level 5)
+3. **Requirements unclear?** → Use `brainstorm:auto-parallel` (Level 4)
+4. **Need persistent session?**
+   - Standard development → `plan` → `execute` (Level 3)
+   - Test-driven → `tdd-plan` → `execute` (Level 3)
+   - Test fixes → `test-fix-gen` → `test-cycle-execute` (Level 3)
+5. **Need multi-perspective analysis?** → Use `multi-cli-plan` (Level 2)
+6. **Bug fix?** → Use `lite-fix` (Level 2)
+7. **Need planning?** → Use `lite-plan` → `lite-execute` (Level 2)
+8. **Quick task?** → Use `lite-lite-lite` (Level 1)
+
+</details>
+
+### What's the difference between Main Workflow and Issue Workflow?
+
+<details>
+<summary>Comparison</summary>
+
+**Main Workflow** is for primary development:
+- Feature development (Levels 1-5)
+- Active development phase
+- Dependency-based parallelism
+- Works on current branch
+
+**Issue Workflow** is for post-development maintenance:
+- Bug fixes and enhancements after merge
+- After main workflow completes
+- Optional worktree isolation
+- Keeps main branch stable
+
+| Aspect | Main Workflow | Issue Workflow |
+|--------|---------------|----------------|
+| **Purpose** | Feature development | Post-development fixes |
+| **Timing** | Development phase | After main workflow completes |
+| **Scope** | Complete feature implementation | Targeted fixes/enhancements |
+| **Parallelism** | Dependency analysis | Worktree isolation (optional) |
+| **Branch Model** | Work on current branch | Can use isolated worktree |
+
+</details>
+
+### What are Minimum Execution Units?
+
+<details>
+<summary>Explanation</summary>
+
+**Minimum Execution Units** are sets of commands that must execute together as atomic groups to achieve meaningful workflow milestones. Splitting these commands breaks logical flow and creates incomplete states.
+
+**Common Minimum Execution Units:**
+
+| Unit | Commands | Purpose |
+|------|----------|---------|
+| Quick Implementation | `lite-plan` → `lite-execute` | Lightweight plan and execution |
+| Multi-CLI Planning | `multi-cli-plan` → `lite-execute` | Multi-perspective analysis and execution |
+| Bug Fix | `lite-fix` → `lite-execute` | Bug diagnosis and fix execution |
+| Verified Planning | `plan` → `plan-verify` → `execute` | Planning with verification and execution |
+| TDD Planning | `tdd-plan` → `execute` | Test-driven development planning and execution |
+| Test Validation | `test-fix-gen` → `test-cycle-execute` | Generate test tasks and execute test-fix cycle |
+
+**Example**: The unit `lite-plan → lite-execute` must complete together. Stopping after `lite-plan` leaves you with a plan but no implementation.
+
+</details>
+
+### When should I use each workflow level?
+
+<details>
+<summary>Level Selection Guide</summary>
+
+**Level 1 (lite-lite-lite):**
+- Quick fixes (typos, minor adjustments)
+- Simple features (single function, small utility)
+- Config changes (environment variables, timeouts)
+- Documentation updates
+
+**Level 2 (lite-plan, lite-fix, multi-cli-plan):**
+- Single-module features
+- Bug diagnosis and fixes
+- Technology selection decisions
+- Solution comparison
+
+**Level 3 (plan, tdd-plan, test-fix-gen):**
+- Multi-module changes
+- Refactoring
+- Test-driven development
+- Test failure fixes
+
+**Level 4 (brainstorm:auto-parallel):**
+- New feature design
+- System architecture refactoring
+- Exploratory requirements
+- Multi-dimensional trade-offs
+
+**Level 5 (ccw-coordinator):**
+- Complex multi-step workflows
+- Uncertain which commands to use
+- End-to-end automation
+- Team collaboration
+
+**Issue Workflow:**
+- Post-development issue fixes
+- Maintaining main branch stability
+
+</details>
+
+## Command Usage
+
+### How do I use workflow commands?
+
+<details>
+<summary>Command Patterns</summary>
+
+**Basic Pattern:**
+```bash
+ccw &lt;command&gt; &lt;arguments&gt;
+```
+
+**Examples:**
+```bash
+# Level 1 - Direct execution
+ccw lite-lite-lite "Fix login button"
+
+# Level 2 - Lightweight planning
+ccw lite-plan "Add user profile page"
+ccw lite-execute --in-memory
+
+# Level 3 - Full workflow
+ccw workflow:plan "Implement OAuth2"
+ccw workflow:execute --session WFS-oauth-auth
+
+# Level 4 - Brainstorming
+ccw brainstorm:auto-parallel "Design notification system"
+
+# Level 5 - Intelligent coordination
+ccw ccw-coordinator "Refactor API layer"
+```
+
+</details>
+
+### What is the difference between lite-execute and execute?
+
+<details>
+<summary>Comparison</summary>
+
+**lite-execute** (Level 2):
+```bash
+ccw lite-execute --in-memory
+```
+- For Level 2 workflows
+- In-memory planning (no session files)
+- Parallel execution for independent tasks
+- Optional code review
+
+**execute** (Level 3):
+```bash
+ccw workflow:execute --session WFS-{session-id}
+```
+- For Level 3 workflows
+- Session-based execution
+- Dependency analysis
+- Full state tracking and resumability
+- Task completion summaries
+
+</details>
+
+### How do I use hotfix mode?
+
+<details>
+<summary>Hotfix Usage</summary>
+
+**Hotfix mode** is for production emergencies:
+
+```bash
+ccw lite-fix --hotfix "Production database connection failing"
+```
+
+**What it does:**
+- Skips most diagnosis phases
+- Minimal planning (direct execution)
+- Auto-generates follow-up tasks for complete fix + post-mortem
+
+**When to use:**
+- Production incidents
+- Critical bugs requiring immediate fix
+- Outages and service disruptions
+
+**What happens after:**
+CCW automatically generates follow-up tasks for:
+- Complete root cause analysis
+- Comprehensive fix
+- Post-mortem documentation
+
+</details>
+
+### How do I resume a paused session?
+
+<details>
+<summary>Session Resume</summary>
+
+```bash
+# Resume most recent session
+ccw workflow:session:resume
+
+# Resume specific session
+ccw workflow:session:resume WFS-user-auth-v2
+
+# List all sessions
+ccw workflow:session:list
+```
+
+**Session states:**
+- **active**: Currently running
+- **paused**: Stopped, can be resumed
+- **completed**: Finished and archived
+
+</details>
+
+## AI Models
+
+### Which AI models does CCW support?
+
+<details>
+<summary>Supported Models</summary>
+
+CCW supports multiple AI models via CLI endpoints:
+
+| Model | Capabilities | Best For |
+|-------|--------------|----------|
+| **Gemini** | Analysis + Write | Code review, debugging, refactoring |
+| **Codex** | Analysis + Write + Review | Git-aware code review, implementation |
+| **Claude** | Analysis + Write | Complex reasoning, documentation |
+| **Qwen** | Analysis + Write | Code generation, pattern matching |
+
+Configure models in `~/.claude/cli-tools.json`.
+
+</details>
+
+### How do I configure API keys?
+
+<details>
+<summary>API Key Configuration</summary>
+
+**Set environment variables:**
+
+```bash
+# Gemini
+export GEMINI_API_KEY="your-key-here"
+
+# OpenAI (Codex)
+export OPENAI_API_KEY="your-key-here"
+
+# Anthropic (Claude)
+export ANTHROPIC_API_KEY="your-key-here"
+
+# Qwen
+export DASHSCOPE_API_KEY="your-key-here"
+```
+
+**Or configure in `.env` file:**
+```env
+GEMINI_API_KEY=your-key-here
+OPENAI_API_KEY=your-key-here
+ANTHROPIC_API_KEY=your-key-here
+DASHSCOPE_API_KEY=your-key-here
+```
+
+</details>
+
+### What is multi-CLI collaboration?
+
+<details>
+<summary>Multi-CLI Explanation</summary>
+
+**Multi-CLI collaboration** uses multiple AI models to analyze the same problem from different perspectives:
+
+```bash
+ccw multi-cli-plan "Compare Redis vs RabbitMQ for message queuing"
+```
+
+**How it works:**
+1. Multiple AI models analyze independently
+2. Each provides unique insights and recommendations
+3. Results are synthesized into a comprehensive analysis
+4. You get multiple perspectives before making decisions
+
+**Best for:**
+- Technology selection
+- Architecture decisions
+- Solution comparison
+- Trade-off analysis
+
+</details>
+
+## Testing
+
+### How do I add tests to existing code?
+
+<details>
+<summary>Test Generation</summary>
+
+**Session Mode (from existing session):**
+```bash
+ccw test-fix-gen WFS-user-auth-v2
+```
+
+**Prompt Mode (direct description):**
+```bash
+ccw test-fix-gen "Add unit tests for the auth API"
+```
+
+**CCW will:**
+1. Analyze the code structure
+2. Generate appropriate test cases
+3. Create test files following project patterns
+4. Implement tests with proper assertions
+
+</details>
+
+### How do I fix failing tests?
+
+<details>
+<summary>Test Fix Workflow</summary>
+
+```bash
+# Generate test fix tasks
+ccw test-fix-gen "Tests failing for user registration"
+
+# Execute test-fix cycle
+ccw test-cycle-execute
+```
+
+**Workflow:**
+1. Analyze test failures
+2. Identify root causes
+3. Fix issues iteratively
+4. Verify >= 95% pass rate
+5. Stop when tests pass or max iterations reached
+
+</details>
+
+### What is TDD (Test-Driven Development)?
+
+<details>
+<summary>TDD Explanation</summary>
+
+**TDD** follows the Red-Green-Refactor cycle:
+
+1. **Red**: Write a failing test
+2. **Green**: Write minimal code to pass the test
+3. **Refactor**: Improve code while keeping tests green
+
+**The Iron Law:**
+```
+NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
+```
+
+**Why write tests first?**
+
+| Aspect | Test-First | Test-After |
+|--------|-----------|------------|
+| **Proof** | Tests fail before implementation | Tests pass immediately (proves nothing) |
+| **Discovery** | Edge cases found before coding | Edge cases found after coding |
+| **Verification** | Verifies requirements | Verifies implementation |
+
+</details>
+
+## Troubleshooting
+
+### My workflow failed. What should I do?
+
+<details>
+<summary>Troubleshooting Steps</summary>
+
+1. **Check the error message** - Identify the root cause
+2. **Review session state** - Check `.workflow/.ccw-coordinator/{session}/state.json`
+3. **Resume the session** - Use `ccw workflow:session:resume` to continue
+4. **Adjust and retry** - Modify approach based on error
+
+**Common fixes:**
+- **API key errors**: Verify environment variables are set
+- **Module not found**: Run `npm install` or `pip install`
+- **Git errors**: Ensure clean git state (`git status`)
+- **Timeout errors**: Increase timeout in task JSON
+
+</details>
+
+### How do I skip a failing task?
+
+<details>
+<summary>Skip Task</summary>
+
+Edit the task JSON to set status to "completed":
+
+```bash
+jq '.status = "completed"' .workflow/active/WFS-{session}/.task/IMPL-001.json
+```
+
+**Use with caution:** Skipping tasks may leave the workflow in an incomplete state.
+
+</details>
+
+### How do I clean up old sessions?
+
+<details>
+<summary>Cleanup Commands</summary>
+
+```bash
+# List sessions
+ccw workflow:session:list
+
+# Remove specific session
+rm -rf .workflow/active/WFS-{session-id}
+
+# Clean all completed sessions
+ccw workflow:clean
+```
+
+**Automatic cleanup:**
+- Completed sessions are archived to `.workflow/completed/`
+- Old sessions (> 30 days) can be safely removed
+
+</details>
+
+### Why is my workflow running slowly?
+
+<details>
+<summary>Performance Tips</summary>
+
+**Possible causes:**
+
+1. **Large codebase**: CCW analyzes the entire project
+   - **Fix**: Use `--focus-paths` to limit analysis scope
+
+2. **Many dependencies**: Slow AI response times
+   - **Fix**: Use faster models (Gemini Flash) for initial analysis
+
+3. **Sequential tasks**: Waiting on dependent tasks
+   - **Fix**: Review task dependencies in `plan-verify`
+
+4. **Network issues**: Slow API calls to AI services
+   - **Fix**: Check network connectivity and API status
+
+**Optimization tips:**
+```bash
+# Limit analysis scope
+ccw plan "Add login" --focus-paths src/auth
+
+# Use faster model for initial analysis
+ccw cli -p "Quick analysis" --model gemini-2.0-flash --mode analysis
+
+# Run in parallel when possible
+ccw workflow:execute --parallel 4
+```
+
+</details>
+
+### How do I debug workflow issues?
+
+<details>
+<summary>Debugging Workflow</summary>
+
+**Enable debug logging:**
+```bash
+DEBUG=ccw:* ccw workflow:plan "My feature"
+```
+
+**Check session logs:**
+```bash
+# View session state
+cat .workflow/active/WFS-{session}/workflow-session.json
+
+# View task progress
+cat .workflow/active/WFS-{session}/TODO_LIST.md
+```
+
+**Use debug workflow:**
+```bash
+ccw workflow:debug-with-file "Debug memory leak in connection handler"
+```
+
+This provides hypothesis-driven debugging with documented exploration.
+
+</details>
+
+## Integration
+
+### Can I use CCW with my existing CI/CD?
+
+<details>
+<summary>CI/CD Integration</summary>
+
+Yes, CCW can be integrated into CI/CD pipelines:
+
+**GitHub Actions Example:**
+```yaml
+- name: Run CCW Workflow
+  run: |
+    ccw workflow:plan "Implement feature"
+    ccw workflow:execute --session WFS-feature
+  env:
+    GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+```
+
+**Best practices:**
+- Use `--mode analysis` for code review in CI
+- Store API keys in secret management
+- Run workflows in isolated environments
+- Archive sessions for audit trails
+
+</details>
+
+### Can CCW work with monorepos?
+
+<details>
+<summary>Monorepo Support</summary>
+
+Yes, CCW supports monorepos:
+
+**Workspace-aware execution:**
+```bash
+# Execute in specific package
+ccw plan "Add auth to frontend" --cd packages/frontend
+
+# Execute across packages
+ccw plan "Update API contracts" --include-dir packages/api,packages/shared
+```
+
+**Benefits:**
+- Dependency-aware task distribution
+- Parallel execution across packages
+- Shared session state
+- Coordinated changes across workspaces
+
+</details>
+
+### How do I migrate from another tool?
+
+<details>
+<summary>Migration Guide</summary>
+
+**From basic Git workflows:**
+```bash
+# Before: Manual planning
+git checkout -b feature
+# ... manual planning ...
+
+# After: CCW planning
+ccw plan "Add feature"
+ccw execute --session WFS-feature
+```
+
+**From other AI tools:**
+- CCW provides structured workflows (vs. ad-hoc prompts)
+- Session management (vs. chat history)
+- Multi-agent coordination (vs. single AI)
+- Persistent artifacts (vs. transient responses)
+
+**Migration steps:**
+1. Install CCW: `npm install -g @ccw/cli`
+2. Initialize: `ccw init`
+3. Start with Level 2 workflows for familiar patterns
+4. Gradually adopt higher levels as needed
+
+</details>
+
+## Best Practices
+
+### What are the workflow best practices?
+
+<details>
+<summary>Best Practices</summary>
+
+**1. Start Simple**
+- Use the lowest level that meets your needs
+- Don't over-engineer simple tasks
+- Scale up complexity as needed
+
+**2. Plan Before Executing**
+- Use verification steps when available
+- Review generated plans before execution
+- Adjust tasks based on project context
+
+**3. Test Continuously**
+- Integrate testing into your workflow
+- Use TDD for critical features
+- Run tests after each iteration
+
+**4. Review Code**
+- Use built-in review workflows
+- Leverage multi-CLI collaboration
+- Merge review feedback iteratively
+
+**5. Document Decisions**
+- Use brainstorm workflows for complex decisions
+- Keep session artifacts for reference
+- Archive completed sessions
+
+**6. Maintain Session Hygiene**
+- Complete sessions when done
+- Clean up old sessions regularly
+- Archive important sessions
+
+</details>
+
+### How do I get the most out of AI assistance?
+
+<details>
+<summary>AI Best Practices</summary>
+
+**1. Be Specific in Prompts**
+```
+Bad: "Fix the bug"
+Good: "Fix the 500 error when users update their profile picture"
+```
+
+**2. Provide Context**
+```bash
+ccw plan "Add OAuth2" \
+  --context "Using Express.js, MongoDB, Passport.js" \
+  --reference "Similar to existing Google OAuth implementation"
+```
+
+**3. Use Multi-CLI Collaboration**
+```bash
+# Get multiple perspectives
+ccw multi-cli-plan "Architecture decision"
+```
+
+**4. Leverage Memory**
+```bash
+# Build on previous work
+ccw plan "Continue auth refactor" --memory WFS-auth-v1
+```
+
+**5. Choose the Right Model**
+- **Gemini Flash**: Fast, good for initial analysis
+- **Gemini Pro**: Deep reasoning, complex tasks
+- **Codex**: Code review, git-aware analysis
+- **Claude**: Documentation, complex reasoning
+
+</details>
+
+## Related Documentation
+
+- [Workflow Introduction](/en/workflows/introduction) - Complete workflow guide
+- [Workflow FAQ](/en/workflows/faq) - Workflow-specific questions
+- [Command Reference](/en/cli-commands/general/ccw) - All commands
+
+---
+
+**Still have questions?** [Open an issue](https://github.com/ccw/ccw/issues) or check the [discussion forums](https://github.com/ccw/ccw/discussions).

@@ -1,0 +1,327 @@
+---
+title: "Issue Queue Agent"
+description: "Solution ordering agent for queue formation with Gemini CLI conflict analysis."
+category: "api"
+locale: "en"
+order: 15
+---
+
+# Issue Queue Agent
+
+Solution ordering agent for queue formation with Gemini CLI conflict analysis.
+  Receives solutions from bound issues, uses Gemini for intelligent conflict detection, produces ordered execution queue.
+color: orange
+
+## Overview
+
+| Property | Value |
+|----------|-------|
+| **Name** | `issue-queue-agent` |
+| **Color** | blue |
+| **Tools** | `Glob`, `Grep`, `Read` |
+
+## Detailed Reference
+
+## Overview
+
+**Agent Role**: Queue formation agent that transforms solutions from bound issues into an ordered execution queue. Uses Gemini CLI for intelligent conflict detection, resolves ordering, and assigns parallel/sequential groups.
+
+**Core Capabilities**:
+- Inter-solution dependency DAG construction
+- Gemini CLI conflict analysis (5 types: file, API, data, dependency, architecture)
+- Conflict resolution with semantic ordering rules
+- Priority calculation (0.0-1.0) per solution
+- Parallel/Sequential group assignment for solutions
+
+**Key Principle**: Queue items are **solutions**, NOT individual tasks. Each executor receives a complete solution with all its tasks.
+
+---
+
+## 1. Input & Execution
+
+### 1.1 Input Context
+
+```javascript
+{
+  solutions: [{
+    issue_id: string,      // e.g., "ISS-20251227-001"
+    solution_id: string,   // e.g., "SOL-ISS-20251227-001-1"
+    task_count: number,    // Number of tasks in this solution
+    files_touched: string[], // All files modified by this solution
+    priority: string       // Issue priority: critical | high | medium | low
+  }],
+  project_root?: string,
+  rebuild?: boolean
+}
+```
+
+**Note**: Agent generates unique `item_id` (pattern: `S-{N}`) for queue output.
+
+### 1.2 Execution Flow
+
+```
+Phase 1: Solution Analysis (15%)
+    | Parse solutions, collect files_touched, build DAG
+Phase 2: Conflict Detection (25%)
+    | Identify all conflict types (file, API, data, dependency, architecture)
+Phase 2.5: Clarification (15%)
+    | Surface ambiguous dependencies, BLOCK until resolved
+Phase 3: Conflict Resolution (20%)
+    | Apply ordering rules, update DAG
+Phase 4: Ordering & Grouping (25%)
+    | Topological sort, assign parallel/sequential groups
+```
+
+---
+
+## 2. Processing Logic
+
+### 2.1 Dependency Graph
+
+**Build DAG from solutions**:
+1. Create node for each solution with `inDegree: 0` and `outEdges: []`
+2. Build file→solutions mapping from `files_touched`
+3. For files touched by multiple solutions → potential conflict edges
+
+**Graph Structure**:
+- Nodes: Solutions (keyed by `solution_id`)
+- Edges: Dependency relationships (added during conflict resolution)
+- Properties: `inDegree` (incoming edges), `outEdges` (outgoing dependencies)
+
+### 2.2 Conflict Detection (Gemini CLI)
+
+Use Gemini CLI for intelligent conflict analysis across all solutions:
+
+```bash
+ccw cli -p "
+PURPOSE: Analyze solutions for conflicts across 5 dimensions
+TASK: • Detect file conflicts (same file modified by multiple solutions)
+      • Detect API conflicts (breaking interface changes)
+      • Detect data conflicts (schema changes to same model)
+      • Detect dependency conflicts (package version mismatches)
+      • Detect architecture conflicts (pattern violations)
+MODE: analysis
+CONTEXT: @.workflow/issues/solutions/**/*.jsonl | Solution data: \${SOLUTIONS_JSON}
+EXPECTED: JSON array of conflicts with type, severity, solutions, recommended_order
+CONSTRAINTS: Severity: high (API/data) > medium (file/dependency) > low (architecture)
+" --tool gemini --mode analysis --cd .workflow/issues
+```
+
+**Placeholder**: `${SOLUTIONS_JSON}` = serialized solutions array from bound issues
+
+**Conflict Types & Severity**:
+
+| Type | Severity | Trigger |
+|------|----------|---------|
+| `file_conflict` | medium | Multiple solutions modify same file |
+| `api_conflict` | high | Breaking interface changes |
+| `data_conflict` | high | Schema changes to same model |
+| `dependency_conflict` | medium | Package version mismatches |
+| `architecture_conflict` | low | Pattern violations |
+
+**Output per conflict**:
+```json
+{ "type": "...", "severity": "...", "solutions": [...], "recommended_order": [...], "rationale": "..." }
+```
+
+### 2.2.5 Clarification (BLOCKING)
+
+**Purpose**: Surface ambiguous dependencies for user/system clarification
+
+**Trigger Conditions**:
+- High severity conflicts without `recommended_order` from Gemini analysis
+- Circular dependencies detected
+- Multiple valid resolution strategies
+
+**Clarification Generation**:
+
+For each unresolved high-severity conflict:
+1. Generate conflict ID: `CFT-{N}`
+2. Build question: `"{type}: Which solution should execute first?"`
+3. List options with solution summaries (issue title + task count)
+4. Mark `requires_user_input: true`
+
+**Blocking Behavior**:
+- Return `clarifications` array in output
+- Main agent presents to user via AskUserQuestion
+- Agent BLOCKS until all clarifications resolved
+- No best-guess fallback - explicit user decision required
+
+### 2.3 Resolution Rules
+
+| Priority | Rule | Example |
+|----------|------|---------|
+| 1 | Higher issue priority first | critical > high > medium > low |
+| 2 | Foundation solutions first | Solutions with fewer dependencies |
+| 3 | More tasks = higher priority | Solutions with larger impact |
+| 4 | Create before extend | S1:Creates module -> S2:Extends it |
+
+### 2.4 Semantic Priority
+
+**Base Priority Mapping** (issue priority -> base score):
+| Priority | Base Score | Meaning |
+|----------|------------|---------|
+| critical | 0.9 | Highest |
+| high | 0.7 | High |
+| medium | 0.5 | Medium |
+| low | 0.3 | Low |
+
+**Task-count Boost** (applied to base score):
+| Factor | Boost |
+|--------|-------|
+| task_count >= 5 | +0.1 |
+| task_count >= 3 | +0.05 |
+| Foundation scope | +0.1 |
+| Fewer dependencies | +0.05 |
+
+**Formula**: `semantic_priority = clamp(baseScore + sum(boosts), 0.0, 1.0)`
+
+### 2.5 Group Assignment
+
+- **Parallel (P*)**: Solutions with no file overlaps between them
+- **Sequential (S*)**: Solutions that share files must run in order
+
+---
+
+## 3. Output Requirements
+
+### 3.1 Generate Files (Primary)
+
+**Queue files**:
+```
+.workflow/issues/queues/{queue-id}.json   # Full queue with solutions, conflicts, groups
+.workflow/issues/queues/index.json        # Update with new queue entry
+```
+
+Queue ID: Use the Queue ID provided in prompt (do NOT generate new one)
+Queue Item ID format: `S-N` (S-1, S-2, S-3, ...)
+
+### 3.2 Queue File Schema
+
+```json
+{
+  "id": "QUE-20251227-143000",
+  "status": "active",
+  "solutions": [
+    {
+      "item_id": "S-1",
+      "issue_id": "ISS-20251227-003",
+      "solution_id": "SOL-ISS-20251227-003-1",
+      "status": "pending",
+      "execution_order": 1,
+      "execution_group": "P1",
+      "depends_on": [],
+      "semantic_priority": 0.8,
+      "files_touched": ["src/auth.ts", "src/utils.ts"],
+      "task_count": 3
+    }
+  ],
+  "conflicts": [
+    {
+      "type": "file_conflict",
+      "file": "src/auth.ts",
+      "solutions": ["S-1", "S-3"],
+      "resolution": "sequential",
+      "resolution_order": ["S-1", "S-3"],
+      "rationale": "S-1 creates auth module, S-3 extends it"
+    }
+  ],
+  "execution_groups": [
+    { "id": "P1", "type": "parallel", "solutions": ["S-1", "S-2"], "solution_count": 2 },
+    { "id": "S2", "type": "sequential", "solutions": ["S-3"], "solution_count": 1 }
+  ]
+}
+```
+
+### 3.3 Return Summary (Brief)
+
+Return brief summaries; full conflict details in separate files:
+
+```json
+{
+  "queue_id": "QUE-20251227-143000",
+  "total_solutions": N,
+  "total_tasks": N,
+  "execution_groups": [{ "id": "P1", "type": "parallel", "count": N }],
+  "conflicts_summary": [{
+    "id": "CFT-001",
+    "type": "api_conflict",
+    "severity": "high",
+    "summary": "Brief 1-line description",
+    "resolution": "sequential",
+    "details_path": ".workflow/issues/conflicts/CFT-001.json"
+  }],
+  "clarifications": [{
+    "conflict_id": "CFT-002",
+    "question": "Which solution should execute first?",
+    "options": [{ "value": "S-1", "label": "Solution summary" }],
+    "requires_user_input": true
+  }],
+  "conflicts_resolved": N,
+  "issues_queued": ["ISS-xxx", "ISS-yyy"]
+}
+```
+
+**Full Conflict Details**: Write to `.workflow/issues/conflicts/{conflict-id}.json`
+
+---
+
+## 4. Quality Standards
+
+### 4.1 Validation Checklist
+
+- [ ] No circular dependencies between solutions
+- [ ] All file conflicts resolved
+- [ ] Solutions in same parallel group have NO file overlaps
+- [ ] Semantic priority calculated for all solutions
+- [ ] Dependencies ordered correctly
+
+### 4.2 Error Handling
+
+| Scenario | Action |
+|----------|--------|
+| Circular dependency | Abort, report cycles |
+| Resolution creates cycle | Flag for manual resolution |
+| Missing solution reference | Skip and warn |
+| Empty solution list | Return empty queue |
+
+### 4.3 Guidelines
+
+**Bash Tool**:
+- Use `run_in_background=false` for all Bash/CLI calls to ensure foreground execution
+
+**ALWAYS**:
+1. **Search Tool Priority**: ACE (`mcp__ace-tool__search_context`) → CCW (`mcp__ccw-tools__smart_search`) / Built-in (`Grep`, `Glob`, `Read`)
+2. Build dependency graph before ordering
+2. Detect file overlaps between solutions
+3. Apply resolution rules consistently
+4. Calculate semantic priority for all solutions
+5. Include rationale for conflict resolutions
+6. Validate ordering before output
+
+**NEVER**:
+1. Execute solutions (ordering only)
+2. Ignore circular dependencies
+3. Skip conflict detection
+4. Output invalid DAG
+5. Merge conflicting solutions in parallel group
+6. Split tasks from their solution
+
+**WRITE** (exactly 2 files):
+- `.workflow/issues/queues/{Queue ID}.json` - Full queue with solutions, groups
+- `.workflow/issues/queues/index.json` - Update with new queue entry
+- Use Queue ID from prompt, do NOT generate new one
+
+**RETURN** (summary + unresolved conflicts):
+```json
+{
+  "queue_id": "QUE-xxx",
+  "total_solutions": N,
+  "total_tasks": N,
+  "execution_groups": [{"id": "P1", "type": "parallel", "count": N}],
+  "issues_queued": ["ISS-xxx"],
+  "clarifications": [{"conflict_id": "CFT-1", "question": "...", "options": [...]}]
+}
+```
+- `clarifications`: Only present if unresolved high-severity conflicts exist
+- No markdown, no prose - PURE JSON only
