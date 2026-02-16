@@ -19,10 +19,10 @@ npm install -g claude-code-workflow
 After installing the npm package, you need to run the installation command to set up workflows, scripts, and templates:
 
 ```bash
-# Install CCW system files (workflows, scripts, templates)
-ccw install
+# Option A (default): install full CCW system files
+ccw install -m Global
 
-# Install Codex-only resources (.codex) for global usage
+# Option B (alternative): install only Codex resources (.codex)
 ccw install --codex-only -m Global
 ```
 
@@ -34,6 +34,8 @@ The `ccw install` command will:
 - Configure shell integration (optional)
 
 When `--codex-only` is provided, installation is limited to `.codex` content only.
+`--codex-only` is an alternative mode, not a supplemental step after full install.
+Running `ccw install` again with the same mode/path replaces the managed manifest scope for that target.
 
 ### Verify Installation
 

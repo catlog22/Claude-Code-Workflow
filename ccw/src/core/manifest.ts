@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { getVersionCandidatePaths, type InstallationScope } from './install-scope.js';
 
 // Manifest directory location
 const MANIFEST_DIR = join(homedir(), '.claude-manifests');
@@ -22,7 +23,7 @@ export interface Manifest {
   version: string;
   installation_mode: string;
   installation_path: string;
-  installation_scope?: 'all' | 'codex';
+  installation_scope?: InstallationScope;
   installation_date: string;
   installer_version: string;
   files: ManifestFileEntry[];
@@ -51,7 +52,7 @@ function ensureManifestDir(): void {
  * @param installPath - Installation path
  * @returns New manifest object
  */
-export function createManifest(mode: string, installPath: string, scope: 'all' | 'codex' = 'all'): Manifest {
+export function createManifest(mode: string, installPath: string, scope: InstallationScope = 'all'): Manifest {
   ensureManifestDir();
 
   const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').split('.')[0];
@@ -167,21 +168,18 @@ export function getAllManifests(): ManifestWithMetadata[] {
         // Try to read version.json for application version
         // Prefer .claude first for backward compatibility, then fallback to .codex.
         let appVersion = 'unknown';
-        try {
-          const versionPaths = [
-            join(content.installation_path, '.claude', 'version.json'),
-            join(content.installation_path, '.codex', 'version.json')
-          ];
-          for (const versionPath of versionPaths) {
-            if (!existsSync(versionPath)) {
-              continue;
-            }
+        const versionPaths = getVersionCandidatePaths(content.installation_path);
+        for (const versionPath of versionPaths) {
+          if (!existsSync(versionPath)) {
+            continue;
+          }
+          try {
             const versionInfo = JSON.parse(readFileSync(versionPath, 'utf8')) as { version?: string };
             appVersion = versionInfo.version || 'unknown';
             break;
+          } catch {
+            // Try next version file
           }
-        } catch {
-          // Ignore
         }
 
         manifests.push({

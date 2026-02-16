@@ -6,14 +6,15 @@ import inquirer from 'inquirer';
 import chalk from 'chalk';
 import { showBanner, createSpinner, info, warning, error, summaryBox, divider } from '../utils/ui.js';
 import { getAllManifests, createManifest, addFileEntry, addDirectoryEntry, saveManifest, deleteManifest } from '../core/manifest.js';
+import {
+  getSourceDirsForScope,
+  getVersionCandidatePaths,
+  getVersionFilePath,
+  scopeFromManifest,
+} from '../core/install-scope.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-// Source directories to install
-const SOURCE_DIRS = ['.claude', '.codex', '.gemini', '.qwen', '.ccw'] as const;
-const CODEX_ONLY_SOURCE_DIRS = ['.codex'] as const;
-type InstallationScope = 'all' | 'codex';
 
 // Subdirectories that should always be installed to global (~/.claude/)
 const GLOBAL_SUBDIRS = ['workflows', 'scripts', 'templates'];
@@ -32,32 +33,8 @@ interface CopyResult {
   directories: number;
 }
 
-function normalizeInstallationScope(scope?: string): InstallationScope {
-  return scope === 'codex' ? 'codex' : 'all';
-}
-
-function getSourceDirsForScope(scope: InstallationScope): string[] {
-  if (scope === 'codex') {
-    return [...CODEX_ONLY_SOURCE_DIRS];
-  }
-  return [...SOURCE_DIRS];
-}
-
-function getVersionFilePath(installPath: string, installedDirs: string[]): string | null {
-  if (installedDirs.includes('.claude')) {
-    return join(installPath, '.claude', 'version.json');
-  }
-  if (installedDirs.includes('.codex')) {
-    return join(installPath, '.codex', 'version.json');
-  }
-  return null;
-}
-
 function readInstalledVersion(installPath: string): string {
-  const versionPaths = [
-    join(installPath, '.claude', 'version.json'),
-    join(installPath, '.codex', 'version.json')
-  ];
+  const versionPaths = getVersionCandidatePaths(installPath);
 
   for (const versionPath of versionPaths) {
     if (!existsSync(versionPath)) {
@@ -132,7 +109,7 @@ export async function upgradeCommand(options: UpgradeOptions): Promise<void> {
   for (let i = 0; i < manifests.length; i++) {
     const m = manifests[i];
     const modeColor = m.installation_mode === 'Global' ? chalk.cyan : chalk.yellow;
-    const installationScope = normalizeInstallationScope((m as any).installation_scope);
+    const installationScope = scopeFromManifest(m.installation_scope);
     const installedVersion = readInstalledVersion(m.installation_path);
 
     // Check if upgrade needed
@@ -271,7 +248,7 @@ export async function upgradeCommand(options: UpgradeOptions): Promise<void> {
 async function performUpgrade(manifest: any, sourceDir: string, version: string): Promise<UpgradeResult> {
   const installPath = manifest.installation_path;
   const mode = manifest.installation_mode;
-  const installationScope = normalizeInstallationScope(manifest.installation_scope);
+  const installationScope = scopeFromManifest(manifest.installation_scope);
 
   // Get available source directories
   const scopedSourceDirs = getSourceDirsForScope(installationScope);

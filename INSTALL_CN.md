@@ -19,10 +19,10 @@ npm install -g claude-code-workflow
 安装 npm 包后，需要运行安装命令来设置工作流、脚本和模板：
 
 ```bash
-# 安装 CCW 系统文件（工作流、脚本、模板）
-ccw install
+# 方案 A（默认）：安装完整 CCW 系统文件
+ccw install -m Global
 
-# 仅安装 Codex 资源（.codex），用于全局使用
+# 方案 B（可选替代）：仅安装 Codex 资源（.codex）
 ccw install --codex-only -m Global
 ```
 
@@ -34,6 +34,8 @@ ccw install --codex-only -m Global
 - 配置 shell 集成（可选）
 
 当使用 `--codex-only` 参数时，仅安装 `.codex` 相关内容。
+`--codex-only` 是“替代模式”，不是完整安装后的叠加步骤。
+对同一模式和路径再次执行 `ccw install` 会替换该目标的 manifest 管理范围。
 
 ### 验证安装
 

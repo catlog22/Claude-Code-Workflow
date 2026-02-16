@@ -7,6 +7,7 @@ import inquirer from 'inquirer';
 import chalk from 'chalk';
 import { showHeader, createSpinner, info, warning, error, summaryBox, divider } from '../utils/ui.js';
 import { createManifest, addFileEntry, addDirectoryEntry, saveManifest, findManifest, getAllManifests } from '../core/manifest.js';
+import { getSourceDirsForScope, getVersionFilePath, scopeFromInstallFlag } from '../core/install-scope.js';
 import { validatePath } from '../utils/path-resolver.js';
 import type { Ora } from 'ora';
 
@@ -24,11 +25,6 @@ const SHELL_CONFIG_FILES = [
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-// Source directories to install (includes .codex with prompts folder)
-const SOURCE_DIRS = ['.claude', '.codex', '.gemini', '.qwen', '.ccw'] as const;
-const CODEX_ONLY_SOURCE_DIRS = ['.codex'] as const;
-type InstallationScope = 'all' | 'codex';
 
 // Subdirectories that should always be installed to global (~/.claude/)
 const GLOBAL_SUBDIRS = ['workflows', 'scripts', 'templates'];
@@ -58,27 +54,6 @@ interface DisabledItem {
 interface DisabledItems {
   skills: DisabledItem[];
   commands: DisabledItem[];
-}
-
-function normalizeInstallationScope(codexOnly?: boolean): InstallationScope {
-  return codexOnly ? 'codex' : 'all';
-}
-
-function getSourceDirsForScope(scope: InstallationScope): string[] {
-  if (scope === 'codex') {
-    return [...CODEX_ONLY_SOURCE_DIRS];
-  }
-  return [...SOURCE_DIRS];
-}
-
-function getVersionFilePath(installPath: string, installedDirs: string[]): string | null {
-  if (installedDirs.includes('.claude')) {
-    return join(installPath, '.claude', 'version.json');
-  }
-  if (installedDirs.includes('.codex')) {
-    return join(installPath, '.codex', 'version.json');
-  }
-  return null;
 }
 
 /**
@@ -257,7 +232,7 @@ export async function installCommand(options: InstallOptions): Promise<void> {
 
   // Interactive mode selection
   const mode = options.mode || await selectMode();
-  const installationScope = normalizeInstallationScope(options.codexOnly);
+  const installationScope = scopeFromInstallFlag(options.codexOnly);
 
   let installPath: string;
   if (mode === 'Global') {
