@@ -21,6 +21,9 @@ After installing the npm package, you need to run the installation command to se
 ```bash
 # Install CCW system files (workflows, scripts, templates)
 ccw install
+
+# Install Codex-only resources (.codex) for global usage
+ccw install --codex-only -m Global
 ```
 
 The `ccw install` command will:
@@ -29,6 +32,8 @@ The `ccw install` command will:
 - Install prompt templates to `~/.claude/templates/`
 - Install skill definitions to `~/.codex/skills/`
 - Configure shell integration (optional)
+
+When `--codex-only` is provided, installation is limited to `.codex` content only.
 
 ### Verify Installation
 

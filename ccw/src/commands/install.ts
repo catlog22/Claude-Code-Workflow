@@ -26,7 +26,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Source directories to install (includes .codex with prompts folder)
-const SOURCE_DIRS = ['.claude', '.codex', '.gemini', '.qwen', '.ccw'];
+const SOURCE_DIRS = ['.claude', '.codex', '.gemini', '.qwen', '.ccw'] as const;
+const CODEX_ONLY_SOURCE_DIRS = ['.codex'] as const;
+type InstallationScope = 'all' | 'codex';
 
 // Subdirectories that should always be installed to global (~/.claude/)
 const GLOBAL_SUBDIRS = ['workflows', 'scripts', 'templates'];
@@ -38,6 +40,7 @@ interface InstallOptions {
   mode?: string;
   path?: string;
   force?: boolean;
+  codexOnly?: boolean;
 }
 
 interface CopyResult {
@@ -55,6 +58,27 @@ interface DisabledItem {
 interface DisabledItems {
   skills: DisabledItem[];
   commands: DisabledItem[];
+}
+
+function normalizeInstallationScope(codexOnly?: boolean): InstallationScope {
+  return codexOnly ? 'codex' : 'all';
+}
+
+function getSourceDirsForScope(scope: InstallationScope): string[] {
+  if (scope === 'codex') {
+    return [...CODEX_ONLY_SOURCE_DIRS];
+  }
+  return [...SOURCE_DIRS];
+}
+
+function getVersionFilePath(installPath: string, installedDirs: string[]): string | null {
+  if (installedDirs.includes('.claude')) {
+    return join(installPath, '.claude', 'version.json');
+  }
+  if (installedDirs.includes('.codex')) {
+    return join(installPath, '.codex', 'version.json');
+  }
+  return null;
 }
 
 /**
@@ -233,6 +257,7 @@ export async function installCommand(options: InstallOptions): Promise<void> {
 
   // Interactive mode selection
   const mode = options.mode || await selectMode();
+  const installationScope = normalizeInstallationScope(options.codexOnly);
 
   let installPath: string;
   if (mode === 'Global') {
@@ -252,8 +277,10 @@ export async function installCommand(options: InstallOptions): Promise<void> {
     info(`Path installation to: ${installPath}`);
   }
 
+  const scopedSourceDirs = getSourceDirsForScope(installationScope);
+
   // Validate source directories exist
-  const availableDirs = SOURCE_DIRS.filter(dir => existsSync(join(sourceDir, dir)));
+  const availableDirs = scopedSourceDirs.filter(dir => existsSync(join(sourceDir, dir)));
 
   if (availableDirs.length === 0) {
     error('No source directories found to install.');
@@ -263,6 +290,7 @@ export async function installCommand(options: InstallOptions): Promise<void> {
 
   console.log('');
   info(`Found ${availableDirs.length} directories to install: ${availableDirs.join(', ')}`);
+  info(`Installation scope: ${installationScope === 'codex' ? 'codex-only' : 'all'}`);
 
   // Show what will be installed including .codex subdirectories
   if (availableDirs.includes('.codex')) {
@@ -336,7 +364,7 @@ export async function installCommand(options: InstallOptions): Promise<void> {
     }
   } else {
     // No manifest - first install or manual install, just overwrite
-    const existingDirs = SOURCE_DIRS.filter(dir => existsSync(join(installPath, dir)));
+    const existingDirs = scopedSourceDirs.filter(dir => existsSync(join(installPath, dir)));
     if (existingDirs.length > 0) {
       info('No installation manifest found, files will be overwritten');
       info(`  Existing directories: ${existingDirs.join(', ')}`);
@@ -352,7 +380,7 @@ export async function installCommand(options: InstallOptions): Promise<void> {
   }
 
   // Create manifest
-  const manifest = createManifest(mode, installPath);
+  const manifest = createManifest(mode, installPath, installationScope);
 
   // Perform installation
   console.log('');
@@ -364,7 +392,7 @@ export async function installCommand(options: InstallOptions): Promise<void> {
 
   try {
     // For Path mode, install workflows to global first
-    if (mode === 'Path') {
+    if (mode === 'Path' && installationScope === 'all') {
       const globalPath = homedir();
       for (const subdir of GLOBAL_SUBDIRS) {
         const srcWorkflows = join(sourceDir, '.claude', subdir);
@@ -395,12 +423,13 @@ export async function installCommand(options: InstallOptions): Promise<void> {
     }
 
     // Create version.json
-    const versionPath = join(installPath, '.claude', 'version.json');
-    if (existsSync(dirname(versionPath))) {
+    const versionPath = getVersionFilePath(installPath, availableDirs);
+    if (versionPath && existsSync(dirname(versionPath))) {
       const versionData = {
         version: version,
         installedAt: new Date().toISOString(),
         mode: mode,
+        scope: installationScope,
         installer: 'ccw'
       };
       writeFileSync(versionPath, JSON.stringify(versionData, null, 2), 'utf8');
@@ -435,6 +464,7 @@ export async function installCommand(options: InstallOptions): Promise<void> {
     chalk.green.bold('✓ Installation Successful'),
     '',
     chalk.white(`Mode: ${chalk.cyan(mode)}`),
+    chalk.white(`Scope: ${chalk.cyan(installationScope === 'codex' ? 'codex-only' : 'all')}`),
     chalk.white(`Path: ${chalk.cyan(installPath)}`),
     chalk.white(`Version: ${chalk.cyan(version)}`),
     '',

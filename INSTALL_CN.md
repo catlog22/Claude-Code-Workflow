@@ -21,6 +21,9 @@ npm install -g claude-code-workflow
 ```bash
 # 安装 CCW 系统文件（工作流、脚本、模板）
 ccw install
+
+# 仅安装 Codex 资源（.codex），用于全局使用
+ccw install --codex-only -m Global
 ```
 
 `ccw install` 命令将会：
@@ -29,6 +32,8 @@ ccw install
 - 安装提示模板到 `~/.claude/templates/`
 - 安装技能定义到 `~/.codex/skills/`
 - 配置 shell 集成（可选）
+
+当使用 `--codex-only` 参数时，仅安装 `.codex` 相关内容。
 
 ### 验证安装
 

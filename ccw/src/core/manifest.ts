@@ -22,6 +22,7 @@ export interface Manifest {
   version: string;
   installation_mode: string;
   installation_path: string;
+  installation_scope?: 'all' | 'codex';
   installation_date: string;
   installer_version: string;
   files: ManifestFileEntry[];
@@ -50,7 +51,7 @@ function ensureManifestDir(): void {
  * @param installPath - Installation path
  * @returns New manifest object
  */
-export function createManifest(mode: string, installPath: string): Manifest {
+export function createManifest(mode: string, installPath: string, scope: 'all' | 'codex' = 'all'): Manifest {
   ensureManifestDir();
 
   const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').split('.')[0];
@@ -62,6 +63,7 @@ export function createManifest(mode: string, installPath: string): Manifest {
     version: '1.0',
     installation_mode: mode,
     installation_path: installPath,
+    installation_scope: scope,
     installation_date: new Date().toISOString(),
     installer_version: '1.0.0',
     files: [],
@@ -163,12 +165,20 @@ export function getAllManifests(): ManifestWithMetadata[] {
         const content = JSON.parse(readFileSync(filePath, 'utf8')) as Manifest;
 
         // Try to read version.json for application version
+        // Prefer .claude first for backward compatibility, then fallback to .codex.
         let appVersion = 'unknown';
         try {
-          const versionPath = join(content.installation_path, '.claude', 'version.json');
-          if (existsSync(versionPath)) {
+          const versionPaths = [
+            join(content.installation_path, '.claude', 'version.json'),
+            join(content.installation_path, '.codex', 'version.json')
+          ];
+          for (const versionPath of versionPaths) {
+            if (!existsSync(versionPath)) {
+              continue;
+            }
             const versionInfo = JSON.parse(readFileSync(versionPath, 'utf8')) as { version?: string };
             appVersion = versionInfo.version || 'unknown';
+            break;
           }
         } catch {
           // Ignore
