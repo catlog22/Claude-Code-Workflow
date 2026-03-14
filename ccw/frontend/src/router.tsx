@@ -93,6 +93,10 @@ const routes: RouteObject[] = [
         element: withErrorHandling(<ReviewSessionPage />),
       },
       {
+        path: 'lite-tasks/:subType/:id',
+        element: withErrorHandling(<LiteTasksPage />),
+      },
+      {
         path: 'lite-tasks',
         element: withErrorHandling(<LiteTasksPage />),
       },

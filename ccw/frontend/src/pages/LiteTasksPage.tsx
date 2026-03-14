@@ -57,7 +57,7 @@ import { TabsNavigation } from '@/components/ui/TabsNavigation';
 import { TaskDrawer } from '@/components/shared/TaskDrawer';
 import { fetchLiteSessionContext, type LiteTask, type LiteTaskSession, type LiteSessionContext, type RoundSynthesis, type MultiCliContextPackage } from '@/lib/api';
 import { LiteContextContent } from '@/components/lite-tasks/LiteContextContent';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
 type LiteTaskTab = 'lite-plan' | 'lite-fix' | 'multi-cli-plan';
@@ -1205,11 +1205,13 @@ function ExpandedMultiCliPanel({
  */
 export function LiteTasksPage() {
   const navigate = useNavigate();
-  const { formatMessage } = useIntl();
+  const { subType, id } = useParams<{ subType?: string; id?: string }>();
   const { litePlan, liteFix, multiCliPlan, isLoading, error, refetch } = useLiteTasks();
+  const { formatMessage } = useIntl();
   const [activeTab, setActiveTab] = React.useState<LiteTaskTab>('lite-plan');
   const [expandedSessionId, setExpandedSessionId] = React.useState<string | null>(null);
   const [selectedTask, setSelectedTask] = React.useState<LiteTask | null>(null);
+  const paramsInitialized = React.useRef(false);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [sortField, setSortField] = React.useState<SortField>('date');
   const [sortOrder, setSortOrder] = React.useState<SortOrder>('desc');
@@ -1258,6 +1260,34 @@ export function LiteTasksPage() {
   const filteredLitePlan = React.useMemo(() => filterAndSort(litePlan), [litePlan, filterAndSort]);
   const filteredLiteFix = React.useMemo(() => filterAndSort(liteFix), [liteFix, filterAndSort]);
   const filteredMultiCliPlan = React.useMemo(() => filterAndSort(multiCliPlan), [multiCliPlan, filterAndSort]);
+
+  // Handle URL params to auto-open task drawer
+  React.useEffect(() => {
+    if (!id || paramsInitialized.current) return;
+    if (isLoading) return;
+
+    // Find the session containing this task
+    const allSessions = [...litePlan, ...liteFix, ...multiCliPlan];
+    const targetSession = allSessions.find(session => session.id === id);
+
+    if (targetSession) {
+      paramsInitialized.current = true;
+
+      // Set active tab based on subType
+      if (subType === 'lite-plan') setActiveTab('lite-plan');
+      else if (subType === 'lite-fix') setActiveTab('lite-fix');
+      else if (subType === 'multi-cli-plan') setActiveTab('multi-cli-plan');
+
+      // Expand the session
+      setExpandedSessionId(id);
+
+      // Find and select the task
+      const task = targetSession.tasks?.find(t => t.task_id === id || t.id === id);
+      if (task) {
+        setSelectedTask(task);
+      }
+    }
+  }, [id, subType, isLoading, litePlan, liteFix, multiCliPlan]);
 
   // Toggle sort
   const toggleSort = (field: SortField) => {

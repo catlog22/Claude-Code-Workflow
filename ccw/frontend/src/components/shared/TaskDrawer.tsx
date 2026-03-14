@@ -104,12 +104,15 @@ export function TaskDrawer({ task, isOpen, onClose }: TaskDrawerProps) {
   const dependsOn = nt.depends_on || [];
   const preAnalysis = nt.pre_analysis || flowControl?.pre_analysis || [];
   const implSteps = nt.implementation || flowControl?.implementation_approach || [];
-  const taskFiles = nt.files || flowControl?.target_files || [];
+
+  // Get files from multiple sources: nt.files, flowControl.target_files, or sourceRaw.file
+  const rawData = nt._raw as Record<string, unknown> | undefined;
+  const sourceRaw = (rawData?._raw as Record<string, unknown>) || rawData;
+  const rawFile = sourceRaw?.file as string | undefined;
+  const taskFiles = nt.files || flowControl?.target_files || (rawFile ? [{ path: rawFile }] : []);
   const taskScope = nt.scope;
 
   // Detect if task supports status tracking (new format has explicit status/status_history)
-  const rawData = nt._raw as Record<string, unknown> | undefined;
-  const sourceRaw = (rawData?._raw as Record<string, unknown>) || rawData;
   const hasStatusTracking = sourceRaw
     ? (sourceRaw.status !== undefined || sourceRaw.status_history !== undefined)
     : false;
@@ -391,7 +394,7 @@ export function TaskDrawer({ task, isOpen, onClose }: TaskDrawerProps) {
               <TabsContent value="files" className="mt-4 pb-6">
                 {hasFiles ? (
                   <div className="space-y-3">
-                    {flowControl?.target_files?.map((file, index) => {
+                    {taskFiles.map((file, index) => {
                       // Support multiple file formats: string, { path: string }, { name: string }, { path, name }
                       let displayPath: string;
                       if (typeof file === 'string') {
