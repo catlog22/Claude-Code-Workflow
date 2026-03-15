@@ -220,6 +220,52 @@ function clearVenvStatusCache(): void {
 // Python detection functions imported from ../utils/python-utils.js
 
 /**
+ * Check if build tools are available for compiling Python packages
+ */
+export function checkBuildTools(): { available: boolean; missing: string[] } {
+  const missing: string[] = [];
+
+  // Check for Visual C++ compiler on Windows
+  if (process.platform === 'win32') {
+    // Check for MSVC (cl.exe) - try multiple ways
+    let hasMSVC = false;
+    try {
+      execSync('where cl.exe', { stdio: 'ignore', windowsHide: true });
+      hasMSVC = true;
+    } catch {
+      // Not found
+    }
+    if (!hasMSVC) {
+      missing.push('Visual C++ Build Tools');
+    }
+
+    // Check for Rust
+    let hasRust = false;
+    try {
+      execSync('cargo --version', { stdio: 'ignore', windowsHide: true });
+      hasRust = true;
+    } catch {
+      // Not found
+    }
+    if (!hasRust) {
+      missing.push('Rust');
+    }
+  } else {
+    // On Unix-like systems, check for gcc
+    try {
+      execSync('gcc --version', { stdio: 'ignore' });
+    } catch {
+      missing.push('GCC');
+    }
+  }
+
+  return {
+    available: missing.length === 0,
+    missing,
+  };
+}
+
+/**
  * Check if CodexLens venv exists and has required packages
  * @param force - Force refresh cache (default: false)
  * @returns Ready status

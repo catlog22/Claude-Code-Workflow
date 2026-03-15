@@ -5,6 +5,7 @@
 
 import { useState, useMemo } from 'react';
 import { useIntl } from 'react-intl';
+import { useWorkflowStore, selectProjectPath } from '@/stores/workflowStore';
 import {
   GitFork,
   Plus,
@@ -157,6 +158,7 @@ export function HookManagerPage() {
   const { hooks, enabledCount, totalCount, isLoading, refetch } = useHooks();
   const { toggleHook } = useToggleHook();
   const { deleteHook } = useDeleteHook();
+  const projectPath = useWorkflowStore(selectProjectPath);
 
   // Convert hooks to HookCardData and filter by search query and trigger type
   const filteredHooks = useMemo(() => {
@@ -291,6 +293,7 @@ export function HookManagerPage() {
         body: JSON.stringify({
           templateId,
           scope: 'project',
+          projectPath,
             }),
       });
 

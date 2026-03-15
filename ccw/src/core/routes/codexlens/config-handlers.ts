@@ -5,6 +5,7 @@
 import {
   bootstrapVenv,
   cancelIndexing,
+  checkBuildTools,
   checkSemanticStatus,
   checkVenvStatus,
   detectGpuSupport,
@@ -261,6 +262,14 @@ export async function handleCodexLensConfigRoutes(ctx: RouteContext): Promise<bo
         return { success: false, error: err instanceof Error ? err.message : String(err), status: 500 };
       }
     });
+    return true;
+  }
+
+  // API: CodexLens Check Environment - Check if build tools are available
+  if (pathname === '/api/codexlens/check-env' && req.method === 'GET') {
+    const buildTools = checkBuildTools();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(buildTools));
     return true;
   }
 

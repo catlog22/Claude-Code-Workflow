@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { useIntl } from 'react-intl';
+import { useWorkflowStore, selectProjectPath } from '@/stores/workflowStore';
 import {
   Dialog,
   DialogContent,
@@ -139,6 +140,7 @@ export function HookWizard({
   const [detectedPlatform, setDetectedPlatform] = useState<Platform>('linux');
   const [scope, setScope] = useState<'project' | 'global'>('project');
   const [saving, setSaving] = useState(false);
+  const projectPath = useWorkflowStore(selectProjectPath);
 
   // Fetch available skills for skill-context wizard
   const { data: skillsData, isLoading: skillsLoading } = useQuery<SkillsResponse>({
@@ -207,6 +209,7 @@ export function HookWizard({
             body: JSON.stringify({
               templateId: 'memory-auto-compress',
               scope,
+              projectPath,
             }),
           });
           const result = await response.json();
@@ -229,6 +232,7 @@ export function HookWizard({
               body: JSON.stringify({
                 templateId,
                 scope,
+                projectPath,
               }),
             });
             const result = await response.json();

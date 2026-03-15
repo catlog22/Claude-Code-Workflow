@@ -445,7 +445,7 @@ export function useHooks(options: UseHooksOptions = {}): UseHooksReturn {
   const queryEnabled = enabled && !!projectPath;
 
   const query = useQuery({
-    queryKey: workspaceQueryKeys.rulesList(projectPath),
+    queryKey: workspaceQueryKeys.hooksList(projectPath),
     queryFn: () => fetchHooks(projectPath),
     staleTime,
     enabled: queryEnabled,
@@ -478,15 +478,17 @@ export function useHooks(options: UseHooksOptions = {}): UseHooksReturn {
 
 export function useToggleHook() {
   const queryClient = useQueryClient();
+  const projectPath = useWorkflowStore(selectProjectPath);
 
   const mutation = useMutation({
     mutationFn: ({ hookName, enabled }: { hookName: string; enabled: boolean }) =>
       toggleHook(hookName, enabled),
     onMutate: async ({ hookName, enabled }) => {
-      await queryClient.cancelQueries({ queryKey: hooksKeys.all });
-      const previousHooks = queryClient.getQueryData<HooksResponse>(hooksKeys.lists());
+      const queryKey = workspaceQueryKeys.hooksList(projectPath || '');
+      await queryClient.cancelQueries({ queryKey });
+      const previousHooks = queryClient.getQueryData<HooksResponse>(queryKey);
 
-      queryClient.setQueryData<HooksResponse>(hooksKeys.lists(), (old) => {
+      queryClient.setQueryData<HooksResponse>(queryKey, (old) => {
         if (!old) return old;
         return {
           hooks: old.hooks.map((h) => (h.name === hookName ? { ...h, enabled } : h)),
@@ -496,12 +498,13 @@ export function useToggleHook() {
       return { previousHooks };
     },
     onError: (_error, _vars, context) => {
+      const queryKey = workspaceQueryKeys.hooksList(projectPath || '');
       if (context?.previousHooks) {
-        queryClient.setQueryData(hooksKeys.lists(), context.previousHooks);
+        queryClient.setQueryData(queryKey, context.previousHooks);
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: hooksKeys.all });
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.hooksList(projectPath || '') });
     },
   });
 
@@ -528,10 +531,11 @@ export function useDeleteHook() {
       });
     },
     onMutate: async (hook) => {
-      await queryClient.cancelQueries({ queryKey: hooksKeys.all });
-      const previousHooks = queryClient.getQueryData<HooksResponse>(hooksKeys.lists());
+      const queryKey = workspaceQueryKeys.hooksList(projectPath || '');
+      await queryClient.cancelQueries({ queryKey });
+      const previousHooks = queryClient.getQueryData<HooksResponse>(queryKey);
 
-      queryClient.setQueryData<HooksResponse>(hooksKeys.lists(), (old) => {
+      queryClient.setQueryData<HooksResponse>(queryKey, (old) => {
         if (!old) return old;
         return {
           hooks: old.hooks.filter((h) => h.name !== hook.name),
@@ -541,12 +545,13 @@ export function useDeleteHook() {
       return { previousHooks };
     },
     onError: (_error, _hook, context) => {
+      const queryKey = workspaceQueryKeys.hooksList(projectPath || '');
       if (context?.previousHooks) {
-        queryClient.setQueryData(hooksKeys.lists(), context.previousHooks);
+        queryClient.setQueryData(queryKey, context.previousHooks);
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: hooksKeys.all });
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.hooksList(projectPath || '') });
     },
   });
 

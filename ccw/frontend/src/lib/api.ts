@@ -5550,6 +5550,18 @@ export async function bootstrapCodexLens(): Promise<CodexLensBootstrapResponse> 
 }
 
 /**
+ * Check if build tools are available for CodexLens installation
+ */
+export interface BuildToolsCheckResponse {
+  available: boolean;
+  missing: string[];
+}
+
+export async function checkCodexLensBuildTools(): Promise<BuildToolsCheckResponse> {
+  return fetchApi<BuildToolsCheckResponse>('/api/codexlens/check-env');
+}
+
+/**
  * CodexLens semantic install response
  */
 export interface CodexLensSemanticInstallResponse {

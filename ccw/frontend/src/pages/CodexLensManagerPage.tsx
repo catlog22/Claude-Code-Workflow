@@ -35,6 +35,8 @@ import { SearchTab } from '@/components/codexlens/SearchTab';
 import { SemanticInstallDialog } from '@/components/codexlens/SemanticInstallDialog';
 import { InstallProgressOverlay } from '@/components/codexlens/InstallProgressOverlay';
 import { useCodexLensDashboard, useCodexLensMutations } from '@/hooks';
+import { checkCodexLensBuildTools } from '@/lib/api';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 export function CodexLensManagerPage() {
@@ -65,11 +67,50 @@ export function CodexLensManagerPage() {
     refetch();
   };
 
-  const handleBootstrap = () => {
+  const handleBootstrap = async () => {
+    // Pre-check: Verify build tools are available before opening dialog
+    const buildTools = await checkCodexLensBuildTools();
+
+    if (!buildTools.available) {
+      const isWindows = navigator.userAgent.includes('Windows');
+      const missingList = buildTools.missing.join(', ');
+
+      let errorMessage = '';
+
+      if (isWindows) {
+        if (buildTools.missing.includes('Visual C++ Build Tools')) {
+          errorMessage += '• Visual C++ Build Tools: https://visualstudio.microsoft.com/visual-cpp-build-tools/\n';
+        }
+        if (buildTools.missing.includes('Rust')) {
+          errorMessage += '• Rust: https://rustup.rs/\n';
+        }
+      } else {
+        errorMessage += '• Ubuntu/Debian: sudo apt install build-essential\n';
+        errorMessage += '• macOS: xcode-select --install\n';
+      }
+
+      toast.error(`缺少构建工具 (${missingList})\n\n${errorMessage}安装完成后再试`, {
+        duration: 10000,
+      });
+      return;
+    }
+
     setIsInstallOverlayOpen(true);
   };
 
   const handleBootstrapInstall = async () => {
+    // Environment check is already done in handleBootstrap, but double-check here
+    const buildTools = await checkCodexLensBuildTools();
+
+    if (!buildTools.available) {
+      const missingList = buildTools.missing.join(', ');
+      toast.error(`缺少构建工具: ${missingList}`, {
+        description: '请先安装所需的构建工具后再试',
+        duration: 10000,
+      });
+      throw new Error('Missing build tools: ' + missingList);
+    }
+
     const result = await bootstrap();
     return result;
   };
