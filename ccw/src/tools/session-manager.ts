@@ -1120,6 +1120,7 @@ export const schema: ToolSchema = {
       },
       dirs: {
         type: 'array',
+        items: { type: 'string' },
         description: 'Directory paths to create for mkdir operation',
       },
       update_status: {
